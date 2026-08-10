@@ -1,0 +1,19 @@
+<resources>
+    <string name="app_name">Matcha</string>
+    <string name="post_delete_confirm">Удалить пост?</string>
+    <string name="comment_delete_confirm">Удалить комментарий?</string>
+    <string name="delete_action_message">Это действие нельзя отменить</string>
+    <string name="delete">Удалить</string>
+    <string name="cancel">Отмена</string>
+    <string name="nsfw_content">NSFW контент</string>
+    <string name="nsfw_show">Нажмите, чтобы показать</string>
+    <string name="post_source_label">Источник: %1$s</string>
+    <string name="copy_link">Копировать ссылку</string>
+    <string name="open_in_browser">Открыть в браузере</string>
+    <string name="open_in_matcha">Открыть в Matcha</string>
+    <string name="show_more">Показать ещё</string>
+    <string name="settings_double_tap_like">Лайк двойным кликом</string>
+    <string name="settings_double_tap_like_desc">Двойное нажатие по посту ставит лайк. Включение может привести к задержкам открытия изображений и комментариев. Изменения вступят в силу после перезапуска.</string>
+    <string name="settings_double_tap_timeout">Ожидание второго клика: %1$d мс</string>
+    <string name="settings_category_feed">Лента</string>
+</resources>
