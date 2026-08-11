@@ -32,6 +32,7 @@ class DownloadRepository(private val context: Context) {
     val downloadedTracksFlow = _downloadedTracksFlow.asStateFlow()
 
     private var metadataCache = mapOf<String, AudioTrack>()
+    private var artistTitleIndex = mapOf<String, AudioTrack>()
 
     init {
         updateDownloadedFlow()
@@ -39,10 +40,13 @@ class DownloadRepository(private val context: Context) {
 
     fun updateDownloadedFlow() {
         if (hasStoragePermission()) {
-            metadataCache = getDownloadedTracksFromFiles().associateBy { it.stableId }
+            val tracks = getDownloadedTracksFromFiles()
+            metadataCache = tracks.associateBy { it.stableId }
+            artistTitleIndex = tracks.associateBy { "${it.artist.lowercase()}|${it.title.lowercase()}" }
             _downloadedTracksFlow.value = metadataCache.keys
         } else {
             metadataCache = emptyMap()
+            artistTitleIndex = emptyMap()
             _downloadedTracksFlow.value = emptySet()
         }
     }
@@ -56,10 +60,8 @@ class DownloadRepository(private val context: Context) {
     }
 
     fun enrichTrack(track: AudioTrack): AudioTrack {
-        val localMatch = metadataCache[track.stableId] ?: metadataCache.values.find {
-            it.artist.equals(track.artist, ignoreCase = true) && 
-            it.title.equals(track.title, ignoreCase = true)
-        }
+        val localMatch = metadataCache[track.stableId] 
+            ?: artistTitleIndex["${track.artist.lowercase()}|${track.title.lowercase()}"]
 
         return localMatch?.let {
             track.copy(

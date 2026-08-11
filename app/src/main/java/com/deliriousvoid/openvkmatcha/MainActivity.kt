@@ -349,10 +349,6 @@ class MainActivity : ComponentActivity() {
                         val isBuffering = playbackState == Player.STATE_BUFFERING
                         val repeatMode by playerViewModel.repeatMode.collectAsState()
                         val shuffleMode by playerViewModel.shuffleMode.collectAsState()
-                        val currentPosition by playerViewModel.currentPosition.collectAsState()
-                        val duration by playerViewModel.duration.collectAsState()
-                        val syncedLyrics by playerViewModel.syncedLyrics.collectAsState()
-                        val currentLineIndex by playerViewModel.currentLineIndex.collectAsState()
                         val queue by playerViewModel.queue.collectAsState()
                         val hidePlayedTracks by settingsViewModel.hidePlayedTracks.collectAsState()
 
@@ -384,12 +380,9 @@ class MainActivity : ComponentActivity() {
                                 isBuffering = isBuffering,
                                 repeatMode = repeatMode,
                                 shuffleMode = shuffleMode,
-                                currentPosition = currentPosition,
-                                duration = duration,
-                                syncedLyrics = syncedLyrics,
-                                currentLineIndex = currentLineIndex,
                                 queue = queue,
                                 hidePlayedTracks = hidePlayedTracks,
+                                playerViewModel = playerViewModel,
                                 onPlayPause = { playerViewModel.playPause() },
                                 onNext = { playerViewModel.skipToNext() },
                                 onPrevious = { playerViewModel.skipToPrevious() },

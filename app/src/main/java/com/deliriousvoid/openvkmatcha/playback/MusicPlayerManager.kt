@@ -21,6 +21,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -75,6 +76,13 @@ class MusicPlayerManager(
     private val scope = CoroutineScope(Dispatchers.Main + Job())
     private var progressJob: Job? = null
     private var isInternalUpdate = false
+    private var lastSeekTime: Long = 0
+
+    // Cached settings for performance
+    private var lbEnabled: Boolean? = null
+    private var lbToken: String? = null
+    private var lastSettingsRefresh: Long = 0
+    private var saveJob: Job? = null
 
     init {
         val sessionToken = SessionToken(context, ComponentName(context, PlaybackService::class.java))
@@ -99,9 +107,17 @@ class MusicPlayerManager(
 
     private suspend fun checkAndScrobble() {
         val track = currentTrack.value ?: return
-        val prefs = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
-        val enabled = prefs.getBoolean("lb_enabled", false)
-        val token = (prefs.getString("lb_token", "") ?: "").trim()
+        
+        val now = System.currentTimeMillis()
+        if (now - lastSettingsRefresh > 10000 || lbEnabled == null) {
+            val prefs = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
+            lbEnabled = prefs.getBoolean("lb_enabled", false)
+            lbToken = (prefs.getString("lb_token", "") ?: "").trim()
+            lastSettingsRefresh = now
+        }
+
+        val enabled = lbEnabled == true
+        val token = lbToken ?: ""
         
         if (!enabled) {
             // Log once per track if disabled
@@ -124,7 +140,6 @@ class MusicPlayerManager(
         }
 
         // Rate limit retries on error (every 30 seconds)
-        val now = System.currentTimeMillis()
         if (lastLbErrorTime > 0 && now - lastLbErrorTime < 30000) return
 
         // Handle "Now Playing"
@@ -184,6 +199,8 @@ class MusicPlayerManager(
 
         controller.addListener(object : Player.Listener {
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                _currentPosition.value = 0L
+                lastSeekTime = System.currentTimeMillis()
                 updateCurrentTrack(mediaItem)
                 savePlaybackState()
                 
@@ -220,7 +237,10 @@ class MusicPlayerManager(
 
             override fun onPlaybackStateChanged(state: Int) {
                 _playbackState.value = state
-                _duration.value = controller.duration.coerceAtLeast(0L)
+                val d = controller.duration
+                if (d > 0) {
+                    _duration.value = d
+                }
             }
 
             override fun onShuffleModeEnabledChanged(shuffleModeEnabled: Boolean) {
@@ -284,25 +304,37 @@ class MusicPlayerManager(
     private fun savePlaybackState() {
         val controller = controller ?: return
         val track = _currentTrack.value ?: return
-        
-        playerPrefs.edit().apply {
-            putInt("last_track_id", track.id)
-            putInt("last_track_owner_id", track.ownerId)
-            putString("last_track_artist", track.artist)
-            putString("last_track_title", track.title)
-            putInt("last_track_duration", track.duration)
-            putString("last_track_url", track.url)
-            putString("last_track_remote_url", track.remoteUrl)
-            putString("last_track_artwork_url", track.artworkUrl)
-            putLong("last_position", controller.currentPosition)
-            putInt("last_index", controller.currentMediaItemIndex)
-            putString("last_source", _playlistSource.value.toJsonString())
+        val currentPosition = controller.currentPosition
+        val currentMediaItemIndex = controller.currentMediaItemIndex
+        val playlistSource = _playlistSource.value
+        val currentList = currentPlaylist.toList()
+        val originalList = originalPlaylist.toList()
+
+        saveJob?.cancel()
+        saveJob = scope.launch(Dispatchers.IO) {
+            // Debounce saves slightly to avoid hammering the disk during seek
+            delay(500)
             
-            // Save queues
-            putString("current_queue_json", currentPlaylist.toJsonArrayString())
-            putString("original_queue_json", originalPlaylist.toJsonArrayString())
-            
-            apply()
+            val currentQueueJson = currentList.toJsonArrayString()
+            val originalQueueJson = originalList.toJsonArrayString()
+            val sourceJson = playlistSource.toJsonString()
+
+            playerPrefs?.edit()?.apply {
+                putInt("last_track_id", track.id)
+                putInt("last_track_owner_id", track.ownerId)
+                putString("last_track_artist", track.artist)
+                putString("last_track_title", track.title)
+                putInt("last_track_duration", track.duration)
+                putString("last_track_url", track.url)
+                putString("last_track_remote_url", track.remoteUrl)
+                putString("last_track_artwork_url", track.artworkUrl)
+                putLong("last_position", currentPosition)
+                putInt("last_index", currentMediaItemIndex)
+                putString("last_source", sourceJson)
+                putString("current_queue_json", currentQueueJson)
+                putString("original_queue_json", originalQueueJson)
+                apply()
+            }
         }
     }
 
@@ -474,7 +506,9 @@ class MusicPlayerManager(
                 accumulatedTimeMs += delta
 
                 controller?.let {
-                    _currentPosition.value = it.currentPosition
+                    if (System.currentTimeMillis() - lastSeekTime > 500) {
+                        _currentPosition.value = it.currentPosition
+                    }
                 }
                 
                 checkAndScrobble()
@@ -621,6 +655,7 @@ class MusicPlayerManager(
 
     fun seekTo(position: Long) {
         val controller = controller ?: return
+        lastSeekTime = System.currentTimeMillis()
         controller.seekTo(position)
         _currentPosition.value = position
         savePlaybackState()
@@ -634,7 +669,7 @@ class MusicPlayerManager(
 
     fun skipToPrevious() {
         val controller = controller ?: return
-        controller.seekToPrevious()
+        controller.seekToPreviousMediaItem()
         controller.play()
     }
 
@@ -643,76 +678,90 @@ class MusicPlayerManager(
         val currentShuffle = _shuffleMode.value
         val newShuffle = !currentShuffle
         
-        isInternalUpdate = true
-        
-        if (newShuffle) {
-            // Smart Shuffle: Shuffle the queue without resetting current item
-            val currentIndex = controller.currentMediaItemIndex
-            val totalItems = controller.mediaItemCount
+        scope.launch {
+            isInternalUpdate = true
             
-            if (totalItems > 1) {
-                // 1. Calculate new order locally (much faster than IPC)
-                val currentTrack = currentPlaylist.getOrNull(currentIndex)
-                val otherTracks = currentPlaylist.toMutableList().apply { 
-                    if (currentIndex in indices) removeAt(currentIndex) 
-                }
-                otherTracks.shuffle()
+            if (newShuffle) {
+                // Smart Shuffle: Shuffle the queue without resetting current item
+                val currentIndex = controller.currentMediaItemIndex
+                val totalItems = controller.mediaItemCount
                 
-                val newTrackOrder = if (currentTrack != null) {
-                    listOf(currentTrack) + otherTracks
-                } else {
-                    otherTracks
-                }
-                
-                // Update UI state immediately
-                currentPlaylist = newTrackOrder
-                _queue.value = newTrackOrder
-                
-                // 2. Batch update the controller
-                val otherMediaItems = otherTracks.map { it.toMediaItem() }
-                
-                if (currentIndex != 0) {
-                    controller.moveMediaItem(currentIndex, 0)
-                }
-                controller.removeMediaItems(1, totalItems)
-                controller.addMediaItems(otherMediaItems)
-            }
-        } else {
-            // Restore original order
-            if (originalPlaylist.isNotEmpty()) {
-                val currentTrackId = _currentTrack.value?.stableId
-                val currentIndexInOriginal = originalPlaylist.indexOfFirst { it.stableId == currentTrackId }
-                
-                if (currentIndexInOriginal != -1) {
-                    val totalItems = controller.mediaItemCount
-                    val currentControllerIndex = controller.currentMediaItemIndex
+                if (totalItems > 1) {
+                    val (newTrackOrder, otherMediaItems) = withContext(Dispatchers.Default) {
+                        val currentTrack = currentPlaylist.getOrNull(currentIndex)
+                        val otherTracks = currentPlaylist.toMutableList().apply { 
+                            if (currentIndex in indices) removeAt(currentIndex) 
+                        }
+                        otherTracks.shuffle()
+                        
+                        val order = if (currentTrack != null) {
+                            listOf(currentTrack) + otherTracks
+                        } else {
+                            otherTracks
+                        }
+                        
+                        // Heavy MediaItem creation in background
+                        val items = otherTracks.map { it.toMediaItem() }
+                        Pair(order, items)
+                    }
                     
                     // Update UI state immediately
-                    currentPlaylist = originalPlaylist
-                    _queue.value = originalPlaylist
+                    currentPlaylist = newTrackOrder
+                    _queue.value = newTrackOrder
                     
-                    // Batch update the controller
-                    if (currentControllerIndex != 0) {
-                        controller.moveMediaItem(currentControllerIndex, 0)
+                    if (currentIndex != 0) {
+                        controller.moveMediaItem(currentIndex, 0)
                     }
                     controller.removeMediaItems(1, totalItems)
+                    controller.addMediaItems(otherMediaItems)
+                }
+            } else {
+                // Restore original order
+                if (originalPlaylist.isNotEmpty()) {
+                    val currentTrackId = _currentTrack.value?.stableId
+                    val currentIndexInOriginal = originalPlaylist.indexOfFirst { it.stableId == currentTrackId }
                     
-                    if (currentIndexInOriginal > 0) {
-                        val beforeItems = originalPlaylist.subList(0, currentIndexInOriginal).map { it.toMediaItem() }
-                        controller.addMediaItems(0, beforeItems)
-                    }
-                    if (currentIndexInOriginal < originalPlaylist.size - 1) {
-                        val afterItems = originalPlaylist.subList(currentIndexInOriginal + 1, originalPlaylist.size).map { it.toMediaItem() }
-                        controller.addMediaItems(afterItems)
+                    if (currentIndexInOriginal != -1) {
+                        val totalItems = controller.mediaItemCount
+                        val currentControllerIndex = controller.currentMediaItemIndex
+                        
+                        val (beforeItems, afterItems) = withContext(Dispatchers.Default) {
+                            val before = if (currentIndexInOriginal > 0) {
+                                originalPlaylist.subList(0, currentIndexInOriginal).map { it.toMediaItem() }
+                            } else emptyList()
+                            
+                            val after = if (currentIndexInOriginal < originalPlaylist.size - 1) {
+                                originalPlaylist.subList(currentIndexInOriginal + 1, originalPlaylist.size).map { it.toMediaItem() }
+                            } else emptyList()
+                            
+                            Pair(before, after)
+                        }
+
+                        // Update UI state
+                        currentPlaylist = originalPlaylist
+                        _queue.value = originalPlaylist
+                        
+                        // Batch update the controller
+                        if (currentControllerIndex != 0) {
+                            controller.moveMediaItem(currentControllerIndex, 0)
+                        }
+                        controller.removeMediaItems(1, totalItems)
+                        
+                        if (beforeItems.isNotEmpty()) {
+                            controller.addMediaItems(0, beforeItems)
+                        }
+                        if (afterItems.isNotEmpty()) {
+                            controller.addMediaItems(afterItems)
+                        }
                     }
                 }
             }
+            
+            isInternalUpdate = false
+            _shuffleMode.value = newShuffle
+            playerPrefs?.edit()?.putBoolean("shuffle_mode", newShuffle)?.apply()
+            savePlaybackState()
         }
-        
-        isInternalUpdate = false
-        _shuffleMode.value = newShuffle
-        playerPrefs.edit().putBoolean("shuffle_mode", newShuffle).apply()
-        savePlaybackState()
     }
 
     fun moveItem(fromIndex: Int, toIndex: Int) {

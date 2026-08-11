@@ -8,6 +8,7 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
@@ -25,7 +26,8 @@ private fun getLightColorScheme(accent: AccentColor): ColorScheme {
     return lightColorScheme(
         primary = primaryColor,
         onPrimary = VkSurface,
-        primaryContainer = primaryColor.copy(alpha = 0.12f),
+        primaryContainer = primaryColor.copy(alpha = 0.25f).compositeOver(VkSurface),
+        onPrimaryContainer = primaryColor,
         secondary = VkSecondaryText,
         background = VkBackground,
         surface = VkSurface,
@@ -44,6 +46,7 @@ private fun getAmoledColorScheme(accent: AccentColor): ColorScheme {
         primary = primaryColor,
         onPrimary = VkOnSurfaceDark,
         primaryContainer = containerColor.copy(alpha = 0.3f),
+        onPrimaryContainer = primaryColor,
         secondary = VkSecondaryTextDark,
         background = Color.Black,
         surface = Color.Black,

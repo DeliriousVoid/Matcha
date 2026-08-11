@@ -300,7 +300,7 @@ fun AppearanceSettingsScreen(
             )
             Spacer(modifier = Modifier.width(8.dp))
             ThemeButton(
-                label = "Светлая",
+                label = "Light",
                 selected = currentTheme == AppTheme.LIGHT,
                 onClick = { viewModel.setTheme(AppTheme.LIGHT) },
                 modifier = Modifier.weight(1f)

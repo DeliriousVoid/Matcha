@@ -16,6 +16,10 @@ import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -66,6 +70,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -88,6 +93,7 @@ import androidx.media3.common.Player
 import coil.compose.AsyncImage
 import com.deliriousvoid.openvkmatcha.data.model.AudioTrack
 import com.deliriousvoid.openvkmatcha.data.model.LrcLine
+import com.deliriousvoid.openvkmatcha.ui.viewmodel.PlayerViewModel
 import kotlinx.coroutines.launch
 
 @Composable
@@ -191,12 +197,9 @@ fun FullPlayer(
     isBuffering: Boolean,
     repeatMode: Int,
     shuffleMode: Boolean,
-    currentPosition: Long,
-    duration: Long,
-    syncedLyrics: List<LrcLine>,
-    currentLineIndex: Int,
     queue: List<AudioTrack>,
     hidePlayedTracks: Boolean,
+    playerViewModel: PlayerViewModel,
     onPlayPause: () -> Unit,
     onNext: () -> Unit,
     onPrevious: () -> Unit,
@@ -214,6 +217,10 @@ fun FullPlayer(
 
     var showLyrics by remember { mutableStateOf(false) }
     var showQueue by remember { mutableStateOf(false) }
+
+    LaunchedEffect(currentTrack.stableId) {
+        showLyrics = false
+    }
 
     val scope = rememberCoroutineScope()
     val queueSwipeOffset = remember { Animatable(0f) }
@@ -234,6 +241,43 @@ fun FullPlayer(
         else if (showLyrics) showLyrics = false
     }
 
+    val currentPosition by playerViewModel.currentPosition.collectAsState()
+    val duration by playerViewModel.duration.collectAsState()
+    val syncedLyrics by playerViewModel.syncedLyrics.collectAsState()
+    val currentLineIndex by playerViewModel.currentLineIndex.collectAsState()
+    val artworkCache by playerViewModel.artworkCache.collectAsState()
+    val lyricsLoading by playerViewModel.lyricsLoading.collectAsState()
+
+    val currentIndex = remember(currentTrack.stableId, queue) {
+        queue.indexOfFirst { it.stableId == currentTrack.stableId }.coerceAtLeast(0)
+    }
+    val isRepeating = repeatMode != Player.REPEAT_MODE_OFF
+    val pageCount = if (isRepeating && queue.size > 1) 10000 else queue.size
+    val pagerState = rememberPagerState(
+        initialPage = if (pageCount > queue.size) 5000 - (5000 % queue.size) + currentIndex else currentIndex
+    ) { pageCount }
+
+    LaunchedEffect(currentIndex) {
+        val targetPage = if (pageCount > queue.size) {
+            val currentBase = pagerState.currentPage - (pagerState.currentPage % queue.size)
+            currentBase + currentIndex
+        } else {
+            currentIndex
+        }
+        if (pagerState.currentPage != targetPage) {
+            pagerState.animateScrollToPage(targetPage)
+        }
+    }
+
+    LaunchedEffect(pagerState.currentPage, pagerState.isScrollInProgress) {
+        if (!pagerState.isScrollInProgress) {
+            val trackIndex = if (pageCount > queue.size) pagerState.currentPage % queue.size else pagerState.currentPage
+            if (trackIndex != currentIndex) {
+                onSkipToQueueItem(trackIndex)
+            }
+        }
+    }
+
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
@@ -244,12 +288,16 @@ fun FullPlayer(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(bottom = 48.dp, start = 24.dp, end = 24.dp),
+                    .padding(bottom = 48.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 BottomSheetDefaults.DragHandle()
 
-                Box(modifier = Modifier.fillMaxWidth()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 24.dp)
+                ) {
                     IconButton(
                         onClick = onShare,
                         modifier = Modifier.align(Alignment.TopEnd)
@@ -262,43 +310,59 @@ fun FullPlayer(
                     }
                 }
                 
-                Box(
+                HorizontalPager(
+                    state = pagerState,
                     modifier = Modifier
                         .weight(1f)
-                        .aspectRatio(1f)
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(MaterialTheme.colorScheme.primaryContainer),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    if (showLyrics && syncedLyrics.isNotEmpty()) {
-                        LyricsView(
-                            lyrics = syncedLyrics,
-                            currentLineIndex = currentLineIndex,
-                            onLineClick = onSeek,
-                            modifier = Modifier.fillMaxSize()
-                        )
-                    } else if (currentTrack.artworkUrl != null) {
-                        AsyncImage(
-                            model = currentTrack.artworkUrl,
-                            contentDescription = null,
-                            modifier = Modifier.fillMaxSize(),
-                            contentScale = ContentScale.Crop,
-                        )
-                    } else {
-                        Icon(
-                            imageVector = Icons.Default.MusicNote,
-                            contentDescription = null,
-                            modifier = Modifier.size(120.dp),
-                            tint = MaterialTheme.colorScheme.primary,
-                        )
+                        .fillMaxWidth(),
+                    contentPadding = PaddingValues(horizontal = 32.dp),
+                    pageSpacing = with(LocalDensity.current) { 92.toDp() },
+                    userScrollEnabled = queue.size > 1,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) { page ->
+                    val pageTrackIndex = if (pageCount > queue.size) page % queue.size else page
+                    val track = queue.getOrNull(pageTrackIndex) ?: return@HorizontalPager
+                    val artworkUrl = artworkCache[track.stableId] ?: track.artworkUrl
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .aspectRatio(1f)
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(MaterialTheme.colorScheme.primaryContainer),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        if (showLyrics && pageTrackIndex == currentIndex && syncedLyrics.isNotEmpty()) {
+                            LyricsView(
+                                lyrics = syncedLyrics,
+                                currentLineIndex = currentLineIndex,
+                                onLineClick = onSeek,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        } else if (artworkUrl != null) {
+                            AsyncImage(
+                                model = artworkUrl,
+                                contentDescription = null,
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Crop,
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.MusicNote,
+                                contentDescription = null,
+                                modifier = Modifier.size(120.dp),
+                                tint = MaterialTheme.colorScheme.primary,
+                            )
+                        }
                     }
                 }
 
                 Spacer(modifier = Modifier.height(32.dp))
 
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 24.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
@@ -328,13 +392,25 @@ fun FullPlayer(
                         }
                         IconButton(
                             onClick = { showLyrics = !showLyrics },
-                            enabled = syncedLyrics.isNotEmpty()
+                            enabled = syncedLyrics.isNotEmpty() || lyricsLoading || showLyrics
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.Lyrics,
-                                contentDescription = "Lyrics",
-                                tint = if (showLyrics) MaterialTheme.colorScheme.primary else LocalContentColor.current
-                            )
+                            if (lyricsLoading && !showLyrics) {
+                                androidx.compose.material3.CircularProgressIndicator(
+                                    modifier = Modifier.size(24.dp),
+                                    strokeWidth = 2.dp,
+                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Default.Lyrics,
+                                    contentDescription = "Lyrics",
+                                    tint = when {
+                                        showLyrics && syncedLyrics.isNotEmpty() -> MaterialTheme.colorScheme.primary
+                                        syncedLyrics.isNotEmpty() -> LocalContentColor.current
+                                        else -> LocalContentColor.current.copy(alpha = 0.38f)
+                                    }
+                                )
+                            }
                         }
                         IconButton(onClick = { showQueue = !showQueue }) {
                             Icon(
@@ -363,11 +439,14 @@ fun FullPlayer(
                     colors = SliderDefaults.colors(
                         thumbColor = MaterialTheme.colorScheme.primary,
                         activeTrackColor = MaterialTheme.colorScheme.primary,
-                    )
+                    ),
+                    modifier = Modifier.padding(horizontal = 12.dp)
                 )
 
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 24.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
                     Text(
@@ -383,7 +462,9 @@ fun FullPlayer(
                 Spacer(modifier = Modifier.height(24.dp))
 
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp),
                     horizontalArrangement = Arrangement.SpaceEvenly,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -489,7 +570,7 @@ fun FullPlayer(
                 ) {
                     QueueView(
                         queue = queue,
-                        currentTrackId = currentTrack.id,
+                        currentTrackStableId = currentTrack.stableId,
                         hidePlayedTracks = hidePlayedTracks,
                         onTrackClick = onSkipToQueueItem,
                         onRemove = onRemoveFromQueue,
@@ -569,7 +650,7 @@ fun LyricsView(
 @Composable
 fun QueueView(
     queue: List<AudioTrack>,
-    currentTrackId: Int,
+    currentTrackStableId: String,
     hidePlayedTracks: Boolean,
     onTrackClick: (Int) -> Unit,
     onRemove: (Int) -> Unit,
@@ -579,7 +660,7 @@ fun QueueView(
     var draggedItemIndex by remember { mutableStateOf<Int?>(null) }
     var draggingOffset by remember { mutableStateOf(0f) }
     
-    val currentIndex = queue.indexOfFirst { it.id == currentTrackId }
+    val currentIndex = queue.indexOfFirst { it.stableId == currentTrackStableId }
     val displayQueue = if (hidePlayedTracks && currentIndex != -1) {
         queue.subList(currentIndex, queue.size)
     } else {
@@ -622,7 +703,7 @@ fun QueueView(
             ) {
                 itemsIndexed(displayQueue, key = { _, track -> track.stableId }) { index, track ->
                     val originalIndex = index + offset
-                    val isPlaying = track.id == currentTrackId
+                    val isPlaying = track.stableId == currentTrackStableId
                     val isDragging = draggedItemIndex == index
                     
                     val elevation by animateDpAsState(

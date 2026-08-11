@@ -1,5 +1,6 @@
 package com.deliriousvoid.openvkmatcha.ui.viewmodel
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -11,7 +12,9 @@ import com.deliriousvoid.openvkmatcha.data.repository.ArtworkRepository
 import com.deliriousvoid.openvkmatcha.data.repository.LyricsRepository
 import com.deliriousvoid.openvkmatcha.playback.LrcParser
 import com.deliriousvoid.openvkmatcha.playback.MusicPlayerManager
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -30,6 +33,10 @@ class PlayerViewModel(
 
     private val _trackWithArtwork = MutableStateFlow<AudioTrack?>(null)
     val currentTrack: StateFlow<AudioTrack?> = _trackWithArtwork.asStateFlow()
+
+    private val _artworkCache = MutableStateFlow<Map<String, String>>(emptyMap())
+    val artworkCache: StateFlow<Map<String, String>> = _artworkCache.asStateFlow()
+
     val isPlaying = playerManager.isPlaying
     val playWhenReady = playerManager.playWhenReady
     val playbackState = playerManager.playbackState
@@ -45,9 +52,14 @@ class PlayerViewModel(
     private val _lyricsLoading = MutableStateFlow(false)
     val lyricsLoading: StateFlow<Boolean> = _lyricsLoading.asStateFlow()
 
+    private var lyricsJob: kotlinx.coroutines.Job? = null
+
     val currentLineIndex: StateFlow<Int> = combine(syncedLyrics, currentPosition) { lyrics, pos ->
         if (lyrics.isEmpty()) -1
-        else lyrics.indexOfLast { it.timestampMs <= pos }.coerceAtLeast(0)
+        else {
+            val index = lyrics.binarySearch { it.timestampMs.compareTo(pos) }
+            if (index < 0) (-(index + 1) - 1).coerceAtLeast(0) else index
+        }
     }.distinctUntilChanged().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), -1)
 
     init {
@@ -63,31 +75,71 @@ class PlayerViewModel(
                 }
             }
         }
+
+        viewModelScope.launch {
+            combine(playerManager.currentTrack, playerManager.queue, playerManager.repeatMode) { track, queue, repeat ->
+                Triple(track, queue, repeat)
+            }.collect { (track, queue, repeat) ->
+                if (track != null && queue.isNotEmpty()) {
+                    val index = queue.indexOfFirst { it.stableId == track.stableId }
+                    if (index != -1) {
+                        // Load current, next, and previous
+                        loadArtwork(track)
+                        
+                        val nextIndex = (index + 1) % queue.size
+                        val prevIndex = (index - 1 + queue.size) % queue.size
+                        
+                        if (queue.size > 1) {
+                            loadArtwork(queue[nextIndex])
+                            loadArtwork(queue[prevIndex])
+                        }
+                    }
+                }
+            }
+        }
     }
 
     private fun loadArtwork(track: AudioTrack) {
-        if (track.artworkUrl != null) return
+        if (track.artworkUrl != null) {
+            if (_artworkCache.value[track.stableId] != track.artworkUrl) {
+                _artworkCache.value = _artworkCache.value + (track.stableId to track.artworkUrl)
+            }
+            return
+        }
         viewModelScope.launch {
             artworkRepository.getArtworkUrl(track.artist, track.title)
                 .onSuccess { url ->
-                    if (url != null && _trackWithArtwork.value?.id == track.id) {
-                        _trackWithArtwork.value = track.copy(artworkUrl = url)
+                    if (url != null) {
+                        _artworkCache.value = _artworkCache.value + (track.stableId to url)
+                        if (_trackWithArtwork.value?.stableId == track.stableId) {
+                            _trackWithArtwork.value = track.copy(artworkUrl = url)
+                        }
                     }
                 }
         }
     }
 
     private fun loadLyrics(track: AudioTrack) {
-        viewModelScope.launch {
+        lyricsJob?.cancel()
+        _syncedLyrics.value = emptyList()
+        
+        lyricsJob = viewModelScope.launch {
             _lyricsLoading.value = true
-            lyricsRepository.getLyrics(track.title, track.artist, track.duration)
-                .onSuccess { record ->
-                    _syncedLyrics.value = LrcParser.parse(record?.syncedLyrics)
-                }
-                .onFailure {
-                    _syncedLyrics.value = emptyList()
-                }
-            _lyricsLoading.value = false
+            try {
+                lyricsRepository.getLyrics(track.title, track.artist, track.duration)
+                    .onSuccess { record ->
+                        val parsed = withContext(Dispatchers.Default) {
+                            LrcParser.parse(record?.syncedLyrics)
+                        }
+                        _syncedLyrics.value = parsed
+                    }
+                    .onFailure {
+                        Log.e("PlayerViewModel", "Failed to load lyrics for ${track.title}", it)
+                        _syncedLyrics.value = emptyList()
+                    }
+            } finally {
+                _lyricsLoading.value = false
+            }
         }
     }
 
