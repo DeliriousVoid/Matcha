@@ -28,6 +28,10 @@ import com.deliriousvoid.openvkmatcha.ui.components.VerifiedBadge
 import com.deliriousvoid.openvkmatcha.ui.util.formatTimeAgo
 import com.deliriousvoid.openvkmatcha.ui.viewmodel.NotificationsViewModel
 
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.remember
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NotificationsScreen(
@@ -36,10 +40,25 @@ fun NotificationsScreen(
     viewModel: NotificationsViewModel = viewModel(factory = NotificationsViewModel.factory())
 ) {
     val state by viewModel.uiState.collectAsState()
+    val listState = rememberLazyListState()
 
-    // Mark as read when the list of notifications changes and we have unread ones
+    val shouldLoadMore by remember {
+        derivedStateOf {
+            val layoutInfo = listState.layoutInfo
+            val totalItemsNumber = layoutInfo.totalItemsCount
+            val lastVisibleItemIndex = (layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0) + 1
+            lastVisibleItemIndex > (totalItemsNumber - 5) && totalItemsNumber > 0
+        }
+    }
+
+    LaunchedEffect(shouldLoadMore) {
+        if (shouldLoadMore && !state.isLoading && state.hasMore) {
+            viewModel.loadNotifications()
+        }
+    }
+
     LaunchedEffect(state.notifications, state.isArchive) {
-        if (!state.isArchive && state.unreadCount > 0) {
+        if (!state.isArchive && state.notifications.any { !it.isRead }) {
             viewModel.markAsRead()
         }
     }
@@ -68,7 +87,7 @@ fun NotificationsScreen(
             onRefresh = { viewModel.loadNotifications(refresh = true, isManual = true) },
             modifier = Modifier.weight(1f)
         ) {
-            if (state.isLoading) {
+            if (state.isLoading && state.notifications.isEmpty()) {
                 LoadingBox(modifier = Modifier.fillMaxSize())
             } else if (state.notifications.isEmpty()) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -78,12 +97,16 @@ fun NotificationsScreen(
                     )
                 }
             } else {
-                LazyColumn(modifier = Modifier.fillMaxSize()) {
-                    items(state.notifications) { notification ->
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    state = listState
+                ) {
+                    items(state.notifications, key = { it.id }) { notification ->
                         NotificationItem(
                             notification = notification,
                             onAuthorClick = { onOpenProfile(notification.authorId) },
                             onItemClick = {
+                                viewModel.markAsRead()
                                 if (notification.ownerId != 0 && notification.itemId != 0) {
                                     onOpenPost(notification.ownerId, notification.itemId)
                                 }
@@ -94,6 +117,17 @@ fun NotificationsScreen(
                             modifier = Modifier.padding(horizontal = 16.dp),
                             color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
                         )
+                    }
+                    
+                    if (state.hasMore) {
+                        item {
+                            Box(
+                                modifier = Modifier.fillMaxWidth().padding(16.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                            }
+                        }
                     }
                 }
             }

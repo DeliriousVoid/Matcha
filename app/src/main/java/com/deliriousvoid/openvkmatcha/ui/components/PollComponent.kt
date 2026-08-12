@@ -6,7 +6,10 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CheckBox
+import androidx.compose.material.icons.filled.CheckBoxOutlineBlank
+import androidx.compose.material.icons.filled.Poll
+import androidx.compose.material.icons.filled.RadioButtonChecked
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -18,6 +21,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.deliriousvoid.openvkmatcha.data.model.Poll
+import com.deliriousvoid.openvkmatcha.util.StringUtils
 
 @Composable
 fun PollComponent(
@@ -26,6 +30,7 @@ fun PollComponent(
     modifier: Modifier = Modifier
 ) {
     val isVoted = poll.answerIds.isNotEmpty()
+    val showsResults = isVoted || poll.closed || !poll.canVote
     var selectedAnswers by remember(poll.id, poll.answerIds) { mutableStateOf(poll.answerIds) }
 
     Column(
@@ -35,11 +40,20 @@ fun PollComponent(
             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
             .padding(16.dp)
     ) {
-        Text(
-            text = poll.question,
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold
-        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                imageVector = Icons.Default.Poll,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(20.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = poll.question,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+        }
         
         Spacer(modifier = Modifier.height(4.dp))
         
@@ -58,15 +72,15 @@ fun PollComponent(
         poll.answers.forEach { answer ->
             val isAnswerSelected = selectedAnswers.contains(answer.id)
             val percentage = (answer.rate / 100.0).toFloat()
-            val animatedProgress by animateFloatAsState(targetValue = if (isVoted) percentage else 0f)
+            val animatedProgress by animateFloatAsState(targetValue = if (showsResults) percentage else 0f)
 
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(40.dp)
-                    .clip(RoundedCornerShape(8.dp))
+                    .clip(RoundedCornerShape(10.dp))
                     .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                    .clickable(enabled = poll.canVote) {
+                    .clickable(enabled = poll.canVote && !poll.closed) {
                         if (poll.multiple) {
                             selectedAnswers = if (isAnswerSelected) {
                                 selectedAnswers - answer.id
@@ -74,20 +88,20 @@ fun PollComponent(
                                 selectedAnswers + answer.id
                             }
                         } else {
-                            if (!isVoted || !isAnswerSelected) {
+                            if (!isVoted) {
                                 onVote(listOf(answer.id))
                             }
                         }
                     }
             ) {
-                if (isVoted) {
+                if (showsResults) {
                     Box(
                         modifier = Modifier
                             .fillMaxHeight()
                             .fillMaxWidth(animatedProgress)
                             .background(
-                                if (isAnswerSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
-                                else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.1f)
+                                if (isAnswerSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
+                                else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.15f)
                             )
                     )
                 }
@@ -98,21 +112,21 @@ fun PollComponent(
                         .padding(horizontal = 12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    if (!isVoted && poll.canVote) {
+                    if (!showsResults && poll.canVote) {
                         Icon(
                             imageVector = if (poll.multiple) {
-                                if (isAnswerSelected) Icons.Default.Check else Icons.Default.Check // Should be Checkbox
+                                if (isAnswerSelected) Icons.Default.CheckBox else Icons.Default.CheckBoxOutlineBlank
                             } else {
-                                Icons.Default.RadioButtonUnchecked
+                                if (isAnswerSelected) Icons.Default.RadioButtonChecked else Icons.Default.RadioButtonUnchecked
                             },
                             contentDescription = null,
                             modifier = Modifier.size(20.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            tint = if (isAnswerSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Spacer(modifier = Modifier.width(8.dp))
-                    } else if (isVoted && isAnswerSelected) {
+                    } else if (showsResults && isAnswerSelected) {
                         Icon(
-                            imageVector = Icons.Default.Check,
+                            imageVector = Icons.Default.RadioButtonChecked,
                             contentDescription = null,
                             modifier = Modifier.size(16.dp),
                             tint = MaterialTheme.colorScheme.primary
@@ -124,12 +138,10 @@ fun PollComponent(
                         text = answer.text,
                         modifier = Modifier.weight(1f),
                         style = MaterialTheme.typography.bodyMedium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
                         fontWeight = if (isAnswerSelected) FontWeight.Bold else FontWeight.Normal
                     )
 
-                    if (isVoted) {
+                    if (showsResults) {
                         Text(
                             text = "${answer.rate.toInt()}%",
                             style = MaterialTheme.typography.bodySmall,
@@ -142,7 +154,7 @@ fun PollComponent(
             Spacer(modifier = Modifier.height(8.dp))
         }
 
-        if (poll.multiple && !isVoted && poll.canVote && selectedAnswers.isNotEmpty()) {
+        if (poll.multiple && !showsResults && poll.canVote && selectedAnswers.isNotEmpty()) {
             Button(
                 onClick = { onVote(selectedAnswers) },
                 modifier = Modifier.align(Alignment.CenterHorizontally),
@@ -159,7 +171,7 @@ fun PollComponent(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = "${poll.votes} проголосовало",
+                text = StringUtils.getPollVotesString(poll.votes),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -176,6 +188,12 @@ fun PollComponent(
                         fontWeight = FontWeight.Bold
                     )
                 }
+            } else if (poll.closed) {
+                Text(
+                    text = "Опрос завершён",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
     }

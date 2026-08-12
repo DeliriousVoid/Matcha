@@ -1,9 +1,11 @@
 package com.deliriousvoid.openvkmatcha.ui.components
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
@@ -14,8 +16,11 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
@@ -104,15 +109,39 @@ fun MiniPlayer(
     onPlayPause: () -> Unit,
     onToggleAdded: () -> Unit,
     onClick: () -> Unit,
+    onNext: () -> Unit,
+    onPrevious: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     if (currentTrack == null) return
+
+    val scope = rememberCoroutineScope()
+    val offsetX = remember { Animatable(0f) }
+    val density = LocalDensity.current
+    val threshold = remember { with(density) { 50.dp.toPx() } }
 
     Surface(
         modifier = modifier
             .fillMaxWidth()
             .height(64.dp)
-            .clickable { onClick() },
+            .clickable { onClick() }
+            .draggable(
+                orientation = Orientation.Horizontal,
+                state = rememberDraggableState { delta ->
+                    scope.launch { offsetX.snapTo(offsetX.value + delta) }
+                },
+                onDragStopped = {
+                    val velocity = offsetX.value
+                    if (velocity > threshold) {
+                        onPrevious()
+                    } else if (velocity < -threshold) {
+                        onNext()
+                    }
+                    scope.launch {
+                        offsetX.animateTo(0f)
+                    }
+                }
+            ),
         color = MaterialTheme.colorScheme.surface,
         tonalElevation = 0.dp,
     ) {
@@ -120,47 +149,64 @@ fun MiniPlayer(
             modifier = Modifier.padding(horizontal = 16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Box(
-                modifier = Modifier
-                    .size(44.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(MaterialTheme.colorScheme.primaryContainer),
-                contentAlignment = Alignment.Center,
-            ) {
-                if (currentTrack.artworkUrl != null) {
-                    AsyncImage(
-                        model = currentTrack.artworkUrl,
-                        contentDescription = null,
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop,
-                    )
-                } else {
-                    Icon(
-                        imageVector = Icons.Default.MusicNote,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                    )
-                }
-            }
-
-            Column(
+            AnimatedContent(
+                targetState = currentTrack,
+                transitionSpec = {
+                    val direction = if (offsetX.value < 0) 1 else -1
+                    slideInHorizontally { width -> direction * width } togetherWith
+                            slideOutHorizontally { width -> direction * -width }
+                },
                 modifier = Modifier
                     .weight(1f)
-                    .padding(horizontal = 12.dp)
-            ) {
-                Text(
-                    text = currentTrack.title,
-                    style = MaterialTheme.typography.titleSmall,
-                    maxLines = 1,
-                    modifier = Modifier.basicMarquee(),
-                )
-                Text(
-                    text = currentTrack.artist,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    modifier = Modifier.basicMarquee(),
-                )
+                    .graphicsLayer { translationX = offsetX.value },
+                label = "MiniPlayerTrackAnimation"
+            ) { track ->
+                if (track != null) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(44.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(MaterialTheme.colorScheme.primaryContainer),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            if (track.artworkUrl != null) {
+                                AsyncImage(
+                                    model = track.artworkUrl,
+                                    contentDescription = null,
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentScale = ContentScale.Crop,
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Default.MusicNote,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                )
+                            }
+                        }
+
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(horizontal = 12.dp)
+                        ) {
+                            Text(
+                                text = track.title,
+                                style = MaterialTheme.typography.titleSmall,
+                                maxLines = 1,
+                                modifier = Modifier.basicMarquee(),
+                            )
+                            Text(
+                                text = track.artist,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                modifier = Modifier.basicMarquee(),
+                            )
+                        }
+                    }
+                }
             }
 
             IconButton(onClick = onToggleAdded) {

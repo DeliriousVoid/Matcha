@@ -807,8 +807,9 @@ class ProfileViewModel(
         loadCurrentUserId()
         loadProfile()
         viewModelScope.launch {
-            AppEvents.refreshProfile.collect {
-                if (userIdOrName == null) {
+            AppEvents.refreshProfile.collect { targetId ->
+                val currentProfileId = _uiState.value.profile?.id
+                if (targetId == null || targetId == currentProfileId) {
                     loadProfile(refresh = true, isManual = true)
                 }
                 _scrollToTop.emit(Unit)
@@ -1347,6 +1348,8 @@ data class NotificationsUiState(
     val isLoading: Boolean = false,
     val isRefreshing: Boolean = false,
     val isArchive: Boolean = false,
+    val hasMore: Boolean = true,
+    val nextFrom: String? = null,
     val error: String? = null,
 )
 
@@ -1359,15 +1362,17 @@ class NotificationsViewModel(
     private val _uiState = MutableStateFlow(NotificationsUiState())
     val uiState = _uiState.asStateFlow()
 
+    private var loadingJob: Job? = null
+    private var pollingJob: Job? = null
+
     init {
-        loadNotifications()
+        loadNotifications(refresh = true)
         refreshUnreadCount()
         viewModelScope.launch {
             AppEvents.refreshNotifications.collect {
                 refreshUnreadCount()
                 if (!_uiState.value.isArchive) {
-                    // Small delay to allow the server to index the notification after a message event
-                    delay(1000)
+                    delay(1000) // Small delay to allow the server to index the notification
                     loadNotifications(refresh = true)
                 }
             }
@@ -1375,26 +1380,28 @@ class NotificationsViewModel(
         startPolling()
     }
 
-    private var pollingJob: Job? = null
-    private var loadingJob: Job? = null
-
     private fun startPolling() {
         pollingJob?.cancel()
         pollingJob = viewModelScope.launch {
             while (true) {
-                delay(60_000) // Fallback poll every 60 seconds
+                delay(30_000) // Poll every 30 seconds as fallback
                 if (settingsViewModel.offlineMode.value) continue
                 refreshUnreadCount()
-                if (!_uiState.value.isArchive) {
-                    loadNotifications(refresh = true)
-                }
             }
         }
     }
 
     fun setArchive(archive: Boolean) {
         if (_uiState.value.isArchive == archive && _uiState.value.notifications.isNotEmpty()) return
-        _uiState.update { it.copy(isArchive = archive, notifications = emptyList(), isLoading = true) }
+        _uiState.update { 
+            it.copy(
+                isArchive = archive, 
+                notifications = emptyList(), 
+                isLoading = true,
+                nextFrom = null,
+                hasMore = true
+            ) 
+        }
         loadNotifications(refresh = true)
     }
 
@@ -1404,35 +1411,36 @@ class NotificationsViewModel(
             return
         }
         
+        if (!refresh && (!_uiState.value.hasMore || _uiState.value.isLoading)) return
+
         loadingJob?.cancel()
         loadingJob = viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = !refresh && it.notifications.isEmpty(), isRefreshing = isManual) }
-            repository.loadNotifications(archived = _uiState.value.isArchive).onSuccess { response ->
+            val startFrom = if (refresh) null else _uiState.value.nextFrom
+            
+            _uiState.update { state ->
+                state.copy(
+                    isLoading = refresh && state.notifications.isEmpty(),
+                    isRefreshing = isManual
+                )
+            }
+
+            repository.loadNotifications(
+                startFrom = startFrom, 
+                archived = _uiState.value.isArchive
+            ).onSuccess { response ->
                 _uiState.update { state ->
-                    val updatedNotifications = if (refresh) {
-                        // Merge with existing notifications to preserve loaded details
-                        response.items.map { newNotif ->
-                            state.notifications.find { it.id == newNotif.id && it.isDetailsLoaded }
-                                ?.let { existing ->
-                                    newNotif.copy(
-                                        parentText = existing.parentText,
-                                        isDetailsLoaded = true
-                                    )
-                                } ?: newNotif
-                        }
-                    } else {
-                        // When loading more, archived status is handled by API
-                        // but for new notifications, we should honor the isRead from API
-                        state.notifications + response.items
-                    }
+                    val newItems = if (refresh) response.items else state.notifications + response.items
                     
                     state.copy(
-                        notifications = updatedNotifications,
-                        unreadCount = response.unreadCount,
+                        notifications = newItems,
+                        nextFrom = response.nextFrom,
+                        hasMore = response.nextFrom != null && response.items.isNotEmpty(),
                         isLoading = false,
-                        isRefreshing = false
+                        isRefreshing = false,
+                        error = null
                     )
                 }
+                if (refresh && !_uiState.value.isArchive) refreshUnreadCount()
             }.onFailure { error ->
                 _uiState.update { it.copy(isLoading = false, isRefreshing = false, error = error.message) }
             }
@@ -1444,6 +1452,9 @@ class NotificationsViewModel(
         viewModelScope.launch {
             repository.getUnreadCount().onSuccess { count ->
                 _uiState.update { it.copy(unreadCount = count) }
+                android.util.Log.d("NotificationsViewModel", "Unread count updated: $count")
+            }.onFailure {
+                android.util.Log.e("NotificationsViewModel", "Failed to get unread count: ${it.message}")
             }
         }
     }
@@ -1451,9 +1462,9 @@ class NotificationsViewModel(
     fun markAsRead() {
         viewModelScope.launch {
             repository.markAsViewed()
+            refreshUnreadCount()
             _uiState.update { state -> 
                 state.copy(
-                    unreadCount = 0,
                     notifications = state.notifications.map { it.copy(isRead = true) }
                 )
             }
@@ -1462,13 +1473,11 @@ class NotificationsViewModel(
 
     fun loadCommentDetails(notification: Notification) {
         if (notification.isDetailsLoaded || notification.itemId == 0 || notification.ownerId == 0) return
-        if (notification.type != "comment_post" && notification.type != "reply_comment" && 
-            notification.type != "reply_post" && notification.type != "mention" && 
-            notification.type != "comment_photo") return
+        val typesWithComments = listOf("comment_post", "comment_photo", "mention", "reply_comment", "reply_post")
+        if (notification.type !in typesWithComments) return
 
         viewModelScope.launch {
             commentsRepository.getComments(notification.ownerId, notification.itemId).onSuccess { response ->
-                // Search for matching comment by date (within 5 seconds tolerance)
                 val matchingComment = response.items.minByOrNull { kotlin.math.abs(it.date - notification.date) }
                     ?.takeIf { kotlin.math.abs(it.date - notification.date) <= 5 }
 
@@ -1486,7 +1495,6 @@ class NotificationsViewModel(
                         )
                     }
                 } else {
-                    // Mark as loaded even if not found to avoid repeated requests
                     _uiState.update { state ->
                         state.copy(
                             notifications = state.notifications.map { n ->
@@ -1628,7 +1636,7 @@ class CreatePostViewModel(
 
     fun post() {
         val state = _uiState.value
-        if (state.inputText.trim().isEmpty() && state.pendingAttachments.isEmpty()) return
+        if (state.inputText.trim().isEmpty() && state.pendingAttachments.isEmpty() && state.pollQuestion == null) return
         if (state.isSending) return
 
         viewModelScope.launch {
@@ -1691,6 +1699,7 @@ class CreatePostViewModel(
                 isNsfw = state.isNsfw
             ).onSuccess {
                 _uiState.update { it.copy(isSending = false, success = true) }
+                AppEvents.emitRefreshProfile(ownerId)
             }.onFailure { error ->
                 _uiState.update { it.copy(isSending = false, error = error.message) }
             }

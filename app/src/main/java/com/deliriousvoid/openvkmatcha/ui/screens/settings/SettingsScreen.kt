@@ -536,7 +536,7 @@ fun DeveloperSettingsScreen(
             onCheckedChange = { viewModel.setExperimentalFeatures(it) }
         )
         Text(
-            text = "Включает доступ к экспериментальным и не полностью готовым функциям (опросы, источники, вложения видео и документов).",
+            text = "Включает доступ к экспериментальным и не полностью готовым функциям (документы, источники, расширенные настройки).",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(bottom = 16.dp)

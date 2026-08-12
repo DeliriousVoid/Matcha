@@ -28,6 +28,7 @@ import com.deliriousvoid.openvkmatcha.ui.viewmodel.SendGiftViewModel
 
 import androidx.compose.runtime.DisposableEffect
 import com.deliriousvoid.openvkmatcha.util.AppEvents
+import com.deliriousvoid.openvkmatcha.util.StringUtils
 import com.deliriousvoid.openvkmatcha.util.TopBarState
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -350,17 +351,6 @@ private fun getPriceText(gift: SelectableGift): String {
         hasLimit && left == 0 && price == 0 -> "Закончились"
         gift.priceStr != null -> gift.priceStr!!
         price == 0 -> "Бесплатно"
-        else -> "$price ${pluralGolos(price)}"
-    }
-}
-
-private fun pluralGolos(count: Int): String {
-    val lastDigit = count % 10
-    val lastTwoDigits = count % 100
-    return when {
-        lastTwoDigits in 11..19 -> "голосов"
-        lastDigit == 1 -> "голос"
-        lastDigit in 2..4 -> "голоса"
-        else -> "голосов"
+        else -> "$price ${StringUtils.getGolosString(price)}"
     }
 }

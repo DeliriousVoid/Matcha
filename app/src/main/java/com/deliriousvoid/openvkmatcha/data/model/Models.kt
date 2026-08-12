@@ -345,7 +345,7 @@ sealed class PlaylistSource {
 
 data class Notification(
     val id: String,
-    val type: String, // like_post, reply_comment, follow, etc.
+    val type: String, // like_post, comment_post, follow, etc.
     val action: String,
     val date: Long,
     val authorId: Int,
@@ -353,12 +353,13 @@ data class Notification(
     val authorAvatar: String,
     val authorOnline: Boolean = false,
     val authorMobileOnline: Boolean = false,
-    val authorVerified: Boolean,
+    val authorVerified: Boolean = false,
     val text: String?,
     val parentText: String? = null,
     val ownerId: Int = 0,
     val itemId: Int = 0,
     val isRead: Boolean = false,
+    val isArchived: Boolean = false,
     val isDetailsLoaded: Boolean = false,
 )
 

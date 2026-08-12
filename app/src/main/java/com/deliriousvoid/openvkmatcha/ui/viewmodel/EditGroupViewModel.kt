@@ -66,7 +66,7 @@ class EditGroupViewModel(
             profileRepository.editGroup(groupId, _uiState.value.settings)
                 .onSuccess {
                     _uiState.update { it.copy(isSaving = false, isSaved = true) }
-                    AppEvents.emitRefreshProfile()
+                    AppEvents.emitRefreshProfile(-groupId)
                 }
                 .onFailure { error ->
                     _uiState.update { it.copy(isSaving = false, error = error.message) }

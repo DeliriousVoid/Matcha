@@ -492,7 +492,7 @@ object JsonParsers {
         return map
     }
 
-    fun parseNotifications(response: JSONObject): NotificationsResponse {
+    fun parseNotifications(response: JSONObject, isArchived: Boolean = false): NotificationsResponse {
         val responseObj = getResponseObject(response)
         val items = responseObj.optJSONArray("items") ?: JSONArray()
         val profiles = responseObj.optJSONArray("profiles") ?: JSONArray()
@@ -511,10 +511,10 @@ object JsonParsers {
             val feedback = item.optJSONObject("feedback")
             val parent = item.optJSONObject("parent")
             
-            // Robust fromId extraction with multiple fallbacks (inspired by Flux)
+            // Robust fromId extraction with multiple fallbacks (as in Flux)
             var fromId = 0
 
-            // 1. Check feedback items (common for group actions like likes)
+            // 1. Check feedback items
             val feedbackItems = feedback?.optJSONArray("items")
             if (feedbackItems != null && feedbackItems.length() > 0) {
                 val firstItem = feedbackItems.optJSONObject(0)
@@ -526,8 +526,7 @@ object JsonParsers {
             if (fromId == 0) fromId = feedback?.optInt("from_id", 0) ?: 0
             if (fromId == 0) fromId = item.optInt("from_id", 0)
             
-            // 3. Fallback for comment_post where author might be in feedback.id 
-            // but ONLY if from_id was completely missing
+            // 3. Fallback for comments where author might be in feedback.id
             if (fromId == 0 && (type == "comment_post" || type == "comment_photo")) {
                 fromId = feedback?.optInt("id", 0) ?: 0
             }
@@ -536,7 +535,7 @@ object JsonParsers {
             if (fromId == 0) fromId = parent?.optInt("from_id", 0) ?: 0
             if (fromId == 0 && type == "sent_gift") fromId = parent?.optInt("id", 0) ?: 0
             
-            // Flux-inspired ID extraction for navigation
+            // Extract IDs for navigation
             var ownerId = 0
             var itemId = 0
             
@@ -550,34 +549,31 @@ object JsonParsers {
                 if (ownerId == 0) ownerId = parent.optInt("to_id", 0)
                 if (ownerId == 0) ownerId = parent.optInt("from_id", 0)
                 
-                // For nested comment interactions, we need the post_id
                 if (type == "like_comment" || type == "reply_comment") {
                     val postId = parent.optInt("post_id", 0)
                     if (postId != 0) itemId = postId
                 }
             } else if (feedback != null) {
-                // Fallback for some types that might not have a parent but have info in feedback
                 itemId = feedback.optInt("id", 0)
                 ownerId = feedback.optInt("owner_id", 0)
                 if (ownerId == 0) ownerId = feedback.optInt("to_id", 0)
             }
             
-            android.util.Log.d("Notifications", "Parsed $type: owner=$ownerId, item=$itemId")
-            
             val author = resolveAuthor(fromId, profileMap, groupMap)
             
             val actionText = when (type) {
-                "like_post" -> "оценил ваш пост"
+                "like_post" -> "понравился ваш пост"
                 "like_comment" -> "оценил ваш комментарий"
                 "reply_comment" -> "ответил на ваш комментарий"
                 "reply_post" -> "ответил на ваш пост"
                 "mention" -> "упомянул вас"
                 "comment_post" -> "прокомментировал ваш пост"
-                "copy_post" -> "сделал репост вашей записи"
+                "comment_photo" -> "оставил(а) комментарий под вашей фотографией"
+                "copy_post" -> "поделился(-ась) вашим постом"
                 "follow" -> "подписался на вас"
                 "sent_gift" -> "отправил вам подарок"
-                "wall" -> "оставил запись на вашей стене"
-                else -> "новое уведомление ($type)"
+                "wall" -> "написал(а) на вашей стене пост"
+                else -> "выполнил действие ($type)"
             }
 
             fun extractCleanText(obj: JSONObject?): String? {
@@ -608,6 +604,7 @@ object JsonParsers {
                             "audio" -> "[аудио]"
                             "doc" -> "[файл]"
                             "link" -> "[ссылка]"
+                            "wall" -> "[Запись]"
                             else -> "[$attType]"
                         }
                         if (sb.isNotEmpty()) sb.append(" ")
@@ -640,32 +637,32 @@ object JsonParsers {
             }
 
             // Extract main content text (e.g. comment)
-            // Priority: 1. feedback.items[0], 2. feedback, 3. item
             val firstFeedbackItem = feedback?.optJSONArray("items")?.optJSONObject(0)
             val extractedContent = getFullText(firstFeedbackItem) ?: getFullText(feedback) ?: getFullText(item)
+            val extractedParent = if (type == "sent_gift") null else getFullText(parent)
 
-            // Extract parent context text (e.g. post)
-            val extractedParent = getFullText(parent)
-
-            // Logic swap as requested: 
-            // For comment/reply actions, we show the comment itself in the "context box" 
-            // instead of the original post, as per user request.
+            // Ported logic from MatchaOLD: show certain types in the grey context box
             val (mainText, parentContextText) = when (type) {
                 "comment_post", "reply_comment", "reply_post", "mention", "comment_photo" -> {
-                    // Try to get comment text. If missing, fallback to parent (post) text 
+                    // Try to get content text. If missing, fallback to parent text 
                     // so the box doesn't disappear completely.
                     val boxText = extractedContent ?: extractedParent
                     null to boxText
                 }
+                "sent_gift" -> {
+                    val giftText = if (author.name.isNotBlank()) "Подарок от ${author.name}" else "Подарок"
+                    giftText to null
+                }
                 else -> {
-                    // For likes etc., keep original behavior
                     extractedContent to extractedParent
                 }
             }
 
+            val notificationId = "${if (isArchived) "archived_" else ""}${type}_${date}_$i"
+
             parsedItems.add(
                 Notification(
-                    id = "${type}_${date}_$fromId",
+                    id = notificationId,
                     type = type,
                     action = actionText,
                     date = date,
@@ -679,7 +676,8 @@ object JsonParsers {
                     parentText = parentContextText,
                     ownerId = ownerId,
                     itemId = itemId,
-                    isRead = date <= lastViewed
+                    isRead = if (isArchived) true else date <= lastViewed,
+                    isArchived = isArchived
                 )
             )
         }
@@ -687,7 +685,7 @@ object JsonParsers {
         return NotificationsResponse(
             items = parsedItems,
             nextFrom = nextFrom,
-            unreadCount = 0 // Will be handled via count from account.getCounters or similar
+            unreadCount = 0
         )
     }
 

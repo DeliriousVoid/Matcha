@@ -150,6 +150,7 @@ class PlayerViewModel(
     fun playPause() = playerManager.playPause()
     fun skipToNext() = playerManager.skipToNext()
     fun skipToPrevious() = playerManager.skipToPrevious()
+    fun seekToPreviousOrRestart() = playerManager.seekToPreviousOrRestart()
     fun toggleShuffle() = playerManager.toggleShuffle()
     fun toggleRepeat() = playerManager.toggleRepeat()
     fun seekTo(position: Long) = playerManager.seekTo(position)

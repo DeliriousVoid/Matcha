@@ -100,7 +100,8 @@ fun ParsedText(
 
     val annotatedString = buildAnnotatedString {
         val mentionRegex = Regex("\\[(id|club|public)(\\d+)\\|(.*?)\\]")
-        val urlRegex = Regex("(https?://[\\w\\d.\\-]+[\\w\\d/\\-?%&=._~#+!]*)|(openvk\\.org/[\\w\\d._]+)")
+        // Comprehensive URL regex that matches both http/https and domain-only links like google.com
+        val urlRegex = Regex("(?:https?://|www\\.)[\\w\\d.\\-]+[\\w\\d/\\-?%&=._~#+!]*|(?:[\\w\\d\\-]+\\.)+[a-z]{2,10}(?:/[\\w\\d/\\-?%&=._~#+!]*)?", RegexOption.IGNORE_CASE)
         
         var currentIndex = 0
         

@@ -101,7 +101,7 @@ fun CreatePostScreen(
                     } else {
                         TextButton(
                             onClick = { viewModel.post() },
-                            enabled = state.inputText.isNotBlank() || state.pendingAttachments.isNotEmpty()
+                            enabled = state.inputText.isNotBlank() || state.pendingAttachments.isNotEmpty() || state.pollQuestion != null
                         ) {
                             Text("Опубликовать", fontWeight = FontWeight.Bold)
                         }
@@ -234,12 +234,12 @@ fun CreatePostScreen(
                 IconButton(onClick = { showMusicPicker = true }) {
                     Icon(Icons.Default.MusicNote, "Аудио", tint = MaterialTheme.colorScheme.primary)
                 }
+                IconButton(onClick = { showPollDialog = true }) {
+                    Icon(Icons.Default.Poll, "Опрос", tint = MaterialTheme.colorScheme.primary)
+                }
                 if (state.isDeveloperMode) {
                     IconButton(onClick = { showDocsPicker = true }) {
                         Icon(Icons.Default.Description, "Документ", tint = MaterialTheme.colorScheme.primary)
-                    }
-                    IconButton(onClick = { showPollDialog = true }) {
-                        Icon(Icons.Default.Poll, "Опрос", tint = MaterialTheme.colorScheme.primary)
                     }
                     IconButton(onClick = { 
                         tempSourceUrl = state.copyright ?: ""
@@ -283,22 +283,36 @@ fun CreatePostScreen(
                             Text("Подпись автора", style = MaterialTheme.typography.bodyMedium)
                         }
                     }
-                }
-            }
 
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp)
-                    .clickable { viewModel.setNsfw(!state.isNsfw) },
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Checkbox(
-                    checked = state.isNsfw,
-                    onCheckedChange = { viewModel.setNsfw(it) }
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Пометить как NSFW", style = MaterialTheme.typography.bodyMedium)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { viewModel.setNsfw(!state.isNsfw) },
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Checkbox(
+                            checked = state.isNsfw,
+                            onCheckedChange = { viewModel.setNsfw(it) }
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Пометить как NSFW", style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
+            } else {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                        .clickable { viewModel.setNsfw(!state.isNsfw) },
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Checkbox(
+                        checked = state.isNsfw,
+                        onCheckedChange = { viewModel.setNsfw(it) }
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Пометить как NSFW", style = MaterialTheme.typography.bodyMedium)
+                }
             }
         }
     }
@@ -541,8 +555,9 @@ fun PollCreationDialog(
         confirmButton = {
             TextButton(
                 onClick = {
-                    val filteredAnswers = answers.filter { it.isNotBlank() }
-                    if (question.isNotBlank() && filteredAnswers.size >= 2) {
+                    val trimmedQuestion = question.trim()
+                    val filteredAnswers = answers.map { it.trim() }.filter { it.isNotBlank() }
+                    if (trimmedQuestion.isNotBlank() && filteredAnswers.size >= 2) {
                         val now = System.currentTimeMillis() / 1000
                         val endDate = when (endDateOption) {
                             1 -> now + 3600
@@ -550,10 +565,10 @@ fun PollCreationDialog(
                             3 -> now + 604800
                             else -> null
                         }
-                        onConfirm(question, filteredAnswers, anonymous, multiple, disableUnvote, endDate)
+                        onConfirm(trimmedQuestion, filteredAnswers, anonymous, multiple, disableUnvote, endDate)
                     }
                 },
-                enabled = question.isNotBlank() && answers.filter { it.isNotBlank() }.size >= 2
+                enabled = question.trim().isNotBlank() && answers.count { it.trim().isNotBlank() } >= 2
             ) {
                 Text("Создать")
             }

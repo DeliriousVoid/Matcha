@@ -50,6 +50,7 @@ import com.deliriousvoid.openvkmatcha.R
 import com.deliriousvoid.openvkmatcha.data.model.Video
 import com.deliriousvoid.openvkmatcha.ui.viewmodel.SettingsViewModel
 import com.deliriousvoid.openvkmatcha.util.AppEvents
+import com.deliriousvoid.openvkmatcha.util.LocalFullScreenVideoHandler
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -131,16 +132,12 @@ fun VideoPlayer(
         }
     }
 
-    // MediaSession is now managed globally in AppEvents to survive PiP transition
-    
-    // Ensure we have a listener
     DisposableEffect(exoPlayer) {
         val listener = object : Player.Listener {
             override fun onIsPlayingChanged(playing: Boolean) {
                 isPlaying = playing
                 if (playing) {
                     playerManager.pause()
-                    // Set as active video when starting playback
                     if (AppEvents.activeVideo.value?.id != video.id) {
                         AppEvents.setActiveVideo(context, video, exoPlayer)
                     }
@@ -162,34 +159,24 @@ fun VideoPlayer(
             }
         }
         exoPlayer.addListener(listener)
-        // Sync initial state
         isPlaying = exoPlayer.isPlaying
         currentPosition = exoPlayer.currentPosition
         duration = exoPlayer.duration.coerceAtLeast(0L)
-        
+
         onDispose {
             exoPlayer.removeListener(listener)
             
             val isCurrentlyPlaying = exoPlayer.isPlaying
+            val isGlobalFullScreen = AppEvents.isFullScreenOpened.value
 
-            if (!AppEvents.isInPipMode.value && !AppEvents.shouldEnterPip.value) {
-                // Restore UI state regardless of settings if the player is being destroyed
-                val activity = context.findActivity()
-                if (activity != null) {
-                    activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
-                    val window = activity.window
-                    WindowInsetsControllerCompat(window, window.decorView).show(WindowInsetsCompat.Type.systemBars())
-                }
-
+            if (!initiallyFullscreen && !isGlobalFullScreen && !AppEvents.isInPipMode.value && !AppEvents.shouldEnterPip.value) {
                 if (isCurrentlyPlaying) {
                     if (pauseVideoOnScroll) {
                         exoPlayer.pause()
                     } else {
-                        // Enter in-app floating mode instead of system PiP
                         AppEvents.setVideoFloating(true)
                     }
                 } else {
-                    // If not playing and not floating, release if it's not the active player
                     if (AppEvents.activeVideo.value?.id != video.id) {
                         exoPlayer.release()
                     }
@@ -198,28 +185,12 @@ fun VideoPlayer(
         }
     }
 
+    val fullScreenHandler = LocalFullScreenVideoHandler.current
+
     LaunchedEffect(playbackSpeed) {
         exoPlayer.playbackParameters = PlaybackParameters(playbackSpeed)
     }
 
-    // Fullscreen behavior: orientation and immersive mode
-    LaunchedEffect(isFullscreen) {
-        val activity = context.findActivity() ?: return@LaunchedEffect
-        val window = activity.window
-        val controller = WindowInsetsControllerCompat(window, window.decorView)
-        
-        if (isFullscreen) {
-            activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR
-            controller.hide(WindowInsetsCompat.Type.systemBars())
-            controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-            AppEvents.setActiveVideo(context, video, exoPlayer)
-        } else {
-            activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
-            controller.show(WindowInsetsCompat.Type.systemBars())
-        }
-    }
-
-    // Pause video if music starts playing
     val musicIsPlaying by playerManager.isPlaying.collectAsState()
     LaunchedEffect(musicIsPlaying) {
         if (musicIsPlaying && isPlaying) {
@@ -245,6 +216,9 @@ fun VideoPlayer(
     }
     
     val scope = rememberCoroutineScope()
+
+    val isGlobalFullScreen by AppEvents.isFullScreenOpened.collectAsState()
+    val isVideoFloating by AppEvents.isVideoFloating.collectAsState()
 
     val playerContent = @Composable { isFull: Boolean ->
         Box(
@@ -280,13 +254,16 @@ fun VideoPlayer(
                 factory = { ctx ->
                     val view = LayoutInflater.from(ctx).inflate(R.layout.matcha_player_view, null) as PlayerView
                     view.apply {
-                        player = if (isInPipMode) null else exoPlayer
+                        player = if (isInPipMode || isVideoFloating || (isGlobalFullScreen && !isFull)) null else exoPlayer
                         setBackgroundColor(android.graphics.Color.BLACK)
                         setEnableComposeSurfaceSyncWorkaround(true)
                     }
                 },
                 update = {
-                    it.player = if (isInPipMode) null else exoPlayer
+                    it.player = if (isInPipMode || isVideoFloating || (isGlobalFullScreen && !isFull)) null else exoPlayer
+                },
+                onRelease = {
+                    it.player = null
                 },
                 modifier = Modifier.fillMaxSize()
             )
@@ -350,8 +327,12 @@ fun VideoPlayer(
                         }
                     },
                     onToggleFullscreen = {
-                        isFullscreen = !isFullscreen
-                        if (!isFullscreen && initiallyFullscreen) onDismiss?.invoke()
+                        if (fullScreenHandler != null) {
+                            fullScreenHandler(video, !isFull, exoPlayer)
+                        } else {
+                            isFullscreen = !isFullscreen
+                            if (!isFullscreen && initiallyFullscreen) onDismiss?.invoke()
+                        }
                     },
                     onPip = {
                         AppEvents.triggerEnterPip()
@@ -363,14 +344,16 @@ fun VideoPlayer(
     }
 
     Box(
-        modifier = modifier
-            .fillMaxWidth()
-            .aspectRatio(16 / 9f)
-            .background(Color.Black)
+        modifier = if (isFullscreen) {
+            Modifier.fillMaxSize().background(Color.Black)
+        } else {
+            modifier
+                .fillMaxWidth()
+                .aspectRatio(16 / 9f)
+                .background(Color.Black)
+        }
     ) {
-        val isFloating by AppEvents.isVideoFloating.collectAsState()
-        
-        if (isThisVideoActive && (isInPipMode || isFloating)) {
+        if (isThisVideoActive && (isInPipMode || isVideoFloating)) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -386,14 +369,14 @@ fun VideoPlayer(
                     )
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        text = if (isFloating) "Видео воспроизводится в плавающем окне" else "Видео воспроизводится в отдельном окне",
+                        text = if (isVideoFloating) "Видео воспроизводится в плавающем окне" else "Видео воспроизводится в отдельном окне",
                         color = Color.White,
                         style = MaterialTheme.typography.bodyMedium,
                         textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                         modifier = Modifier.padding(horizontal = 16.dp)
                     )
                     TextButton(onClick = {
-                        if (isFloating) {
+                        if (isVideoFloating) {
                             AppEvents.setVideoFloating(false)
                         } else {
                             AppEvents.setInPipMode(false)
@@ -441,13 +424,11 @@ fun VideoPlayer(
                 }
             }
         } else {
-            if (!isFullscreen) {
-                playerContent(false)
-            }
+            playerContent(isFullscreen)
         }
     }
 
-    if (isFullscreen && !isInPipMode) {
+    if (isFullscreen && !isInPipMode && fullScreenHandler == null) {
         Dialog(
             onDismissRequest = { 
                 isFullscreen = false

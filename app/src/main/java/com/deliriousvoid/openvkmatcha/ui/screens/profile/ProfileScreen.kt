@@ -818,7 +818,10 @@ private fun ExtendedProfileInfo(
     val contacts = mutableListOf<InfoItem>()
     profile.mobilePhone?.let { contacts.add(InfoItem(Icons.Default.Phone, "Моб. телефон: $it")) }
     profile.homePhone?.let { contacts.add(InfoItem(Icons.Default.Phone, "Доп. телефон: $it")) }
-    profile.site?.let { contacts.add(InfoItem(Icons.Default.Public, "Сайт: $it")) }
+    profile.site?.let { site ->
+        val url = if (site.startsWith("http://") || site.startsWith("https://")) site else "http://$site"
+        contacts.add(InfoItem(Icons.Default.Public, "Сайт: $site", onClick = { openUrl(url) }))
+    }
     profile.skype?.let { contacts.add(InfoItem(Icons.Default.Language, "Skype: $it")) }
     profile.facebook?.let { contacts.add(InfoItem(Icons.Default.Language, "Facebook: $it")) }
     profile.twitter?.let { contacts.add(InfoItem(Icons.Default.Language, "Twitter: $it")) }

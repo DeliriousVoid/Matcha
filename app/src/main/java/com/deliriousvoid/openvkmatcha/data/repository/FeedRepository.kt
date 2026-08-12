@@ -142,8 +142,8 @@ class FeedRepository(private val api: OpenVKApi) {
     ) = api.callMethod(
         "polls.create",
         mutableMapOf(
-            "question" to question,
-            "add_answers" to JSONArray(answers).toString(),
+            "question" to question.trim(),
+            "add_answers" to JSONArray(answers.map { it.trim() }.filter { it.isNotBlank() }).toString(),
             "is_anonymous" to if (anonymous) "1" else "0",
             "is_multiple" to if (multiple) "1" else "0",
             "disable_unvote" to if (disableUnvote) "1" else "0"
@@ -151,7 +151,10 @@ class FeedRepository(private val api: OpenVKApi) {
             if (endDate != null) put("end_date", endDate.toString())
         },
         isPost = true
-    ).map { JsonParsers.parsePoll(it) }
+    ).map { 
+        val response = JsonParsers.getResponseObject(it)
+        JsonParsers.parsePoll(response) 
+    }
 
     suspend fun deletePollVote(ownerId: Int, pollId: Int) = api.callMethod(
         "polls.deleteVote",

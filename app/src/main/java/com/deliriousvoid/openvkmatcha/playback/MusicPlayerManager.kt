@@ -673,6 +673,16 @@ class MusicPlayerManager(
         controller.play()
     }
 
+    fun seekToPreviousOrRestart() {
+        val controller = controller ?: return
+        if (controller.currentPosition > 3000) {
+            controller.seekTo(0)
+        } else {
+            controller.seekToPreviousMediaItem()
+        }
+        controller.play()
+    }
+
     fun toggleShuffle() {
         val controller = controller ?: return
         val currentShuffle = _shuffleMode.value

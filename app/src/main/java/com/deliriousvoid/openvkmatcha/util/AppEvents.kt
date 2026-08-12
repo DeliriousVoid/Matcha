@@ -9,6 +9,7 @@ import android.content.Intent
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.session.MediaSession
 import com.deliriousvoid.openvkmatcha.playback.PlaybackService
+import androidx.compose.runtime.staticCompositionLocalOf
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -26,6 +27,8 @@ data class TopBarState(
     val tag: String? = null
 )
 
+val LocalFullScreenVideoHandler = staticCompositionLocalOf<((Video, Boolean, ExoPlayer?) -> Unit)?> { null }
+
 object AppEvents {
     private val _networkError = MutableSharedFlow<Unit>()
     val networkError = _networkError.asSharedFlow()
@@ -36,7 +39,7 @@ object AppEvents {
     private val _refreshMusic = MutableSharedFlow<Unit>()
     val refreshMusic = _refreshMusic.asSharedFlow()
 
-    private val _refreshProfile = MutableSharedFlow<Unit>()
+    private val _refreshProfile = MutableSharedFlow<Int?>(extraBufferCapacity = 1)
     val refreshProfile = _refreshProfile.asSharedFlow()
 
     private val _refreshNotes = MutableSharedFlow<Unit>()
@@ -119,8 +122,8 @@ object AppEvents {
         context.startService(serviceIntent)
     }
 
-    fun releaseActivePlayer(context: Context? = null) {
-        if (_isInPipMode.value) return
+    fun releaseActivePlayer(context: Context? = null, force: Boolean = false) {
+        if (_isInPipMode.value && !force) return
         _activeExoPlayer.value?.release()
         _activeVideo.value = null
         _activeExoPlayer.value = null
@@ -133,6 +136,9 @@ object AppEvents {
         }
     }
 
+    private val _isFullScreenOpened = MutableStateFlow(false)
+    val isFullScreenOpened = _isFullScreenOpened.asStateFlow()
+
     fun setInPipMode(inPip: Boolean) {
         _isInPipMode.value = inPip
         if (!inPip) {
@@ -142,6 +148,10 @@ object AppEvents {
 
     fun setVideoFloating(floating: Boolean) {
         _isVideoFloating.value = floating
+    }
+
+    fun setFullScreenOpened(opened: Boolean) {
+        _isFullScreenOpened.value = opened
     }
 
     fun triggerEnterPip() {
@@ -160,8 +170,8 @@ object AppEvents {
         _refreshMusic.emit(Unit)
     }
 
-    suspend fun emitRefreshProfile() {
-        _refreshProfile.emit(Unit)
+    suspend fun emitRefreshProfile(ownerId: Int? = null) {
+        _refreshProfile.emit(ownerId)
     }
 
     suspend fun emitRefreshNotes() {
