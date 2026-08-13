@@ -100,115 +100,160 @@ fun ParsedText(
 
     val annotatedString = buildAnnotatedString {
         val mentionRegex = Regex("\\[(id|club|public)(\\d+)\\|(.*?)\\]")
+        val shortnameMentionRegex = Regex("\\[([^|]+)\\|@([\\w\\d._-]+)\\]")
         // Comprehensive URL regex that matches both http/https and domain-only links like google.com
         val urlRegex = Regex("(?:https?://|www\\.)[\\w\\d.\\-]+[\\w\\d/\\-?%&=._~#+!]*|(?:[\\w\\d\\-]+\\.)+[a-z]{2,10}(?:/[\\w\\d/\\-?%&=._~#+!]*)?", RegexOption.IGNORE_CASE)
         
         var currentIndex = 0
         
-        val allMatches = (mentionRegex.findAll(text) + urlRegex.findAll(text))
-            .sortedBy { it.range.first }
+        val allMatches = (mentionRegex.findAll(text).map { it to "ID" } + 
+                          shortnameMentionRegex.findAll(text).map { it to "SHORTNAME" } + 
+                          urlRegex.findAll(text).map { it to "URL" })
+            .sortedBy { it.first.range.first }
             .toList()
 
-        allMatches.forEach { match ->
+        allMatches.forEach { (match, matchType) ->
             if (match.range.first < currentIndex) return@forEach
             
             append(text.substring(currentIndex, match.range.first))
             
-            val matchText = match.value
-            if (matchText.startsWith("[")) {
-                // Mention [id123|Name]
-                val type = match.groupValues[1]
-                val id = match.groupValues[2].toInt()
-                val name = match.groupValues[3]
-                
-                pushStringAnnotation(tag = "MENTION", annotation = if (type == "id") id.toString() else (-id).toString())
-                withStyle(style = SpanStyle(color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)) {
-                    append(name)
+            when (matchType) {
+                "ID" -> {
+                    // Mention [id123|Name]
+                    val type = match.groupValues[1]
+                    val id = match.groupValues[2].toInt()
+                    val name = match.groupValues[3]
+                    
+                    pushStringAnnotation(tag = "MENTION", annotation = if (type == "id") id.toString() else (-id).toString())
+                    withStyle(style = SpanStyle(color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)) {
+                        append(name)
+                    }
+                    pop()
                 }
-                pop()
-            } else {
-                // URL or OpenVK link
-                val url = if (!matchText.startsWith("http")) "https://$matchText" else matchText
-                val uri = Uri.parse(url)
-                val path = uri.path?.trim('/') ?: ""
-                
-                val ovkLinkType = when {
-                    path.startsWith("id") && path.substring(2).all { it.isDigit() } -> "profile"
-                    path == "id0" -> "profile"
-                    (path.startsWith("club") || path.startsWith("public")) && path.substring(4).all { it.isDigit() } -> "group"
-                    path.startsWith("event") -> "event"
-                    path.startsWith("playlist") -> "playlist"
-                    path.startsWith("wall") -> "wall"
-                    path.startsWith("audios") && path.substring(6).all { it.isDigit() || (it == '-' && path.length > 7) } -> "music"
-                    uri.host?.contains("openvk.org") == true -> "screen_name"
-                    else -> "external"
+                "SHORTNAME" -> {
+                    // Shortname mention [Name|@shortname]
+                    val name = match.groupValues[1]
+                    val shortname = match.groupValues[2]
+                    
+                    pushStringAnnotation(tag = "PROFILE", annotation = shortname)
+                    withStyle(style = SpanStyle(color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)) {
+                        append(name)
+                    }
+                    pop()
                 }
+                "URL" -> {
+                    val matchText = match.value
+                    // URL or OpenVK link
+                    val url = if (!matchText.startsWith("http")) "https://$matchText" else matchText
+                    val uri = Uri.parse(url)
+                    val path = uri.path?.trim('/') ?: ""
 
-                when (ovkLinkType) {
-                    "profile" -> {
-                        val id = if (path == "id0") "0" else path.substring(2)
-                        pushStringAnnotation(tag = "PROFILE", annotation = id)
-                        withStyle(style = SpanStyle(color = MaterialTheme.colorScheme.primary)) { append(matchText) }
-                        pop()
+                    val ovkLinkType = when {
+                        path.startsWith("id") && path.substring(2).all { it.isDigit() } -> "profile"
+                        path == "id0" -> "profile"
+                        (path.startsWith("club") || path.startsWith("public")) && path.substring(4)
+                            .all { it.isDigit() } -> "group"
+                        path.startsWith("event") -> "event"
+                        path.startsWith("playlist") -> "playlist"
+                        path.startsWith("wall") -> "wall"
+                        path.startsWith("audios") && path.substring(6).all {
+                            it.isDigit() || (it == '-' && path.length > 7)
+                        } -> "music"
+                        uri.host?.contains("openvk.org") == true -> "screen_name"
+                        else -> "external"
                     }
-                    "group" -> {
-                        val id = if (path.startsWith("club")) path.substring(4) else path.substring(6)
-                        pushStringAnnotation(tag = "PROFILE", annotation = "-$id")
-                        withStyle(style = SpanStyle(color = MaterialTheme.colorScheme.primary)) { append(matchText) }
-                        pop()
-                    }
-                    "event" -> {
-                        val idStr = path.removePrefix("event").trimStart('/')
-                        if (idStr.all { it.isDigit() } && idStr.isNotEmpty()) {
-                            pushStringAnnotation(tag = "PROFILE", annotation = "-$idStr")
-                            withStyle(style = SpanStyle(color = MaterialTheme.colorScheme.primary)) { append(matchText) }
+
+                    when (ovkLinkType) {
+                        "profile" -> {
+                            val id = if (path == "id0") "0" else path.substring(2)
+                            pushStringAnnotation(tag = "PROFILE", annotation = id)
+                            withStyle(style = SpanStyle(color = MaterialTheme.colorScheme.primary)) {
+                                append(matchText)
+                            }
                             pop()
-                        } else {
-                            append(matchText)
                         }
-                    }
-                    "playlist" -> {
-                        val idStr = path.removePrefix("playlist").trimStart('/')
-                        val parts = idStr.split("_")
-                        if (parts.size == 2 && parts[0].toIntOrNull() != null && parts[1].toIntOrNull() != null) {
-                            pushStringAnnotation(tag = "PLAYLIST", annotation = "${parts[0]}_${parts[1]}")
-                            withStyle(style = SpanStyle(color = MaterialTheme.colorScheme.primary)) { append(matchText) }
+                        "group" -> {
+                            val id =
+                                if (path.startsWith("club")) path.substring(4) else path.substring(6)
+                            pushStringAnnotation(tag = "PROFILE", annotation = "-$id")
+                            withStyle(style = SpanStyle(color = MaterialTheme.colorScheme.primary)) {
+                                append(matchText)
+                            }
                             pop()
-                        } else {
-                            append(matchText)
                         }
-                    }
-                    "wall" -> {
-                        val parts = path.substring(4).split("_")
-                        if (parts.size == 2) {
-                            pushStringAnnotation(tag = "WALL", annotation = "${parts[0]}_${parts[1]}")
-                            withStyle(style = SpanStyle(color = MaterialTheme.colorScheme.primary)) { append(matchText) }
-                            pop()
-                        } else {
-                            append(matchText)
+                        "event" -> {
+                            val idStr = path.removePrefix("event").trimStart('/')
+                            if (idStr.all { it.isDigit() } && idStr.isNotEmpty()) {
+                                pushStringAnnotation(tag = "PROFILE", annotation = "-$idStr")
+                                withStyle(style = SpanStyle(color = MaterialTheme.colorScheme.primary)) {
+                                    append(matchText)
+                                }
+                                pop()
+                            } else {
+                                append(matchText)
+                            }
                         }
-                    }
-                    "music" -> {
-                        val id = path.substring(6)
-                        pushStringAnnotation(tag = "MUSIC", annotation = id)
-                        withStyle(style = SpanStyle(color = MaterialTheme.colorScheme.primary)) { append(matchText) }
-                        pop()
-                    }
-                    "screen_name" -> {
-                        if (path.isNotBlank() && !path.contains("/")) {
-                            pushStringAnnotation(tag = "PROFILE", annotation = path)
-                            withStyle(style = SpanStyle(color = MaterialTheme.colorScheme.primary)) { append(matchText) }
+                        "playlist" -> {
+                            val idStr = path.removePrefix("playlist").trimStart('/')
+                            val parts = idStr.split("_")
+                            if (parts.size == 2 && parts[0].toIntOrNull() != null && parts[1].toIntOrNull() != null) {
+                                pushStringAnnotation(
+                                    tag = "PLAYLIST",
+                                    annotation = "${parts[0]}_${parts[1]}"
+                                )
+                                withStyle(style = SpanStyle(color = MaterialTheme.colorScheme.primary)) {
+                                    append(matchText)
+                                }
+                                pop()
+                            } else {
+                                append(matchText)
+                            }
+                        }
+                        "wall" -> {
+                            val parts = path.substring(4).split("_")
+                            if (parts.size == 2) {
+                                pushStringAnnotation(
+                                    tag = "WALL",
+                                    annotation = "${parts[0]}_${parts[1]}"
+                                )
+                                withStyle(style = SpanStyle(color = MaterialTheme.colorScheme.primary)) {
+                                    append(matchText)
+                                }
+                                pop()
+                            } else {
+                                append(matchText)
+                            }
+                        }
+                        "music" -> {
+                            val id = path.substring(6)
+                            pushStringAnnotation(tag = "MUSIC", annotation = id)
+                            withStyle(style = SpanStyle(color = MaterialTheme.colorScheme.primary)) {
+                                append(matchText)
+                            }
                             pop()
-                        } else {
+                        }
+                        "screen_name" -> {
+                            if (path.isNotBlank() && !path.contains("/")) {
+                                pushStringAnnotation(tag = "PROFILE", annotation = path)
+                                withStyle(style = SpanStyle(color = MaterialTheme.colorScheme.primary)) {
+                                    append(matchText)
+                                }
+                                pop()
+                            } else {
+                                pushStringAnnotation(tag = "URL", annotation = url)
+                                withStyle(style = SpanStyle(color = MaterialTheme.colorScheme.primary)) {
+                                    append(matchText)
+                                }
+                                pop()
+                            }
+                        }
+                        else -> {
                             pushStringAnnotation(tag = "URL", annotation = url)
-                            withStyle(style = SpanStyle(color = MaterialTheme.colorScheme.primary)) { append(matchText) }
+                            withStyle(style = SpanStyle(color = MaterialTheme.colorScheme.primary)) {
+                                append(matchText)
+                            }
                             pop()
                         }
-                    }
-                    else -> {
-                        pushStringAnnotation(tag = "URL", annotation = url)
-                        withStyle(style = SpanStyle(color = MaterialTheme.colorScheme.primary)) { append(matchText) }
-                        pop()
                     }
                 }
             }

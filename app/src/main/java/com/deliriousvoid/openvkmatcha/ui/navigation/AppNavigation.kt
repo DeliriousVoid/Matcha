@@ -20,6 +20,7 @@ import com.deliriousvoid.openvkmatcha.ui.screens.board.TopicsScreen
 import com.deliriousvoid.openvkmatcha.ui.screens.comments.CommentsScreen
 import com.deliriousvoid.openvkmatcha.ui.screens.explore.*
 import com.deliriousvoid.openvkmatcha.ui.screens.login.LoginScreen
+import com.deliriousvoid.openvkmatcha.ui.screens.login.TwoFactorScreen
 import com.deliriousvoid.openvkmatcha.ui.screens.main.MainScreen
 import com.deliriousvoid.openvkmatcha.ui.screens.map.MapPickerScreen
 import com.deliriousvoid.openvkmatcha.ui.screens.messages.ChatScreen
@@ -86,7 +87,34 @@ fun AppNavigation(
                     navController.navigate(Routes.MAIN) {
                         popUpTo(Routes.LOGIN) { inclusive = true }
                     }
+                },
+                onNavigateTo2FA = { username, password, instance ->
+                    navController.navigate(Routes.twoFactorRoute(username, password, instance))
                 }
+            )
+        }
+
+        composable(
+            route = Routes.TWO_FACTOR,
+            arguments = listOf(
+                navArgument("username") { type = NavType.StringType },
+                navArgument("password") { type = NavType.StringType },
+                navArgument("instance") { type = NavType.StringType }
+            )
+        ) { backStackEntry ->
+            val username = backStackEntry.arguments?.getString("username") ?: ""
+            val password = backStackEntry.arguments?.getString("password") ?: ""
+            val instance = backStackEntry.arguments?.getString("instance") ?: ""
+            TwoFactorScreen(
+                username = username,
+                password = password,
+                instance = instance,
+                onSuccess = {
+                    navController.navigate(Routes.MAIN) {
+                        popUpTo(Routes.LOGIN) { inclusive = true }
+                    }
+                },
+                onBack = { navController.popBackStack() }
             )
         }
 

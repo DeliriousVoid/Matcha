@@ -78,6 +78,7 @@ import com.deliriousvoid.openvkmatcha.ui.viewmodel.PlayerViewModel
 import com.deliriousvoid.openvkmatcha.ui.viewmodel.PlaylistDetailsViewModel
 
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.foundation.layout.statusBarsPadding
 import com.deliriousvoid.openvkmatcha.util.AppEvents
 import com.deliriousvoid.openvkmatcha.util.TopBarState
 
@@ -114,6 +115,7 @@ fun PlaylistDetailsScreen(
     DisposableEffect(state.playlist, state.isBookmarked, state.isOwner, showMenu) {
         AppEvents.setTopBarState(TopBarState(
             title = state.playlist?.title ?: title,
+            isTransparent = true,
             actions = {
                 Box {
                     IconButton(onClick = { showMenu = true }) {
@@ -363,7 +365,8 @@ private fun PlaylistHeader(
                     )
                 )
             )
-            .padding(top = 16.dp, start = 16.dp, end = 16.dp, bottom = 24.dp),
+            .statusBarsPadding()
+            .padding(top = 56.dp, start = 16.dp, end = 16.dp, bottom = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Spacer(modifier = Modifier.height(8.dp))

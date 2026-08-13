@@ -25,7 +25,6 @@ import androidx.compose.material.icons.filled.Brush
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.MusicNote
-import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.SupervisorAccount
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Storage
@@ -34,7 +33,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
@@ -73,9 +71,9 @@ fun SettingsScreen(
     onNavigateToAppearance: () -> Unit,
     onNavigateToMusic: () -> Unit,
     onNavigateToDeveloper: () -> Unit,
-    onBack: () -> Unit,
+    @Suppress("UNUSED_PARAMETER") onBack: () -> Unit,
     onLogout: () -> Unit,
-    viewModel: SettingsViewModel
+    viewModel: SettingsViewModel,
 ) {
     val app = OpenVKMatchaApp.instance
     val isDeveloperMode by viewModel.developerModeActive.collectAsState()
@@ -189,8 +187,7 @@ fun GeneralSettingsScreen(
             label = "Очистить кеш",
             value = cacheSize,
             icon = Icons.Default.Storage,
-            onClick = { viewModel.clearCache() }
-        )
+        ) { viewModel.clearCache() }
         
         Spacer(modifier = Modifier.height(24.dp))
         
@@ -278,6 +275,7 @@ fun AppearanceSettingsScreen(
     val currentTheme by viewModel.theme.collectAsState()
     val currentAccent by viewModel.accent.collectAsState()
     val navBarLabelsVisible by viewModel.navBarLabelsVisible.collectAsState()
+    val autoHidePlayer by viewModel.autoHidePlayer.collectAsState()
 
     Column(
         modifier = Modifier
@@ -350,6 +348,25 @@ fun AppearanceSettingsScreen(
             label = "Показывать подписи кнопок",
             checked = navBarLabelsVisible,
             onCheckedChange = { viewModel.setNavBarLabelsVisible(it) }
+        )
+
+        Spacer(modifier = Modifier.height(32.dp))
+
+        Text(
+            text = "Плеер",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(bottom = 12.dp)
+        )
+        SettingsSwitchRow(
+            label = androidx.compose.ui.res.stringResource(com.deliriousvoid.openvkmatcha.R.string.settings_auto_hide_player),
+            checked = autoHidePlayer,
+            onCheckedChange = { viewModel.setAutoHidePlayer(it) }
+        )
+        Text(
+            text = androidx.compose.ui.res.stringResource(com.deliriousvoid.openvkmatcha.R.string.settings_auto_hide_player_desc),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
 }
@@ -487,9 +504,9 @@ fun DeveloperSettingsScreen(
     val invisibility by viewModel.invisibility.collectAsState()
     val experimentalFeatures by viewModel.experimentalFeatures.collectAsState()
     val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
-    var showDialog by remember { mutableStateOf(false) }
+    var showDialog by remember { mutableStateOf(value = false) }
     var customName by remember { mutableStateOf("") }
-    var showLoginHint by remember { mutableStateOf(false) }
+    var showLoginHint by remember { mutableStateOf(value = false) }
 
     val predefinedNames = listOf(
         "openvk_native",
@@ -835,7 +852,7 @@ private fun SettingsActionRow(
             Text(
                 text = value,
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
     }

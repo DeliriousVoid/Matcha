@@ -17,8 +17,10 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
@@ -57,7 +59,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.media3.common.Player
-import com.deliriousvoid.openvkmatcha.data.model.Video
 import com.deliriousvoid.openvkmatcha.ui.components.FullPlayer
 import com.deliriousvoid.openvkmatcha.ui.components.MiniPlayer
 import com.deliriousvoid.openvkmatcha.ui.components.PipPlayerView
@@ -82,7 +83,7 @@ class MainActivity : ComponentActivity() {
         private const val ACTION_PIP_PAUSE = "com.deliriousvoid.openvkmatcha.ACTION_PIP_PAUSE"
     }
 
-    private var openPlayerTrigger by mutableStateOf(false)
+    private var openPlayerTrigger by mutableStateOf(value = false)
     private var deepLinkRoute by mutableStateOf<String?>(null)
 
     private val pipReceiver = object : BroadcastReceiver() {
@@ -99,7 +100,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onPictureInPictureModeChanged(
         isInPictureInPictureMode: Boolean,
-        newConfig: Configuration
+        newConfig: Configuration,
     ) {
         super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
         AppEvents.setInPipMode(isInPictureInPictureMode)
@@ -128,13 +129,23 @@ class MainActivity : ComponentActivity() {
                 RemoteAction(
                     Icon.createWithResource(this, android.R.drawable.ic_media_pause),
                     "Пауза", "Пауза",
-                    PendingIntent.getBroadcast(this, 1, Intent(ACTION_PIP_PAUSE), PendingIntent.FLAG_IMMUTABLE)
+                    PendingIntent.getBroadcast(
+                        this,
+                        1,
+                        Intent(ACTION_PIP_PAUSE),
+                        PendingIntent.FLAG_IMMUTABLE,
+                    ),
                 )
             } else {
                 RemoteAction(
                     Icon.createWithResource(this, android.R.drawable.ic_media_play),
                     "Воспроизвести", "Воспроизвести",
-                    PendingIntent.getBroadcast(this, 2, Intent(ACTION_PIP_PLAY), PendingIntent.FLAG_IMMUTABLE)
+                    PendingIntent.getBroadcast(
+                        this,
+                        2,
+                        Intent(ACTION_PIP_PLAY),
+                        PendingIntent.FLAG_IMMUTABLE,
+                    ),
                 )
             }
             actions.add(playPauseAction)
@@ -198,14 +209,16 @@ class MainActivity : ComponentActivity() {
             val settingsViewModel: SettingsViewModel = viewModel(factory = SettingsViewModel.factory())
             val theme by settingsViewModel.theme.collectAsState()
             val accent by settingsViewModel.accent.collectAsState()
+            val autoHidePlayer by settingsViewModel.autoHidePlayer.collectAsState()
 
             val isInPipMode by AppEvents.isInPipMode.collectAsState()
             val activeVideo by AppEvents.activeVideo.collectAsState()
-            var isFullScreenVideoOpen by rememberSaveable { mutableStateOf(false) }
-            var showFullPlayer by remember { mutableStateOf(false) }
+            var isFullScreenVideoOpen by rememberSaveable { mutableStateOf(value = false) }
+            var showFullPlayer by remember { mutableStateOf(value = false) }
+            var isPlayerManuallyHidden by rememberSaveable { mutableStateOf(value = false) }
 
             LaunchedEffect(isFullScreenVideoOpen, activeVideo) {
-                if (isFullScreenVideoOpen && activeVideo == null) {
+                if ((isFullScreenVideoOpen) && (activeVideo == null)) {
                     isFullScreenVideoOpen = false
                 }
             }
@@ -217,12 +230,12 @@ class MainActivity : ComponentActivity() {
                 val controller = androidx.core.view.WindowInsetsControllerCompat(window, window.decorView)
                 
                 if (isFullScreenVideoOpen) {
-                    AppEvents.setFullScreenOpened(true)
+                    AppEvents.setFullScreenOpened(opened = true)
                     requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR
                     controller.hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
                     controller.systemBarsBehavior = androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
                 } else {
-                    AppEvents.setFullScreenOpened(false)
+                    AppEvents.setFullScreenOpened(opened = false)
                     requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
                     controller.show(androidx.core.view.WindowInsetsCompat.Type.systemBars())
                 }
@@ -236,7 +249,7 @@ class MainActivity : ComponentActivity() {
                         val playerToUse = player ?: (if (activeVid?.id == video.id) activePlayer else null)
                         AppEvents.setActiveVideo(this@MainActivity, video, playerToUse)
                         isFullScreenVideoOpen = open
-                    }
+                    },
                 ) {
                     Box(modifier = Modifier.fillMaxSize()) {
                         Box(
@@ -277,9 +290,10 @@ class MainActivity : ComponentActivity() {
                             val isPhotoAlbums = currentRoute?.startsWith("photo_albums/") == true
                             val isPhotos = currentRoute?.startsWith("photos/") == true
                             val isQr = (currentRoute?.startsWith("qr_display/") == true) || (currentRoute == Routes.QR_SCANNER)
+                            val isTwoFactor = currentRoute?.startsWith("two_factor/") == true
 
                             val topBarState by AppEvents.topBarState.collectAsState()
-                            val showOuterTopBar = (currentRoute != Routes.SPLASH) && (currentRoute != Routes.LOGIN) && (currentRoute != Routes.GRAFFITI) && !isQr && !isCreatePost
+                            val showOuterTopBar = (currentRoute != Routes.SPLASH) && (currentRoute != Routes.LOGIN) && !isTwoFactor && (currentRoute != Routes.GRAFFITI) && !isQr && !isCreatePost
 
                             LaunchedEffect(deepLinkRoute, currentRoute) {
                                 if ((deepLinkRoute != null) && (currentRoute != null) && (currentRoute != Routes.SPLASH)) {
@@ -325,7 +339,7 @@ class MainActivity : ComponentActivity() {
                             }
 
                             LaunchedEffect(intent.action, openPlayerTrigger) {
-                                if (intent.action == ACTION_OPEN_PLAYER || openPlayerTrigger) {
+                                if (((intent.action == ACTION_OPEN_PLAYER) || openPlayerTrigger)) {
                                     showFullPlayer = true
                                     openPlayerTrigger = false
                                     intent.action = null
@@ -347,7 +361,7 @@ class MainActivity : ComponentActivity() {
                                 if (isOfflineMode) {
                                     selectedTab = MainTab.Music
                                     musicViewModel.setMode(MusicMode.Downloaded)
-                                    if (currentRoute != Routes.MAIN && currentRoute != Routes.SETTINGS && currentRoute?.startsWith("settings/") != true) {
+                                    if ((currentRoute != Routes.MAIN) && (currentRoute != Routes.SETTINGS) && (currentRoute?.startsWith("settings/") != true)) {
                                         navController.navigate(Routes.MAIN) {
                                             popUpTo(Routes.MAIN) { inclusive = true }
                                         }
@@ -376,6 +390,19 @@ class MainActivity : ComponentActivity() {
                             val isPlaying by playerViewModel.isPlaying.collectAsState()
                             val playbackState by playerViewModel.playbackState.collectAsState()
 
+                            LaunchedEffect(isPlaying) {
+                                if (isPlaying) {
+                                    isPlayerManuallyHidden = false
+                                }
+                            }
+
+                            LaunchedEffect(isPlaying, autoHidePlayer) {
+                                if (!isPlaying && autoHidePlayer) {
+                                    kotlinx.coroutines.delay(10_000L)
+                                    isPlayerManuallyHidden = true
+                                }
+                            }
+
                             @Suppress("DEPRECATION")
                             val clipboardManager = LocalClipboardManager.current
                             val profileState by profileViewModel.uiState.collectAsState()
@@ -399,7 +426,7 @@ class MainActivity : ComponentActivity() {
 
                             LaunchedEffect(selectedTab) { isSearchActive = false }
                             LaunchedEffect(isSearchActive, currentRoute) {
-                                if (isSearchActive || currentRoute == Routes.SEARCH) focusRequester.requestFocus()
+                                if (isSearchActive || (currentRoute == Routes.SEARCH)) focusRequester.requestFocus()
                             }
                             LaunchedEffect(currentRoute) {
                                 if (currentRoute == Routes.MAIN && previousRoute == Routes.UPLOAD_AUDIO) {
@@ -586,24 +613,34 @@ class MainActivity : ComponentActivity() {
                                                                         Icon(Icons.AutoMirrored.Filled.ArrowBack, "Назад")
                                                                     }
                                                                 }
-                                                                IconButton(onClick = { isSearchActive = true }) { Icon(Icons.Default.Search, "Поиск") }
+                                                                IconButton(
+                                                                    onClick = { isSearchActive = true }
+                                                                ) { Icon(Icons.Default.Search, "Поиск") }
                                                             } else if (isMainScreen && selectedTab == MainTab.Explore && !isOfflineMode) {
-                                                                IconButton(onClick = { navController.navigate(Routes.SEARCH) }) { Icon(Icons.Default.Search, "Поиск") }
-                                                                IconButton(onClick = { navController.navigate(Routes.qrScannerRoute()) }) { Icon(Icons.Default.QrCodeScanner, "Сканировать QR") }
+                                                                IconButton(
+                                                                    onClick = { navController.navigate(Routes.SEARCH) }
+                                                                ) { Icon(Icons.Default.Search, "Поиск") }
+                                                                IconButton(
+                                                                    onClick = { navController.navigate(Routes.qrScannerRoute()) }
+                                                                ) { Icon(Icons.Default.QrCodeScanner, "Сканировать QR") }
                                                             } else if (isProfile || (isMainScreen && selectedTab == MainTab.Profile)) {
                                                                 if (isProfile) {
                                                                     IconButton(onClick = { navController.popBackStack() }) {
                                                                         Icon(Icons.AutoMirrored.Filled.ArrowBack, "Назад")
                                                                     }
                                                                 }
-                                                                IconButton(onClick = {
-                                                                    qrData?.let { navController.navigate(Routes.qrDisplayRoute(it.url, it.title, it.avatarUrl)) }
-                                                                }) { Icon(Icons.Default.QrCode, "Показать QR") }
+                                                                IconButton(
+                                                                    onClick = {
+                                                                        qrData?.let { navController.navigate(Routes.qrDisplayRoute(it.url, it.title, it.avatarUrl)) }
+                                                                    }
+                                                                ) { Icon(Icons.Default.QrCode, "Показать QR") }
                                                             } else if (!isMainScreen) {
-                                                                IconButton(onClick = { 
-                                                                    if (isUpload) musicViewModel.loadMusic()
-                                                                    navController.popBackStack() 
-                                                                }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Назад") }
+                                                                IconButton(
+                                                                    onClick = { 
+                                                                        if (isUpload) musicViewModel.loadMusic()
+                                                                        navController.popBackStack() 
+                                                                    }
+                                                                ) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Назад") }
                                                             }
                                                         }
                                                     }
@@ -627,7 +664,9 @@ class MainActivity : ComponentActivity() {
                                                             }
                                                         }
                                                         if ((isSearch || (isSearchActive && ((isMainScreen && selectedTab == MainTab.Music) || isFriends || isGroups))) && globalSearchQuery.isNotEmpty()) {
-                                                            IconButton(onClick = { AppEvents.setSearchQuery("") }) { Icon(Icons.Default.Clear, "Очистить") }
+                                                            IconButton(
+                                                                onClick = { AppEvents.setSearchQuery("") }
+                                                            ) { Icon(Icons.Default.Clear, "Очистить") }
                                                         }
                                                         if (isMainScreen || isProfile || isFriends || isGroups || isUserMusic || isGifts || isFollowers || isTopics || isTopicComments) {
                                                             if (!isOfflineMode) {
@@ -642,7 +681,9 @@ class MainActivity : ComponentActivity() {
                                                                     }
                                                                 }
                                                             }
-                                                            IconButton(onClick = { navController.navigate(Routes.SETTINGS) }) { Icon(Icons.Default.Settings, "Настройки") }
+                                                            IconButton(onClick = {
+                                                                navController.navigate(Routes.SETTINGS)
+                                                            }) { Icon(Icons.Default.Settings, "Настройки") }
                                                         }
                                                         var showMenu by remember { mutableStateOf(false) }
                                                         val context = LocalContext.current
@@ -660,7 +701,9 @@ class MainActivity : ComponentActivity() {
                                                         }
                                                     }
                                                 },
-                                                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface)
+                                                colors = TopAppBarDefaults.topAppBarColors(
+                                                    containerColor = if (topBarState?.isTransparent == true) Color.Transparent else MaterialTheme.colorScheme.surface
+                                                )
                                             )
                                         }
                                     }
@@ -684,21 +727,31 @@ class MainActivity : ComponentActivity() {
                                     }
                                 },
                                 bottomBar = {
-                                    val shouldShowNavBar = (isMainScreen || isSearch || isPlaylistDetails || isProfile || isFriends || isGroups || isUserMusic || isGifts || isFollowers || isSendGift || isCreatePost || isVideos || isDocuments || isNotes || isNoteDetails || isEvents || isWebView || isTransfer || isTopics || isTopicComments || isEditProfile || isEditGroup || isPhotoAlbums || isPhotos) && !isQr && currentRoute != Routes.GRAFFITI
-                                    val shouldShowPlayer = currentRoute != Routes.SPLASH && currentRoute != Routes.LOGIN && currentRoute != Routes.SETTINGS && currentRoute?.startsWith("settings/") != true && currentRoute != Routes.NOTIFICATIONS && currentRoute?.startsWith("comments/") != true && currentRoute?.startsWith("topic_comments/") != true && !isEditProfile && !isEditGroup && !isPhotoAlbums && !isPhotos && !isQr && currentRoute != Routes.GRAFFITI && currentTrack != null
+                                    val shouldShowNavBar = (isMainScreen || isSearch || isPlaylistDetails || isProfile || isFriends || isGroups || isUserMusic || isGifts || isFollowers || isSendGift || isCreatePost || isVideos || isDocuments || isNotes || isNoteDetails || isEvents || isWebView || isTransfer || isTopics || isTopicComments || isEditProfile || isEditGroup || isPhotoAlbums || isPhotos || isUpload) && !isQr && currentRoute != Routes.GRAFFITI
+                                    val shouldShowPlayer = currentRoute != Routes.SPLASH && currentRoute != Routes.LOGIN && !isTwoFactor && currentRoute != Routes.SETTINGS && currentRoute?.startsWith("settings/") != true && currentRoute != Routes.NOTIFICATIONS && currentRoute?.startsWith("comments/") != true && currentRoute?.startsWith("topic_comments/") != true && !isEditProfile && !isEditGroup && !isPhotoAlbums && !isPhotos && !isQr && currentRoute != Routes.GRAFFITI && currentTrack != null
                                     
                                     Surface(color = MaterialTheme.colorScheme.surface, tonalElevation = 0.dp) {
                                         Column {
-                                            if (shouldShowPlayer) {
+                                            AnimatedVisibility(
+                                                visible = shouldShowPlayer && !isPlayerManuallyHidden,
+                                                enter = expandVertically(expandFrom = Alignment.Bottom) + fadeIn(),
+                                                exit = shrinkVertically(shrinkTowards = Alignment.Bottom) + fadeOut()
+                                            ) {
+                                                val queue by playerViewModel.queue.collectAsState()
+                                                val repeatMode by playerViewModel.repeatMode.collectAsState()
+                                                val artworkCache by playerViewModel.artworkCache.collectAsState()
                                                 MiniPlayer(
                                                     currentTrack = currentTrack,
                                                     isPlaying = isPlaying,
                                                     isBuffering = isBuffering,
+                                                    queue = queue,
+                                                    repeatMode = repeatMode,
+                                                    artworkCache = artworkCache,
                                                     onPlayPause = { playerViewModel.playPause() },
                                                     onToggleAdded = { currentTrack?.let { playerViewModel.toggleTrackAdded(it) } },
                                                     onClick = { showFullPlayer = true },
-                                                    onNext = { playerViewModel.skipToNext() },
-                                                    onPrevious = { playerViewModel.skipToPrevious() }
+                                                    onLongClick = { isPlayerManuallyHidden = true },
+                                                    onSkipToQueueItem = { playerViewModel.skipToQueueItem(it) }
                                                 )
                                             }
                                             if (shouldShowNavBar) {
@@ -708,7 +761,7 @@ class MainActivity : ComponentActivity() {
                                                     val visibleTabs = if (isOfflineMode) listOf(MainTab.Music) else navigationTabs
                                                     visibleTabs.forEach { tab ->
                                                         val selected = (isMainScreen && selectedTab == tab) || 
-                                                            (tab == MainTab.Music && (isPlaylistDetails || isUserMusic)) || 
+                                                            (tab == MainTab.Music && (isPlaylistDetails || isUserMusic || isUpload)) || 
                                                             (tab == MainTab.Profile && (isProfile || isGifts || isFollowers || isSendGift || isCreatePost || isTopics || isTopicComments)) || 
                                                             (tab == MainTab.Explore && (isVideos || isDocuments || isEvents || isWebView || isTransfer || isSearch)) ||
                                                             (tab == MainTab.Friends && isFriends) ||
@@ -718,7 +771,7 @@ class MainActivity : ComponentActivity() {
                                                         NavigationBarItem(
                                                             selected = selected,
                                                             onClick = {
-                                                                if (isPlaylistDetails || isProfile || isFriends || isGroups || isUserMusic || isGifts || isFollowers || isSendGift || isCreatePost || isVideos || isDocuments || isNotes || isNoteDetails || isEvents || isWebView || isTransfer || isTopics || isTopicComments || isSearch) {
+                                                                if (isPlaylistDetails || isProfile || isFriends || isGroups || isUserMusic || isGifts || isFollowers || isSendGift || isCreatePost || isVideos || isDocuments || isNotes || isNoteDetails || isEvents || isWebView || isTransfer || isTopics || isTopicComments || isSearch || isUpload) {
                                                                     navController.popBackStack(Routes.MAIN, false)
                                                                 }
                                                                 isSearchActive = false
@@ -740,7 +793,12 @@ class MainActivity : ComponentActivity() {
                             ) { padding ->
                                 AppNavigation(
                                     navController = navController,
-                                    modifier = Modifier.padding(padding),
+                                    modifier = Modifier.padding(
+                                        start = padding.calculateStartPadding(androidx.compose.ui.unit.LayoutDirection.Ltr),
+                                        end = padding.calculateEndPadding(androidx.compose.ui.unit.LayoutDirection.Ltr),
+                                        bottom = padding.calculateBottomPadding(),
+                                        top = if (topBarState?.isTransparent == true) 0.dp else padding.calculateTopPadding()
+                                    ),
                                     musicViewModel = musicViewModel,
                                     feedViewModel = feedViewModel,
                                     playerViewModel = playerViewModel,

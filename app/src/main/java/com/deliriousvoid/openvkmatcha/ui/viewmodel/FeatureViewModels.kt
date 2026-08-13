@@ -8,6 +8,7 @@ import com.deliriousvoid.openvkmatcha.OpenVKMatchaApp
 import com.deliriousvoid.openvkmatcha.data.model.AudioTrack
 import com.deliriousvoid.openvkmatcha.data.model.ChatMessage
 import com.deliriousvoid.openvkmatcha.data.model.Comment
+import com.deliriousvoid.openvkmatcha.data.model.CommentThreadItem
 import com.deliriousvoid.openvkmatcha.data.model.Conversation
 import com.deliriousvoid.openvkmatcha.data.model.Gift
 import com.deliriousvoid.openvkmatcha.data.model.GiftCategory
@@ -1725,6 +1726,7 @@ class CreatePostViewModel(
 data class CommentsUiState(
     val post: Post? = null,
     val comments: List<Comment> = emptyList(),
+    val threadedComments: List<CommentThreadItem<Comment>> = emptyList(),
     val isLoading: Boolean = false,
     val isLoadingMore: Boolean = false,
     val isSending: Boolean = false,
@@ -1733,6 +1735,7 @@ data class CommentsUiState(
     val inputText: String = "",
     val pendingAttachments: List<PendingAttachment> = emptyList(),
     val editingComment: Comment? = null,
+    val replyingTo: Comment? = null,
     val currentUserId: Int? = null,
     val isDeveloperMode: Boolean = false,
     val isAdmin: Boolean = false,
@@ -1905,11 +1908,27 @@ class CommentsViewModel(
     fun replyTo(comment: Comment) {
         val idStr = if (comment.fromId < 0) "club${comment.fromId.absoluteValue}" else "id${comment.fromId}"
         val mention = "[$idStr|${comment.authorName}], "
-        _uiState.update { it.copy(inputText = it.inputText + mention) }
+        _uiState.update { 
+            it.copy(
+                inputText = it.inputText + mention,
+                replyingTo = comment,
+                editingComment = null
+            ) 
+        }
+    }
+
+    fun cancelReply() {
+        _uiState.update { it.copy(replyingTo = null) }
     }
 
     fun startEditing(comment: Comment) {
-        _uiState.update { it.copy(editingComment = comment, inputText = comment.text) }
+        _uiState.update { 
+            it.copy(
+                editingComment = comment, 
+                inputText = comment.text,
+                replyingTo = null
+            ) 
+        }
     }
 
     fun cancelEditing() {
@@ -1924,6 +1943,83 @@ class CommentsViewModel(
         }
     }
 
+    private fun buildThreadedComments(comments: List<Comment>): List<CommentThreadItem<Comment>> {
+        val roots = comments.filter { it.replyToComment == null }
+        val replies = comments.filter { it.replyToComment != null }
+        
+        val result = mutableListOf<CommentThreadItem<Comment>>()
+        val processedIds = mutableSetOf<Int>()
+
+        // 1. Add roots and their direct/indirect replies
+        for (root in roots) {
+            val treeReplies = findDescendants(root.id, replies, comments).sortedBy { it.date }
+            result.add(CommentThreadItem(
+                item = root,
+                level = 0,
+                isLastInThread = false,
+                hasNextInThread = treeReplies.isNotEmpty()
+            ))
+            processedIds.add(root.id)
+            
+            for (i in treeReplies.indices) {
+                val reply = treeReplies[i]
+                if (!processedIds.contains(reply.id)) {
+                    result.add(CommentThreadItem(
+                        item = reply,
+                        level = 1,
+                        isLastInThread = i == treeReplies.size - 1,
+                        hasNextInThread = i < treeReplies.size - 1
+                    ))
+                    processedIds.add(reply.id)
+                }
+            }
+        }
+
+        // 2. Add remaining replies that might have missing parents in the current list
+        val remaining = replies.filter { !processedIds.contains(it.id) }.sortedBy { it.date }
+        for (rem in remaining) {
+            result.add(CommentThreadItem(
+                item = rem,
+                level = 0,
+                isLastInThread = false,
+                hasNextInThread = false
+            ))
+        }
+
+        return result
+    }
+
+    private fun findDescendants(parentId: Int, allReplies: List<Comment>, allComments: List<Comment>): List<Comment> {
+        val descendants = mutableListOf<Comment>()
+        val queue = mutableListOf(parentId)
+        val visited = mutableSetOf(parentId)
+
+        var i = 0
+        while (i < queue.size) {
+            val currentId = queue[i++]
+            val children = allReplies.filter { it.replyToComment == currentId }
+            for (child in children) {
+                if (!visited.contains(child.id)) {
+                    descendants.add(child)
+                    visited.add(child.id)
+                    queue.add(child.id)
+                }
+            }
+        }
+        return descendants
+    }
+
+    private fun updateUiStateWithComments(update: (CommentsUiState) -> CommentsUiState) {
+        _uiState.update { state ->
+            val newState = update(state)
+            if (newState.comments != state.comments) {
+                newState.copy(threadedComments = buildThreadedComments(newState.comments))
+            } else {
+                newState
+            }
+        }
+    }
+
     fun loadComments(refresh: Boolean = false) {
         if (settingsViewModel.offlineMode.value) {
             _uiState.update { it.copy(isLoading = false) }
@@ -1933,7 +2029,7 @@ class CommentsViewModel(
             _uiState.update { it.copy(isLoading = !refresh && it.comments.isEmpty(), error = null) }
             repository.getComments(ownerId, postId, offset = if (refresh) 0 else _uiState.value.comments.size)
                 .onSuccess { response ->
-                    _uiState.update {
+                    updateUiStateWithComments {
                         val currentComments = if (refresh) emptyList() else it.comments
                         val newComments = (currentComments + response.items).distinctBy { c -> c.id }
                         it.copy(
@@ -1980,7 +2076,7 @@ class CommentsViewModel(
 
             if (users.isEmpty() && groups.isEmpty()) return@launch
 
-            _uiState.update { state ->
+            updateUiStateWithComments { state ->
                 val newComments = state.comments.map { comment ->
                     // Try group match first for suspected IDs
                     val group = groups.find { it.id == -comment.fromId.absoluteValue }
@@ -2018,7 +2114,7 @@ class CommentsViewModel(
             _uiState.update { it.copy(isLoadingMore = true) }
             repository.getComments(ownerId, postId, offset = state.comments.size)
                 .onSuccess { response ->
-                    _uiState.update {
+                    updateUiStateWithComments {
                         val newComments = (it.comments + response.items).distinctBy { c -> c.id }
                         it.copy(
                             comments = newComments,
@@ -2039,6 +2135,7 @@ class CommentsViewModel(
         val attachments = _uiState.value.pendingAttachments
         if (text.isBlank() && attachments.isEmpty()) return
         val editing = _uiState.value.editingComment
+        val replying = _uiState.value.replyingTo
 
         viewModelScope.launch {
             _uiState.update { it.copy(isSending = true) }
@@ -2071,11 +2168,11 @@ class CommentsViewModel(
             val result = if (editing != null) {
                 repository.editComment(editing.id, text, attachmentsParam)
             } else {
-                repository.createComment(ownerId, postId, text, attachmentsParam, _uiState.value.fromGroup)
+                repository.createComment(ownerId, postId, text, attachmentsParam, _uiState.value.fromGroup, replyToComment = replying?.id)
             }
 
             result.onSuccess {
-                _uiState.update { it.copy(inputText = "", pendingAttachments = emptyList(), isSending = false, editingComment = null) }
+                _uiState.update { it.copy(inputText = "", pendingAttachments = emptyList(), isSending = false, editingComment = null, replyingTo = null) }
                 loadComments(refresh = true)
             }.onFailure { err ->
                 _uiState.update { it.copy(isSending = false, error = err.message) }
@@ -2086,7 +2183,7 @@ class CommentsViewModel(
     fun deleteComment(comment: Comment) {
         viewModelScope.launch {
             repository.deleteComment(comment.id).onSuccess {
-                _uiState.update { state ->
+                updateUiStateWithComments { state ->
                     state.copy(comments = state.comments.filter { it.id != comment.id })
                 }
             }

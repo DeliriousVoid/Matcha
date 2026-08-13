@@ -258,7 +258,9 @@ data class Video(
     val date: Long = 0,
     val views: Int = 0,
     val ownerName: String? = null
-)
+) {
+    val isExternal: Boolean get() = videoUrl.isNullOrBlank() && !playerUrl.isNullOrBlank()
+}
 
 data class NewsfeedResponse(
     val posts: List<Post>,
@@ -401,6 +403,8 @@ data class Comment(
     val audios: List<AudioTrack> = emptyList(),
     val documents: List<Document> = emptyList(),
     val poll: Poll? = null,
+    val replyToComment: Int? = null,
+    val replyToUser: Int? = null,
 )
 
 data class CommentsResponse(
@@ -461,6 +465,13 @@ data class PhotosResponse(
     val count: Int
 )
 
+data class CommentThreadItem<T>(
+    val item: T,
+    val level: Int,
+    val isLastInThread: Boolean,
+    val hasNextInThread: Boolean
+)
+
 data class PhotoAlbum(
     val id: Int,
     val ownerId: Int,
@@ -504,6 +515,8 @@ data class TopicComment(
     val poll: Poll? = null,
     val likeCount: Int = 0,
     val isLiked: Boolean = false,
+    val replyToComment: Int? = null,
+    val replyToUser: Int? = null,
 )
 
 data class TopicsResponse(

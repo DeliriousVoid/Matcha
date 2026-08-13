@@ -12,8 +12,20 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
+import androidx.media3.common.util.BitmapLoader
+import coil.imageLoader
+import coil.request.ImageRequest
+import coil.request.SuccessResult
 import com.deliriousvoid.openvkmatcha.OpenVKMatchaApp
 import com.deliriousvoid.openvkmatcha.util.AppEvents
+import com.google.common.util.concurrent.Futures
+import com.google.common.util.concurrent.ListenableFuture
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.guava.future
+import android.graphics.Bitmap
+import android.net.Uri
 
 class PlaybackService : MediaSessionService() {
     private var mediaSession: MediaSession? = null
@@ -59,7 +71,34 @@ class PlaybackService : MediaSessionService() {
         mediaSession = MediaSession.Builder(this, player)
             .setId("MusicPlaybackService_${System.currentTimeMillis()}")
             .setSessionActivity(pendingIntent)
+            .setBitmapLoader(CoilBitmapLoader())
             .build()
+    }
+
+    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+
+    @UnstableApi
+    private inner class CoilBitmapLoader : BitmapLoader {
+        override fun supportsMimeType(mimeType: String): Boolean = true
+
+        override fun decodeBitmap(data: ByteArray): ListenableFuture<Bitmap> {
+            return Futures.immediateFailedFuture(UnsupportedOperationException())
+        }
+
+        override fun loadBitmap(uri: Uri): ListenableFuture<Bitmap> {
+            return serviceScope.future {
+                val request = ImageRequest.Builder(this@PlaybackService)
+                    .data(uri)
+                    .size(600, 600)
+                    .build()
+                val result = imageLoader.execute(request)
+                if (result is SuccessResult) {
+                    (result.drawable as android.graphics.drawable.BitmapDrawable).bitmap
+                } else {
+                    throw (result as coil.request.ErrorResult).throwable
+                }
+            }
+        }
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? {

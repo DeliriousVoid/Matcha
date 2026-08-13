@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.deliriousvoid.openvkmatcha.data.model.Topic
 import com.deliriousvoid.openvkmatcha.data.model.TopicComment
+import com.deliriousvoid.openvkmatcha.data.model.CommentThreadItem
 import com.deliriousvoid.openvkmatcha.data.model.PendingAttachment
 import com.deliriousvoid.openvkmatcha.data.model.AttachmentType
 import com.deliriousvoid.openvkmatcha.data.repository.FeedRepository
@@ -24,6 +25,7 @@ import kotlin.math.absoluteValue
 data class BoardUiState(
     val topics: List<Topic> = emptyList(),
     val comments: List<TopicComment> = emptyList(),
+    val threadedComments: List<CommentThreadItem<TopicComment>> = emptyList(),
     val isLoading: Boolean = false,
     val isRefreshing: Boolean = false,
     val isSending: Boolean = false,
@@ -32,6 +34,7 @@ data class BoardUiState(
     val isLoadingMore: Boolean = false,
     val inputText: String = "",
     val pendingAttachments: List<PendingAttachment> = emptyList(),
+    val replyingTo: TopicComment? = null,
     val isDeveloperMode: Boolean = false,
     val resolvedVirtualId: Int? = null,
     val isResolvingVid: Boolean = false,
@@ -141,7 +144,16 @@ class BoardViewModel(
     fun replyTo(comment: TopicComment) {
         val idStr = if (comment.fromId < 0) "club${comment.fromId.absoluteValue}" else "id${comment.fromId}"
         val mention = "[$idStr|${comment.authorName}], "
-        _uiState.update { it.copy(inputText = it.inputText + mention) }
+        _uiState.update { 
+            it.copy(
+                inputText = it.inputText + mention,
+                replyingTo = comment
+            ) 
+        }
+    }
+
+    fun cancelReply() {
+        _uiState.update { it.copy(replyingTo = null) }
     }
 
     fun report(type: String, ownerId: Int, itemId: Int? = null, comment: String? = null) {
@@ -193,25 +205,104 @@ class BoardViewModel(
         }
     }
 
+    private fun buildThreadedComments(comments: List<TopicComment>): List<CommentThreadItem<TopicComment>> {
+        val roots = comments.filter { it.replyToComment == null }
+        val replies = comments.filter { it.replyToComment != null }
+        
+        val result = mutableListOf<CommentThreadItem<TopicComment>>()
+        val processedIds = mutableSetOf<Int>()
+
+        for (root in roots) {
+            val treeReplies = findDescendants(root.id, replies).sortedBy { it.date }
+            result.add(CommentThreadItem(
+                item = root,
+                level = 0,
+                isLastInThread = false,
+                hasNextInThread = treeReplies.isNotEmpty()
+            ))
+            processedIds.add(root.id)
+            
+            for (i in treeReplies.indices) {
+                val reply = treeReplies[i]
+                if (!processedIds.contains(reply.id)) {
+                    result.add(CommentThreadItem(
+                        item = reply,
+                        level = 1,
+                        isLastInThread = i == treeReplies.size - 1,
+                        hasNextInThread = i < treeReplies.size - 1
+                    ))
+                    processedIds.add(reply.id)
+                }
+            }
+        }
+
+        val remaining = replies.filter { !processedIds.contains(it.id) }.sortedBy { it.date }
+        for (rem in remaining) {
+            result.add(CommentThreadItem(
+                item = rem,
+                level = 0,
+                isLastInThread = false,
+                hasNextInThread = false
+            ))
+        }
+
+        return result
+    }
+
+    private fun findDescendants(parentId: Int, allReplies: List<TopicComment>): List<TopicComment> {
+        val descendants = mutableListOf<TopicComment>()
+        val queue = mutableListOf(parentId)
+        val visited = mutableSetOf(parentId)
+
+        var i = 0
+        while (i < queue.size) {
+            val currentId = queue[i++]
+            val children = allReplies.filter { it.replyToComment == currentId }
+            for (child in children) {
+                if (!visited.contains(child.id)) {
+                    descendants.add(child)
+                    visited.add(child.id)
+                    queue.add(child.id)
+                }
+            }
+        }
+        return descendants
+    }
+
+    private fun updateUiStateWithComments(update: (BoardUiState) -> BoardUiState) {
+        _uiState.update { state ->
+            val newState = update(state)
+            if (newState.comments != state.comments) {
+                newState.copy(threadedComments = buildThreadedComments(newState.comments))
+            } else {
+                newState
+            }
+        }
+    }
+
     private suspend fun loadCommentsInternal(vid: Int, refresh: Boolean = false) {
         boardRepository.getComments(groupId, vid, offset = 0)
             .onSuccess { response ->
                 android.util.Log.d("Board", "Loaded ${response.items.size} comments. First item attachments: img=${response.items.firstOrNull()?.imageUrls?.size}, aud=${response.items.firstOrNull()?.audios?.size}")
-                _uiState.value = _uiState.value.copy(
-                    comments = response.items,
-                    isLoading = false,
-                    isRefreshing = false,
-                    error = null,
-                    canLoadMore = response.items.size < response.count
-                )
+                updateUiStateWithComments {
+                    it.copy(
+                        comments = response.items,
+                        isLoading = false,
+                        isRefreshing = false,
+                        error = null,
+                        canLoadMore = response.items.size < response.count
+                    )
+                }
                 loadMissingAuthors(response.items)
             }
             .onFailure { error ->
-                _uiState.value = _uiState.value.copy(
-                    isLoading = false,
-                    isRefreshing = false,
-                    error = error.message
-                )
+                _uiState.update {
+                    it.copy(
+                        isLoading = false,
+                        isRefreshing = false,
+                        error = error.message
+                    )
+                }
             }
     }
 
@@ -242,7 +333,7 @@ class BoardViewModel(
 
             if (users.isEmpty() && groups.isEmpty()) return@launch
 
-            _uiState.update { state ->
+            updateUiStateWithComments { state ->
                 val newComments = state.comments.map { comment ->
                     // Try group match first for suspected IDs
                     val group = groups.find { it.id == -comment.fromId.absoluteValue }
@@ -281,11 +372,13 @@ class BoardViewModel(
                 }
                 boardRepository.getComments(groupId, vid, offset = offset)
                     .onSuccess { response ->
-                        _uiState.value = _uiState.value.copy(
-                            comments = _uiState.value.comments + response.items,
-                            isLoadingMore = false,
-                            canLoadMore = (_uiState.value.comments.size + response.items.size) < response.count
-                        )
+                        updateUiStateWithComments {
+                            it.copy(
+                                comments = it.comments + response.items,
+                                isLoadingMore = false,
+                                canLoadMore = (it.comments.size + response.items.size) < response.count
+                            )
+                        }
                         loadMissingAuthors(response.items)
                     }
                     .onFailure { 
@@ -311,6 +404,7 @@ class BoardViewModel(
         if (topicId == null) return
         val attachments = _uiState.value.pendingAttachments
         if (text.isBlank() && attachments.isEmpty()) return
+        val replying = _uiState.value.replyingTo
 
         viewModelScope.launch {
             _uiState.update { it.copy(isSending = true) }
@@ -347,10 +441,10 @@ class BoardViewModel(
                 return@launch
             }
 
-            boardRepository.createComment(groupId, vid, text, attachmentsParam, _uiState.value.fromGroup)
+            boardRepository.createComment(groupId, vid, text, attachmentsParam, _uiState.value.fromGroup, replyToComment = replying?.id)
                 .onSuccess {
                     android.util.Log.d("Board", "Post success")
-                    _uiState.update { it.copy(inputText = "", pendingAttachments = emptyList(), isSending = false) }
+                    _uiState.update { it.copy(inputText = "", pendingAttachments = emptyList(), isSending = false, replyingTo = null) }
                     loadComments(refresh = true)
                 }
                 .onFailure { error ->

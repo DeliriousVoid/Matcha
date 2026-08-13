@@ -22,6 +22,9 @@ class SettingsViewModel(private val context: Context) : ViewModel() {
     private val _autoDownload = MutableStateFlow(prefs.getBoolean("auto_download", false))
     val autoDownload = _autoDownload.asStateFlow()
 
+    private val _autoHidePlayer = MutableStateFlow(prefs.getBoolean("auto_hide_player", false))
+    val autoHidePlayer = _autoHidePlayer.asStateFlow()
+
     private val _pauseVideoOnScroll = MutableStateFlow(prefs.getBoolean("pause_video_on_scroll", true))
     val pauseVideoOnScroll = _pauseVideoOnScroll.asStateFlow()
 
@@ -170,6 +173,11 @@ class SettingsViewModel(private val context: Context) : ViewModel() {
     fun setAutoDownload(enabled: Boolean) {
         _autoDownload.value = enabled
         prefs.edit().putBoolean("auto_download", enabled).apply()
+    }
+
+    fun setAutoHidePlayer(enabled: Boolean) {
+        _autoHidePlayer.value = enabled
+        prefs.edit().putBoolean("auto_hide_player", enabled).apply()
     }
 
     fun setPauseVideoOnScroll(enabled: Boolean) {

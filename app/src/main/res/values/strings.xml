@@ -16,4 +16,6 @@
     <string name="settings_double_tap_like_desc">Двойное нажатие по посту ставит лайк. Включение может привести к задержкам открытия изображений и комментариев. Изменения вступят в силу после перезапуска.</string>
     <string name="settings_double_tap_timeout">Ожидание второго клика: %1$d мс</string>
     <string name="settings_category_feed">Лента</string>
+    <string name="settings_auto_hide_player">Автоматически скрывать плеер</string>
+    <string name="settings_auto_hide_player_desc">Скрывать плеер через 10 секунд при неактивности</string>
 </resources>

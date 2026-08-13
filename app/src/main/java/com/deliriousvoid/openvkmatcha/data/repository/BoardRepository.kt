@@ -39,7 +39,7 @@ class BoardRepository(private val api: OpenVKApi) {
         )
     ).map { JsonParsers.parseTopicComments(it) }
 
-    suspend fun createComment(groupId: Int, topicId: Int, message: String, attachments: String? = null, fromGroup: Boolean = false) = api.callMethod(
+    suspend fun createComment(groupId: Int, topicId: Int, message: String, attachments: String? = null, fromGroup: Boolean = false, replyToComment: Int? = null) = api.callMethod(
         "board.createComment",
         mutableMapOf(
             "group_id" to groupId.absoluteValue.toString(),
@@ -48,6 +48,7 @@ class BoardRepository(private val api: OpenVKApi) {
         ).apply {
             if (!attachments.isNullOrBlank()) put("attachments", attachments)
             put("from_group", if (fromGroup) "1" else "0")
+            if (replyToComment != null) put("reply_to_comment", replyToComment.toString())
         },
         isPost = true
     )

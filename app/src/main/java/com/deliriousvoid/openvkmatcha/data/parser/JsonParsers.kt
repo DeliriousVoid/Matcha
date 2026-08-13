@@ -374,6 +374,7 @@ object JsonParsers {
             duration = audio.optInt("duration", 0),
             url = url,
             remoteUrl = url,
+            artworkUrl = null,
             isAdded = audio.optBool("is_added", false) ||
                       audio.optBool("added", false) ||
                       audio.optBool("user_added", false),
@@ -725,7 +726,9 @@ object JsonParsers {
                 videos = attachments.videos,
                 audios = attachments.audios,
                 documents = attachments.documents,
-                poll = attachments.poll
+                poll = attachments.poll,
+                replyToComment = item.optInt("reply_to_comment").takeIf { it != 0 },
+                replyToUser = item.optInt("reply_to_user").takeIf { it != 0 }
             )
         }
 
@@ -962,7 +965,9 @@ object JsonParsers {
                 documents = attachments.documents,
                 poll = attachments.poll,
                 likeCount = likeCount,
-                isLiked = isLiked
+                isLiked = isLiked,
+                replyToComment = item.optInt("reply_to_comment").takeIf { it != 0 },
+                replyToUser = item.optInt("reply_to_user").takeIf { it != 0 }
             )
         }
         

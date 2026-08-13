@@ -26,7 +26,6 @@ class OpenVKApi(private val tokenManager: TokenManager) {
     val baseUrl: String get() = tokenManager.getInstance()
     val token: String? get() = tokenManager.getToken()
 
-    fun saveToken(token: String) = tokenManager.saveToken(token)
     fun saveInstance(url: String) = tokenManager.saveInstance(url)
     fun logout() = tokenManager.clear()
     fun hasToken(): Boolean = tokenManager.hasToken()
@@ -44,7 +43,7 @@ class OpenVKApi(private val tokenManager: TokenManager) {
                     .build()
 
                 val request = Request.Builder()
-                    .url("${baseUrl}/token")
+                    .url("$baseUrl/token")
                     .post(body)
                     .build()
 
@@ -83,7 +82,7 @@ class OpenVKApi(private val tokenManager: TokenManager) {
     suspend fun callMethod(
         method: String,
         params: Map<String, String> = emptyMap(),
-        isPost: Boolean = false
+        isPost: Boolean = false,
     ): Result<JSONObject> =
         withContext(Dispatchers.IO) {
             val accessToken = tokenManager.getToken()
@@ -91,7 +90,7 @@ class OpenVKApi(private val tokenManager: TokenManager) {
 
             enforceRateLimit()
             try {
-                val urlBuilder = StringBuilder("${baseUrl}/method/$method")
+                val urlBuilder = StringBuilder("$baseUrl/method/$method")
                 
                 val request = if (isPost) {
                     val bodyBuilder = FormBody.Builder()

@@ -12,6 +12,7 @@ import com.deliriousvoid.openvkmatcha.OpenVKMatchaApp
 import com.deliriousvoid.openvkmatcha.data.model.AudioTrack
 import com.deliriousvoid.openvkmatcha.data.model.PlaylistSource
 import com.deliriousvoid.openvkmatcha.data.repository.MusicRepository
+import com.deliriousvoid.openvkmatcha.data.repository.ArtworkRepository
 import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.MoreExecutors
 import kotlinx.coroutines.CoroutineScope
@@ -27,7 +28,8 @@ import org.json.JSONObject
 
 class MusicPlayerManager(
     private val context: Context,
-    private val musicRepository: MusicRepository
+    private val musicRepository: MusicRepository,
+    private val artworkRepository: ArtworkRepository
 ) {
     private val playerPrefs = context.getSharedPreferences("player_state", Context.MODE_PRIVATE)
     private var controllerFuture: ListenableFuture<MediaController>? = null
@@ -448,6 +450,75 @@ class MusicPlayerManager(
             val enriched = OpenVKMatchaApp.instance.downloadRepository.enrichTrack(track)
             _currentTrack.value = enriched
             _duration.value = enriched.duration * 1000L
+            
+            if (enriched.artworkUrl == null) {
+                fetchArtworkForTrack(enriched)
+            }
+        }
+    }
+
+    private fun fetchArtworkForTrack(track: AudioTrack) {
+        scope.launch {
+            artworkRepository.getArtworkUrl(track.artist, track.title).onSuccess { url ->
+                if (url != null) {
+                    val updatedTrack = track.copy(artworkUrl = url)
+                    if (_currentTrack.value?.stableId == track.stableId) {
+                        _currentTrack.value = updatedTrack
+                    }
+                    updateMediaItemMetadata(updatedTrack)
+                }
+            }
+        }
+    }
+
+    private fun updateMediaItemMetadata(track: AudioTrack) {
+        val controller = controller ?: return
+        for (i in 0 until controller.mediaItemCount) {
+            val item = controller.getMediaItemAt(i)
+            if (item.mediaId == track.stableId) {
+                val updatedItem = item.buildUpon()
+                    .setMediaMetadata(
+                        item.mediaMetadata.buildUpon()
+                            .setArtworkUri(track.artworkUrl?.let { android.net.Uri.parse(it) })
+                            .build()
+                    )
+                    .build()
+                
+                // Only replace if the artwork URI has actually changed
+                if (item.mediaMetadata.artworkUri != updatedItem.mediaMetadata.artworkUri) {
+                    isInternalUpdate = true
+                    controller.replaceMediaItem(i, updatedItem)
+                    isInternalUpdate = false
+                    
+                    // Update internal lists so the UI reflects the new artwork
+                    currentPlaylist = currentPlaylist.map { if (it.stableId == track.stableId) track else it }
+                    originalPlaylist = originalPlaylist.map { if (it.stableId == track.stableId) track else it }
+                    _queue.value = currentPlaylist
+                }
+                break
+            }
+        }
+    }
+
+    private fun preFetchArtwork(tracks: List<AudioTrack>, startIndex: Int) {
+        scope.launch {
+            // Fetch for current and next 5 tracks
+            val toFetch = tracks.drop(startIndex).take(6)
+            toFetch.forEach { track ->
+                if (track.artworkUrl == null && artworkRepository.getCachedArtworkUrl(track.artist, track.title) == null) {
+                    launch {
+                        artworkRepository.getArtworkUrl(track.artist, track.title).onSuccess { url ->
+                            if (url != null) {
+                                val updatedTrack = track.copy(artworkUrl = url)
+                                if (_currentTrack.value?.stableId == track.stableId) {
+                                    _currentTrack.value = updatedTrack
+                                }
+                                updateMediaItemMetadata(updatedTrack)
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -548,6 +619,9 @@ class MusicPlayerManager(
         controller.play()
         savePlaybackState()
 
+        // Pre-fetch artwork for current and upcoming tracks
+        preFetchArtwork(finalTracks, finalStartIndex)
+
         // If it's a dynamic source, start fetching the rest of the playlist in background
         if (source !is PlaylistSource.LocalAudio && source !is PlaylistSource.Unknown) {
             fetchAllTracks(source)
@@ -614,6 +688,9 @@ class MusicPlayerManager(
         val controller = controller ?: return
         val currentIndex = controller.currentMediaItemIndex
         val totalItems = controller.mediaItemCount
+
+        // 0. Pre-fetch artwork for upcoming tracks
+        preFetchArtwork(currentPlaylist, currentIndex)
 
         // 1. Preload next tracks
         val nextTracks = mutableListOf<AudioTrack>()
@@ -875,6 +952,9 @@ class MusicPlayerManager(
 
     private fun AudioTrack.toMediaItem(): MediaItem {
         val enriched = OpenVKMatchaApp.instance.downloadRepository.enrichTrack(this)
+        val cachedArtwork = artworkRepository.getCachedArtworkUrl(enriched.artist, enriched.title)
+        val artworkUri = (enriched.artworkUrl ?: cachedArtwork)?.let { android.net.Uri.parse(it) }
+        
         return MediaItem.Builder()
             .setMediaId(enriched.stableId)
             .setUri(enriched.url)
@@ -882,6 +962,7 @@ class MusicPlayerManager(
                 MediaMetadata.Builder()
                     .setTitle(enriched.title)
                     .setArtist(enriched.artist)
+                    .setArtworkUri(artworkUri)
                     .build()
             )
             .setTag(enriched)

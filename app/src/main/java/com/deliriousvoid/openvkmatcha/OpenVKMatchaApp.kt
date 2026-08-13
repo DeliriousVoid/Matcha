@@ -149,7 +149,7 @@ class OpenVKMatchaApp : Application(), ImageLoaderFactory {
         onlineManager = OnlineManager(this, authRepository)
         ProcessLifecycleOwner.get().lifecycle.addObserver(onlineManager)
         preloadManager = PreloadManager(this)
-        playerManager = MusicPlayerManager(this, musicRepository)
+        playerManager = MusicPlayerManager(this, musicRepository, artworkRepository)
 
         if (tokenManager.hasToken()) {
             com.deliriousvoid.openvkmatcha.services.LongPollService.start(this)

@@ -5,6 +5,8 @@ import android.content.Context
 import android.content.ContextWrapper
 import android.content.pm.ActivityInfo
 import android.view.LayoutInflater
+import android.content.Intent
+import android.net.Uri
 import androidx.annotation.OptIn
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
@@ -15,6 +17,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -69,10 +72,23 @@ fun VideoPlayer(
     
     val isInPipMode by AppEvents.isInPipMode.collectAsState()
     
+    val isExternal = video.isExternal
     val activeVideo by AppEvents.activeVideo.collectAsState()
     val isThisVideoActive = activeVideo?.id == video.id
     
-    val exoPlayer = remember(video.id) {
+    var resolvedUrl by remember(video.id) { mutableStateOf<String?>(null) }
+    var isResolving by remember(video.id) { mutableStateOf(false) }
+
+    LaunchedEffect(video.id) {
+        if (isExternal && video.playerUrl != null) {
+            isResolving = true
+            resolvedUrl = com.deliriousvoid.openvkmatcha.util.VideoResolver.resolveDirectUrl(video.playerUrl)
+            isResolving = false
+        }
+    }
+
+    val exoPlayer = remember(video.id, resolvedUrl) {
+        if (isExternal && resolvedUrl == null) return@remember null
         val activePlayer = AppEvents.activeExoPlayer.value
         val activeVid = AppEvents.activeVideo.value
         if (activeVid?.id == video.id && activePlayer != null) {
@@ -88,11 +104,12 @@ fun VideoPlayer(
                     .build()
                 setAudioAttributes(audioAttributes, true)
                 
-                video.videoUrl?.let {
+                val urlToUse = if (isExternal) resolvedUrl else video.videoUrl
+                urlToUse?.let {
                     val metadata = MediaMetadata.Builder()
                         .setTitle(video.title)
                         .setArtist(video.ownerName ?: "OpenVK Video")
-                        .setArtworkUri(video.thumbnailUrl?.let { android.net.Uri.parse(it) })
+                        .setArtworkUri(video.thumbnailUrl?.let { Uri.parse(it) })
                         .build()
                     val mediaItem = MediaItem.Builder()
                         .setUri(it)
@@ -105,13 +122,13 @@ fun VideoPlayer(
         }
     }
 
-    var isPlaying by remember { mutableStateOf(exoPlayer.isPlaying) }
-    var isStarted by remember(video.id) { 
-        mutableStateOf(exoPlayer.playbackState != Player.STATE_IDLE || AppEvents.activeVideo.value?.id == video.id) 
+    var isPlaying by remember(exoPlayer) { mutableStateOf(exoPlayer?.isPlaying ?: false) }
+    var isStarted by remember(video.id, exoPlayer) { 
+        mutableStateOf(exoPlayer?.playbackState?.let { it != Player.STATE_IDLE } ?: (AppEvents.activeVideo.value?.id == video.id)) 
     }
     var showControls by remember { mutableStateOf(true) }
-    var currentPosition by remember(video.id) { mutableLongStateOf(exoPlayer.currentPosition) }
-    var duration by remember(video.id) { mutableLongStateOf(exoPlayer.duration.coerceAtLeast(0L)) }
+    var currentPosition by remember(video.id, exoPlayer) { mutableLongStateOf(exoPlayer?.currentPosition ?: 0L) }
+    var duration by remember(video.id, exoPlayer) { mutableLongStateOf(exoPlayer?.duration?.coerceAtLeast(0L) ?: 0L) }
     var isFullscreen by rememberSaveable { mutableStateOf(initiallyFullscreen) }
     var playbackSpeed by remember { mutableFloatStateOf(1.0f) }
     var showSpeedSelector by remember { mutableStateOf(false) }
@@ -122,7 +139,7 @@ fun VideoPlayer(
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_PAUSE) {
                 if (!AppEvents.isInPipMode.value && !AppEvents.shouldEnterPip.value && !AppEvents.isVideoFloating.value) {
-                    exoPlayer.pause()
+                    exoPlayer?.pause()
                 }
             }
         }
@@ -133,6 +150,7 @@ fun VideoPlayer(
     }
 
     DisposableEffect(exoPlayer) {
+        if (exoPlayer == null) return@DisposableEffect onDispose {}
         val listener = object : Player.Listener {
             override fun onIsPlayingChanged(playing: Boolean) {
                 isPlaying = playing
@@ -188,19 +206,19 @@ fun VideoPlayer(
     val fullScreenHandler = LocalFullScreenVideoHandler.current
 
     LaunchedEffect(playbackSpeed) {
-        exoPlayer.playbackParameters = PlaybackParameters(playbackSpeed)
+        exoPlayer?.playbackParameters = PlaybackParameters(playbackSpeed)
     }
 
     val musicIsPlaying by playerManager.isPlaying.collectAsState()
     LaunchedEffect(musicIsPlaying) {
         if (musicIsPlaying && isPlaying) {
-            exoPlayer.pause()
+            exoPlayer?.pause()
         }
     }
 
 
     LaunchedEffect(isPlaying) {
-        if (isPlaying) {
+        if (isPlaying && exoPlayer != null) {
             while (true) {
                 currentPosition = exoPlayer.currentPosition
                 delay(500)
@@ -234,11 +252,11 @@ fun VideoPlayer(
                             val isForward = offset.x > size.width / 2
                             val seekAmount = 10000L
                             val newPos = if (isForward) {
-                                (exoPlayer.currentPosition + seekAmount).coerceAtMost(duration)
+                                ((exoPlayer?.currentPosition ?: 0L) + seekAmount).coerceAtMost(duration)
                             } else {
-                                (exoPlayer.currentPosition - seekAmount).coerceAtLeast(0)
+                                ((exoPlayer?.currentPosition ?: 0L) - seekAmount).coerceAtLeast(0)
                             }
-                            exoPlayer.seekTo(newPos)
+                            exoPlayer?.seekTo(newPos)
                             currentPosition = newPos
 
                             seekIndicator = seekAmount / 1000 to isForward
@@ -250,25 +268,58 @@ fun VideoPlayer(
                     )
                 }
         ) {
-            AndroidView(
-                factory = { ctx ->
-                    val view = LayoutInflater.from(ctx).inflate(R.layout.matcha_player_view, null) as PlayerView
-                    view.apply {
-                        player = if (isInPipMode || isVideoFloating || (isGlobalFullScreen && !isFull)) null else exoPlayer
-                        setBackgroundColor(android.graphics.Color.BLACK)
-                        setEnableComposeSurfaceSyncWorkaround(true)
+            if (isResolving) {
+                CircularProgressIndicator(
+                    modifier = Modifier.align(Alignment.Center),
+                    color = Color.White
+                )
+            } else if (isExternal && resolvedUrl == null) {
+                Column(
+                    modifier = Modifier.align(Alignment.Center),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.ErrorOutline,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(48.dp)
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = "Не удалось загрузить видео",
+                        color = Color.White,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    TextButton(onClick = {
+                        video.playerUrl?.let { url ->
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                            context.startActivity(intent)
+                        }
+                    }) {
+                        Text("Открыть в браузере")
                     }
-                },
-                update = {
-                    it.player = if (isInPipMode || isVideoFloating || (isGlobalFullScreen && !isFull)) null else exoPlayer
-                },
-                onRelease = {
-                    it.player = null
-                },
-                modifier = Modifier.fillMaxSize()
-            )
+                }
+            } else {
+                AndroidView(
+                    factory = { ctx ->
+                        val view = LayoutInflater.from(ctx).inflate(R.layout.matcha_player_view, null) as PlayerView
+                        view.apply {
+                            player = if (isInPipMode || isVideoFloating || (isGlobalFullScreen && !isFull)) null else exoPlayer
+                            setBackgroundColor(android.graphics.Color.BLACK)
+                            setEnableComposeSurfaceSyncWorkaround(true)
+                        }
+                    },
+                    update = {
+                        it.player = if (isInPipMode || isVideoFloating || (isGlobalFullScreen && !isFull)) null else exoPlayer
+                    },
+                    onRelease = {
+                        it.player = null
+                    },
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
 
-            if (isFull) {
+            if (isFull && (resolvedUrl != null || !isExternal)) {
                 seekIndicator?.let { (amount, isForward) ->
                     Box(
                         modifier = Modifier
@@ -308,16 +359,16 @@ fun VideoPlayer(
                     onShowSpeedSelector = { showSpeedSelector = it },
                     onPlayPause = {
                         if (isPlaying) {
-                            exoPlayer.pause()
+                            exoPlayer?.pause()
                         } else {
-                            if (exoPlayer.playbackState == Player.STATE_ENDED) {
+                            if (exoPlayer?.playbackState == Player.STATE_ENDED) {
                                 exoPlayer.seekTo(0)
                             }
-                            exoPlayer.play()
+                            exoPlayer?.play()
                         }
                     },
                     onSeek = {
-                        exoPlayer.seekTo(it)
+                        exoPlayer?.seekTo(it)
                         currentPosition = it
                     },
                     onDownload = {
@@ -337,7 +388,14 @@ fun VideoPlayer(
                     onPip = {
                         AppEvents.triggerEnterPip()
                     },
-                    onSetSpeed = { playbackSpeed = it }
+                    onSetSpeed = { playbackSpeed = it },
+                    isExternal = isExternal && resolvedUrl == null,
+                    onOpenInYouTube = {
+                        video.playerUrl?.let { url ->
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                            context.startActivity(intent)
+                        }
+                    }
                 )
             }
         }
@@ -392,7 +450,7 @@ fun VideoPlayer(
                     .fillMaxSize()
                     .clickable {
                         isStarted = true
-                        exoPlayer.play()
+                        exoPlayer?.play()
                     }
             ) {
                 AsyncImage(
@@ -511,7 +569,9 @@ private fun VideoControls(
     onDownload: () -> Unit,
     onToggleFullscreen: () -> Unit,
     onPip: () -> Unit,
-    onSetSpeed: (Float) -> Unit
+    onSetSpeed: (Float) -> Unit,
+    isExternal: Boolean = false,
+    onOpenInYouTube: () -> Unit = {}
 ) {
     var showMenu by remember { mutableStateOf(false) }
 
@@ -618,7 +678,7 @@ private fun VideoControls(
                     .padding(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                if (isFullscreen) {
+                if (isFullscreen && !isExternal) {
                     IconButton(onClick = onPip) {
                         Icon(
                             imageVector = Icons.Default.PictureInPicture,
@@ -637,14 +697,25 @@ private fun VideoControls(
                         onDismissRequest = { showMenu = false }
                     ) {
                         DropdownMenuItem(
-                            text = { Text("Скачать") },
+                            text = { Text("Смотреть на YouTube") },
                             onClick = {
                                 showMenu = false
-                                onDownload()
+                                onOpenInYouTube()
                             },
-                            leadingIcon = { Icon(Icons.Default.Download, null) }
+                            leadingIcon = { Icon(Icons.AutoMirrored.Filled.OpenInNew, null) }
                         )
-                        if (isFullscreen) {
+                        HorizontalDivider()
+                        if (!isExternal) {
+                            DropdownMenuItem(
+                                text = { Text("Скачать") },
+                                onClick = {
+                                    showMenu = false
+                                    onDownload()
+                                },
+                                leadingIcon = { Icon(Icons.Default.Download, null) }
+                            )
+                        }
+                        if (isFullscreen && !isExternal) {
                             HorizontalDivider()
                             DropdownMenuItem(
                                 text = { Text("Скорость воспроизведения") },
@@ -661,59 +732,80 @@ private fun VideoControls(
             }
 
             // Center Play/Pause
-            IconButton(
-                onClick = onPlayPause,
-                modifier = Modifier
-                    .align(Alignment.Center)
-                    .size(64.dp)
-                    .background(Color.Black.copy(alpha = 0.5f), CircleShape)
-            ) {
-                Icon(
-                    imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                    contentDescription = null,
-                    tint = Color.White,
-                    modifier = Modifier.size(40.dp)
-                )
+            if (!isExternal) {
+                IconButton(
+                    onClick = onPlayPause,
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .size(64.dp)
+                        .background(Color.Black.copy(alpha = 0.5f), CircleShape)
+                ) {
+                    Icon(
+                        imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(40.dp)
+                    )
+                }
             }
 
             // Bottom Bar
-            Column(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = 8.dp)
-            ) {
-                Row(
+            if (!isExternal) {
+                Column(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = 8.dp)
                 ) {
-                    Text(
-                        text = "${formatTime(currentPosition)} / ${formatTime(duration)}",
-                        color = Color.White,
-                        style = MaterialTheme.typography.bodySmall
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "${formatTime(currentPosition)} / ${formatTime(duration)}",
+                            color = Color.White,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                        
+                        IconButton(onClick = onToggleFullscreen) {
+                            Icon(
+                                imageVector = if (isFullscreen) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
+                                contentDescription = "Fullscreen",
+                                tint = Color.White
+                            )
+                        }
+                    }
+                    Slider(
+                        value = currentPosition.toFloat(),
+                        onValueChange = { onSeek(it.toLong()) },
+                        valueRange = 0f..duration.toFloat().coerceAtLeast(1f),
+                        modifier = Modifier.padding(horizontal = 8.dp),
+                        colors = SliderDefaults.colors(
+                            thumbColor = Color.White,
+                            activeTrackColor = Color.White,
+                            inactiveTrackColor = Color.White.copy(alpha = 0.3f)
+                        )
                     )
-                    
-                    IconButton(onClick = onToggleFullscreen) {
+                }
+            } else {
+                // For external videos, only show the fullscreen toggle if needed, or just let them use internal controls
+                // But we still need a way to exit fullscreen if we are in it
+                if (isFullscreen) {
+                    IconButton(
+                        onClick = onToggleFullscreen,
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(16.dp)
+                    ) {
                         Icon(
-                            imageVector = if (isFullscreen) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
+                            imageVector = Icons.Default.FullscreenExit,
                             contentDescription = "Fullscreen",
                             tint = Color.White
                         )
                     }
                 }
-                Slider(
-                    value = currentPosition.toFloat(),
-                    onValueChange = { onSeek(it.toLong()) },
-                    valueRange = 0f..duration.toFloat().coerceAtLeast(1f),
-                    modifier = Modifier.padding(horizontal = 8.dp),
-                    colors = SliderDefaults.colors(
-                        thumbColor = Color.White,
-                        activeTrackColor = Color.White,
-                        inactiveTrackColor = Color.White.copy(alpha = 0.3f)
-                    )
-                )
             }
         }
     }

@@ -36,9 +36,17 @@ import com.deliriousvoid.openvkmatcha.ui.viewmodel.LoginViewModel
 @Composable
 fun LoginScreen(
     onLoginSuccess: () -> Unit,
+    onNavigateTo2FA: (String, String, String) -> Unit,
     viewModel: LoginViewModel = viewModel(factory = LoginViewModel.factory()),
 ) {
     val state by viewModel.uiState.collectAsState()
+    
+    LaunchedEffect(state.navigateTo2FA) {
+        if (state.navigateTo2FA) {
+            onNavigateTo2FA(state.username, state.password, state.instanceUrl)
+            viewModel.onNavigatedTo2FA()
+        }
+    }
     val context = LocalContext.current
     val appIcon = remember(context) {
         context.packageManager.getApplicationIcon(context.packageName)
@@ -115,16 +123,6 @@ fun LoginScreen(
                         visualTransformation = PasswordVisualTransformation(),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password)
                     )
-                    
-                    if (state.needsTwoFactor) {
-                        Spacer(modifier = Modifier.height(16.dp))
-                        MatchaTextField(
-                            value = state.twoFactorCode,
-                            onValueChange = viewModel::updateTwoFactorCode,
-                            label = "Код 2FA",
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-                        )
-                    }
                 }
             }
 

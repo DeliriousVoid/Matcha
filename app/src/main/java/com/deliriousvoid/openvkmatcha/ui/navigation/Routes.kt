@@ -28,6 +28,7 @@ object Routes {
     const val PROFILE = "profile/{id}"
     const val EXPLORE = "explore"
     const val SEARCH = "search"
+    const val TWO_FACTOR = "two_factor/{username}/{password}/{instance}"
     const val TRANSFER = "transfer"
     const val VIDEOS = "videos/{userId}"
     const val DOCUMENTS = "documents/{userId}"
@@ -96,6 +97,10 @@ object Routes {
 
     fun webviewRoute(url: String, title: String): String {
         return "webview?url=${Uri.encode(url)}&title=${Uri.encode(title)}"
+    }
+
+    fun twoFactorRoute(username: String, password: String, instance: String): String {
+        return "two_factor/${Uri.encode(username)}/${Uri.encode(password)}/${Uri.encode(instance)}"
     }
 
     fun videosRoute(userId: Int): String = "videos/$userId"

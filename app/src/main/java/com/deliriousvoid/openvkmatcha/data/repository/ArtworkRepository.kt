@@ -7,12 +7,14 @@ class ArtworkRepository(private val api: ArtworkApi) {
 
     suspend fun getArtworkUrl(artist: String, title: String): Result<String?> {
         val cacheKey = "$artist - $title"
-        if (cache.containsKey(cacheKey)) {
-            return Result.success(cache[cacheKey])
-        }
+        getCachedArtworkUrl(artist, title)?.let { return Result.success(it) }
 
         return api.getArtworkUrl(artist, title).onSuccess {
             cache[cacheKey] = it
         }
+    }
+
+    fun getCachedArtworkUrl(artist: String, title: String): String? {
+        return cache["$artist - $title"]
     }
 }

@@ -1,10 +1,12 @@
 package com.deliriousvoid.openvkmatcha.ui.screens.board
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.selection.SelectionContainer
@@ -17,6 +19,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
@@ -110,6 +114,8 @@ fun TopicCommentsScreen(
                 fromGroup = state.fromGroup,
                 isDeveloperMode = state.isDeveloperMode,
                 pendingAttachments = state.pendingAttachments,
+                replyingTo = state.replyingTo,
+                onCancelReply = viewModel::cancelReply,
                 onTextChange = viewModel::updateInput,
                 onFromGroupChange = viewModel::setFromGroup,
                 onRemoveAttachment = viewModel::removeAttachment,
@@ -146,9 +152,13 @@ fun TopicCommentsScreen(
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(bottom = 16.dp)
                     ) {
-                        items(state.comments) { comment ->
+                        items(state.threadedComments, key = { it.item.id }) { threadedItem ->
+                            val comment = threadedItem.item
                             CommentItem(
                                 comment = comment,
+                                level = threadedItem.level,
+                                isLastInThread = threadedItem.isLastInThread,
+                                hasNextInThread = threadedItem.hasNextInThread,
                                 onAuthorClick = { onOpenProfile(comment.fromId) },
                                 onMentionClick = { onOpenProfile(it) },
                                 onProfileClick = { onOpenProfile(it) },
@@ -174,6 +184,12 @@ fun TopicCommentsScreen(
                                     viewerInitialIndex = it
                                 }
                             )
+                            if (threadedItem.level == 0 && !threadedItem.hasNextInThread || (threadedItem.level == 1 && threadedItem.isLastInThread)) {
+                                HorizontalDivider(
+                                    modifier = Modifier.padding(horizontal = 16.dp),
+                                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
+                                )
+                            }
                         }
                         if (state.isLoadingMore) {
                             item {
@@ -257,6 +273,9 @@ fun TopicCommentsScreen(
 @Composable
 private fun CommentItem(
     comment: TopicComment,
+    level: Int = 0,
+    isLastInThread: Boolean = false,
+    hasNextInThread: Boolean = false,
     onAuthorClick: () -> Unit,
     onMentionClick: (Int) -> Unit = {},
     onProfileClick: (String) -> Unit = {},
@@ -281,22 +300,64 @@ private fun CommentItem(
 ) {
     var showMenu by remember { mutableStateOf(false) }
     val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
+    val primaryColor = MaterialTheme.colorScheme.primary
 
-    Row(
+    Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(16.dp)
+            .padding(start = if (level > 0) 24.dp else 0.dp)
     ) {
-        AsyncImage(
-            model = comment.authorAvatar,
-            contentDescription = null,
+        Canvas(modifier = Modifier.matchParentSize()) {
+            val strokeWidth = 2.dp.toPx()
+            val avatarSizeRoot = 40.dp.toPx()
+            val avatarSizeReply = 32.dp.toPx()
+            val padding = 16.dp.toPx()
+            val indent = 24.dp.toPx()
+            
+            val rootCenterX = padding + avatarSizeRoot / 2
+            
+            if (level == 0) {
+                if (hasNextInThread) {
+                    drawLine(
+                        color = primaryColor.copy(alpha = 0.6f),
+                        start = androidx.compose.ui.geometry.Offset(rootCenterX, padding + avatarSizeRoot),
+                        end = androidx.compose.ui.geometry.Offset(rootCenterX, size.height),
+                        strokeWidth = strokeWidth
+                    )
+                }
+            } else {
+                val threadLineX = rootCenterX - indent
+                
+                drawLine(
+                    color = primaryColor.copy(alpha = 0.6f),
+                    start = androidx.compose.ui.geometry.Offset(threadLineX, 0f),
+                    end = androidx.compose.ui.geometry.Offset(threadLineX, if (hasNextInThread) size.height else padding + avatarSizeReply / 2),
+                    strokeWidth = strokeWidth
+                )
+                drawLine(
+                    color = primaryColor.copy(alpha = 0.6f),
+                    start = androidx.compose.ui.geometry.Offset(threadLineX, padding + avatarSizeReply / 2),
+                    end = androidx.compose.ui.geometry.Offset(padding, padding + avatarSizeReply / 2),
+                    strokeWidth = strokeWidth
+                )
+            }
+        }
+
+        Row(
             modifier = Modifier
-                .size(40.dp)
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.surfaceVariant)
-                .clickable { onAuthorClick() },
-            contentScale = ContentScale.Crop
-        )
+                .fillMaxWidth()
+                .padding(16.dp)
+        ) {
+            AsyncImage(
+                model = comment.authorAvatar,
+                contentDescription = null,
+                modifier = Modifier
+                    .size(if (level > 0) 32.dp else 40.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .clickable { onAuthorClick() },
+                contentScale = ContentScale.Crop
+            )
         Spacer(modifier = Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -407,6 +468,7 @@ private fun CommentItem(
         }
     }
 }
+}
 
 @Composable
 private fun CommentInput(
@@ -416,6 +478,8 @@ private fun CommentInput(
     fromGroup: Boolean = false,
     isDeveloperMode: Boolean = false,
     pendingAttachments: List<PendingAttachment> = emptyList(),
+    replyingTo: TopicComment? = null,
+    onCancelReply: () -> Unit = {},
     onTextChange: (String) -> Unit,
     onFromGroupChange: (Boolean) -> Unit = {},
     onRemoveAttachment: (PendingAttachment) -> Unit,
@@ -426,6 +490,16 @@ private fun CommentInput(
     onSend: () -> Unit
 ) {
     var showAttachMenu by remember { mutableStateOf(false) }
+    var textFieldValue by remember { mutableStateOf(TextFieldValue(text, TextRange(text.length))) }
+
+    LaunchedEffect(text) {
+        if (text != textFieldValue.text) {
+            textFieldValue = textFieldValue.copy(
+                text = text,
+                selection = TextRange(text.length)
+            )
+        }
+    }
 
     Surface(
         tonalElevation = 2.dp,
@@ -457,6 +531,26 @@ private fun CommentInput(
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.primary
                     )
+                }
+            }
+
+            if (replyingTo != null) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f))
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = "В ответ пользователю ${replyingTo.authorName}",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.secondary
+                    )
+                    IconButton(onClick = onCancelReply, modifier = Modifier.size(20.dp)) {
+                        Icon(Icons.Default.Close, null, tint = MaterialTheme.colorScheme.secondary)
+                    }
                 }
             }
 
@@ -514,8 +608,13 @@ private fun CommentInput(
                 }
 
                 TextField(
-                    value = text,
-                    onValueChange = onTextChange,
+                    value = textFieldValue,
+                    onValueChange = {
+                        textFieldValue = it
+                        if (text != it.text) {
+                            onTextChange(it.text)
+                        }
+                    },
                     modifier = Modifier.weight(1f),
                     placeholder = { Text("Введите сообщение...") },
                     colors = TextFieldDefaults.colors(

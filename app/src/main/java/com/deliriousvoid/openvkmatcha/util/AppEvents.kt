@@ -22,6 +22,7 @@ data class TopBarState(
     val navigationIcon: (@Composable () -> Unit)? = null,
     val actions: (@Composable RowScope.() -> Unit)? = null,
     val isSearchActive: Boolean = false,
+    val isTransparent: Boolean = false,
     val customContent: (@Composable () -> Unit)? = null,
     val customTopBar: (@Composable () -> Unit)? = null,
     val tag: String? = null
