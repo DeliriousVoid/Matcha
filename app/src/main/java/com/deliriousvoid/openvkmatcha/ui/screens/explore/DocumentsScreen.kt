@@ -39,7 +39,7 @@ fun DocumentsScreen(
     val state by viewModel.uiState.collectAsState()
 
     DisposableEffect(Unit) {
-        AppEvents.setTopBarState(TopBarState(tag = "documents", title = "Документы"))
+        AppEvents.setTopBarState(TopBarState(tag = "documents", title = "Документы", route = Routes.DOCUMENTS))
         onDispose {
             if (AppEvents.topBarState.value?.tag == "documents") {
                 AppEvents.setTopBarState(null)

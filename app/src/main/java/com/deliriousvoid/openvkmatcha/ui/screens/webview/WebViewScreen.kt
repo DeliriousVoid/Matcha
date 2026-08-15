@@ -10,6 +10,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
+import com.deliriousvoid.openvkmatcha.ui.navigation.Routes
 
 import androidx.compose.runtime.DisposableEffect
 import com.deliriousvoid.openvkmatcha.util.AppEvents
@@ -23,7 +24,7 @@ fun WebViewScreen(
     onBack: () -> Unit
 ) {
     DisposableEffect(title) {
-        AppEvents.setTopBarState(TopBarState(tag = "webview", title = title))
+        AppEvents.setTopBarState(TopBarState(tag = "webview", title = title, route = Routes.WEBVIEW))
         onDispose {
             if (AppEvents.topBarState.value?.tag == "webview") {
                 AppEvents.setTopBarState(null)

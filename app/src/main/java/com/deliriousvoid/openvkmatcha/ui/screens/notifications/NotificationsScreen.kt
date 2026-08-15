@@ -27,6 +27,7 @@ import com.deliriousvoid.openvkmatcha.ui.components.LoadingBox
 import com.deliriousvoid.openvkmatcha.ui.components.VerifiedBadge
 import com.deliriousvoid.openvkmatcha.ui.util.formatTimeAgo
 import com.deliriousvoid.openvkmatcha.ui.viewmodel.NotificationsViewModel
+import com.deliriousvoid.openvkmatcha.util.StringUtils
 
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.derivedStateOf
@@ -195,10 +196,11 @@ fun NotificationItem(
             )
             
             notification.text?.let { text ->
-                if (text.isNotBlank()) {
+                val cleanText = remember(text) { StringUtils.stripMentions(text) }
+                if (!cleanText.isNullOrBlank()) {
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = text,
+                        text = cleanText,
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurface
                     )
@@ -206,24 +208,27 @@ fun NotificationItem(
             }
             
             notification.parentText?.let { parent ->
-                Spacer(modifier = Modifier.height(8.dp))
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(8.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-                    border = androidx.compose.foundation.BorderStroke(
-                        width = 1.dp,
-                        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f)
-                    )
-                ) {
-                    Text(
-                        text = parent,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 4,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.padding(8.dp)
-                    )
+                val cleanParent = remember(parent) { StringUtils.stripMentions(parent) }
+                if (!cleanParent.isNullOrBlank()) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                        border = androidx.compose.foundation.BorderStroke(
+                            width = 1.dp,
+                            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f)
+                        )
+                    ) {
+                        Text(
+                            text = cleanParent,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 4,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(8.dp)
+                        )
+                    }
                 }
             }
         }

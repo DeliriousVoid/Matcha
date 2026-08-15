@@ -68,6 +68,7 @@ class LoginViewModel(
                 onSuccess = {
                     _uiState.update { it.copy(isLoading = false) }
                     viewModelScope.launch {
+                        AppEvents.emitAccountChanged()
                         AppEvents.emitRefreshFeed()
                         AppEvents.emitRefreshMusic()
                     }
@@ -131,6 +132,7 @@ class TwoFactorViewModel(
                 onSuccess = {
                     _uiState.update { it.copy(isLoading = false) }
                     viewModelScope.launch {
+                        AppEvents.emitAccountChanged()
                         AppEvents.emitRefreshFeed()
                         AppEvents.emitRefreshMusic()
                     }
@@ -180,6 +182,9 @@ class AccountsViewModel(
     fun switchAccount(accountId: String, onSwitched: () -> Unit) {
         if (authRepository.switchAccount(accountId)) {
             _currentAccountId.value = accountId
+            viewModelScope.launch {
+                AppEvents.emitAccountChanged()
+            }
             onSwitched()
         }
     }

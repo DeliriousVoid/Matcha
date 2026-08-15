@@ -44,7 +44,7 @@ fun VideosScreen(
     val state by viewModel.uiState.collectAsState()
 
     DisposableEffect(Unit) {
-        AppEvents.setTopBarState(TopBarState(tag = "videos", title = "Видео"))
+        AppEvents.setTopBarState(TopBarState(tag = "videos", title = "Видео", route = Routes.VIDEOS))
         onDispose {
             if (AppEvents.topBarState.value?.tag == "videos") {
                 AppEvents.setTopBarState(null)

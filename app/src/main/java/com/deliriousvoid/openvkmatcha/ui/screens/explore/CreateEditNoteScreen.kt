@@ -12,6 +12,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.deliriousvoid.openvkmatcha.ui.navigation.Routes
 import com.deliriousvoid.openvkmatcha.ui.viewmodel.CreateEditNoteViewModel
 
 import androidx.compose.runtime.DisposableEffect
@@ -30,6 +31,7 @@ fun CreateEditNoteScreen(
     DisposableEffect(state.isLoading, state.title, state.text, state.isSaving) {
         AppEvents.setTopBarState(TopBarState(
             title = if (state.isLoading) "Заметка" else if (state.title.isEmpty()) "Новая заметка" else "Редактирование",
+            route = Routes.CREATE_EDIT_NOTE,
             actions = {
                 IconButton(
                     onClick = { viewModel.save() },

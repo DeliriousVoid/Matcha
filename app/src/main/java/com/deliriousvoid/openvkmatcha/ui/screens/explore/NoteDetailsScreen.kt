@@ -16,6 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.deliriousvoid.openvkmatcha.ui.navigation.Routes
 import com.deliriousvoid.openvkmatcha.data.model.Note
 import com.deliriousvoid.openvkmatcha.ui.screens.comments.CommentItem
 import com.deliriousvoid.openvkmatcha.ui.viewmodel.NoteDetailsViewModel
@@ -43,6 +44,7 @@ fun NoteDetailsScreen(
     DisposableEffect(state.note, showMenu, currentUserId) {
         AppEvents.setTopBarState(TopBarState(
             title = state.note?.title ?: "Заметка",
+            route = Routes.NOTE_DETAILS,
             actions = {
                 if (state.note?.ownerId == currentUserId) {
                     IconButton(onClick = { showMenu = true }) {

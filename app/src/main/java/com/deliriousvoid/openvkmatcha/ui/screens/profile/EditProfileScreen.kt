@@ -53,6 +53,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
+import com.deliriousvoid.openvkmatcha.ui.navigation.Routes
 import com.deliriousvoid.openvkmatcha.OpenVKMatchaApp
 import com.deliriousvoid.openvkmatcha.ui.components.ErrorText
 import com.deliriousvoid.openvkmatcha.ui.components.LoadingBox
@@ -77,6 +78,7 @@ fun EditProfileScreen(
 
     DisposableEffect(state.currentTab) {
         AppEvents.setTopBarState(TopBarState(
+            route = Routes.EDIT_PROFILE,
             customTopBar = {
                 Surface(color = MaterialTheme.colorScheme.surface, tonalElevation = 3.dp) {
                     Column {

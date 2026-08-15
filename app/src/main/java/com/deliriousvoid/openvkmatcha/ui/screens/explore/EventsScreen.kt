@@ -18,6 +18,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.deliriousvoid.openvkmatcha.data.model.UserProfile
+import com.deliriousvoid.openvkmatcha.ui.navigation.Routes
 import com.deliriousvoid.openvkmatcha.ui.components.VerifiedBadge
 import com.deliriousvoid.openvkmatcha.ui.viewmodel.EventsViewModel
 
@@ -35,7 +36,7 @@ fun EventsScreen(
     val state by viewModel.uiState.collectAsState()
 
     DisposableEffect(Unit) {
-        AppEvents.setTopBarState(TopBarState(tag = "events", title = "События"))
+        AppEvents.setTopBarState(TopBarState(tag = "events", title = "События", route = Routes.EVENTS))
         onDispose {
             if (AppEvents.topBarState.value?.tag == "events") {
                 AppEvents.setTopBarState(null)

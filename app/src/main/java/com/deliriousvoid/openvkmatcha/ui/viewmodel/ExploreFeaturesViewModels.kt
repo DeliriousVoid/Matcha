@@ -27,7 +27,15 @@ class VideosViewModel(
     private val _uiState = MutableStateFlow(VideosUiState(isLoading = true))
     val uiState = _uiState.asStateFlow()
 
-    init { loadVideos() }
+    init { 
+        loadVideos()
+        viewModelScope.launch {
+            AppEvents.accountChanged.collect {
+                _uiState.update { VideosUiState(isLoading = true) }
+                loadVideos()
+            }
+        }
+    }
 
     fun loadVideos() {
         viewModelScope.launch {
@@ -65,7 +73,15 @@ class DocsViewModel(
     private val _uiState = MutableStateFlow(DocsUiState(isLoading = true))
     val uiState = _uiState.asStateFlow()
 
-    init { loadDocs() }
+    init { 
+        loadDocs()
+        viewModelScope.launch {
+            AppEvents.accountChanged.collect {
+                _uiState.update { DocsUiState(isLoading = true) }
+                loadDocs()
+            }
+        }
+    }
 
     fun loadDocs() {
         viewModelScope.launch {
@@ -107,6 +123,12 @@ class NotesViewModel(
         loadNotes()
         viewModelScope.launch {
             AppEvents.refreshNotes.collect {
+                loadNotes()
+            }
+        }
+        viewModelScope.launch {
+            AppEvents.accountChanged.collect {
+                _uiState.update { NotesUiState(isLoading = true) }
                 loadNotes()
             }
         }
@@ -343,7 +365,15 @@ class EventsViewModel(
     private val _uiState = MutableStateFlow(EventsUiState(isLoading = true))
     val uiState = _uiState.asStateFlow()
 
-    init { loadEvents() }
+    init { 
+        loadEvents()
+        viewModelScope.launch {
+            AppEvents.accountChanged.collect {
+                _uiState.update { EventsUiState(isLoading = true) }
+                loadEvents()
+            }
+        }
+    }
 
     fun loadEvents() {
         viewModelScope.launch {
@@ -387,7 +417,15 @@ class TransferViewModel(
     private val _uiState = MutableStateFlow(TransferUiState())
     val uiState = _uiState.asStateFlow()
 
-    init { loadFriends() }
+    init { 
+        loadFriends()
+        viewModelScope.launch {
+            AppEvents.accountChanged.collect {
+                _uiState.update { TransferUiState(isLoading = true) }
+                loadFriends()
+            }
+        }
+    }
 
     fun loadFriends() {
         viewModelScope.launch {

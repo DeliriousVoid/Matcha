@@ -22,6 +22,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
+import com.deliriousvoid.openvkmatcha.ui.navigation.Routes
 import com.deliriousvoid.openvkmatcha.data.model.SelectableGift
 import com.deliriousvoid.openvkmatcha.ui.components.LoadingBox
 import com.deliriousvoid.openvkmatcha.ui.viewmodel.SendGiftViewModel
@@ -43,7 +44,7 @@ fun SendGiftScreen(
     var showGiftPicker by remember { mutableStateOf(false) }
 
     DisposableEffect(Unit) {
-        AppEvents.setTopBarState(TopBarState(title = "Отправить подарок"))
+        AppEvents.setTopBarState(TopBarState(title = "Отправить подарок", route = Routes.SEND_GIFT))
         onDispose {
             AppEvents.setTopBarState(null)
         }

@@ -28,6 +28,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import com.deliriousvoid.openvkmatcha.ui.navigation.MainTab
+import com.deliriousvoid.openvkmatcha.ui.navigation.Routes
 import com.deliriousvoid.openvkmatcha.ui.viewmodel.SettingsViewModel
 import com.deliriousvoid.openvkmatcha.util.AppEvents
 import com.deliriousvoid.openvkmatcha.util.TopBarState
@@ -50,6 +51,7 @@ fun NavigationSettingsScreen(
     DisposableEffect(Unit) {
         AppEvents.setTopBarState(TopBarState(
             title = "Настройка навигации",
+            route = Routes.SETTINGS_NAVIGATION,
             actions = {
                 TextButton(onClick = {
                     viewModel.setNavigationTabs(listOf(

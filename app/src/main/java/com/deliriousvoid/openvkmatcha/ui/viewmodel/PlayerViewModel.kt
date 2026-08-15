@@ -12,6 +12,7 @@ import com.deliriousvoid.openvkmatcha.data.repository.ArtworkRepository
 import com.deliriousvoid.openvkmatcha.data.repository.LyricsRepository
 import com.deliriousvoid.openvkmatcha.playback.LrcParser
 import com.deliriousvoid.openvkmatcha.playback.MusicPlayerManager
+import com.deliriousvoid.openvkmatcha.util.AppEvents
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.withContext
@@ -95,6 +96,14 @@ class PlayerViewModel(
                         }
                     }
                 }
+            }
+        }
+
+        viewModelScope.launch {
+            AppEvents.accountChanged.collect {
+                playerManager.pause()
+                _trackWithArtwork.value = null
+                _syncedLyrics.value = emptyList()
             }
         }
     }

@@ -512,53 +512,98 @@ object JsonParsers {
             val feedback = item.optJSONObject("feedback")
             val parent = item.optJSONObject("parent")
             
-            // Robust fromId extraction with multiple fallbacks (as in Flux)
+            // Robust fromId extraction with multiple fallbacks
             var fromId = 0
+            
+            fun extractFromId(obj: JSONObject?): Int {
+                if (obj == null) return 0
+                return obj.optInt("from_id", 0).takeIf { it != 0 }
+                    ?: obj.optInt("user_id", 0).takeIf { it != 0 }
+                    ?: obj.optInt("author_id", 0).takeIf { it != 0 }
+                    ?: obj.optInt("owner_id", 0).takeIf { it != 0 }
+                    ?: obj.optInt("to_id", 0).takeIf { it != 0 }
+                    ?: 0
+            }
 
-            // 1. Check feedback items
+            // 1. Check feedback items (common for grouped notifications)
             val feedbackItems = feedback?.optJSONArray("items")
             if (feedbackItems != null && feedbackItems.length() > 0) {
                 val firstItem = feedbackItems.optJSONObject(0)
-                fromId = firstItem.optInt("from_id", 0)
-                if (fromId == 0) fromId = firstItem.optInt("id", 0)
+                fromId = extractFromId(firstItem)
+                if (fromId == 0) fromId = firstItem.optInt("id", 0) 
             }
             
-            // 2. Check direct from_id in feedback or item
-            if (fromId == 0) fromId = feedback?.optInt("from_id", 0) ?: 0
-            if (fromId == 0) fromId = item.optInt("from_id", 0)
+            // 2. Check direct fields in feedback or item
+            if (fromId == 0) fromId = extractFromId(feedback)
+            if (fromId == 0) fromId = extractFromId(item)
             
             // 3. Fallback for comments where author might be in feedback.id
             if (fromId == 0 && (type == "comment_post" || type == "comment_photo")) {
                 fromId = feedback?.optInt("id", 0) ?: 0
             }
 
-            // 4. Last resort: parent from_id or parent id (for sent_gift)
-            if (fromId == 0) fromId = parent?.optInt("from_id", 0) ?: 0
+            // 4. Check parent extraction
+            if (fromId == 0) fromId = extractFromId(parent)
+            
+            // 5. Check nested post extraction (common in OpenVK for comment actions)
+            if (fromId == 0) {
+                val post = parent?.optJSONObject("post") ?: feedback?.optJSONObject("post")
+                fromId = extractFromId(post)
+            }
+            
+            // 6. Special case for gifts
             if (fromId == 0 && type == "sent_gift") fromId = parent?.optInt("id", 0) ?: 0
+            
+            android.util.Log.d("MatchaDebug", "Extracted fromId for type $type: $fromId")
             
             // Extract IDs for navigation
             var ownerId = 0
             var itemId = 0
             
-            if (type == "mention") {
-                itemId = feedback?.optInt("id", 0) ?: 0
-                ownerId = feedback?.optInt("to_id", 0) ?: 0
-                if (ownerId == 0) ownerId = feedback?.optInt("from_id", 0) ?: 0
-            } else if (parent != null) {
-                itemId = parent.optInt("id", 0)
-                ownerId = parent.optInt("owner_id", 0)
-                if (ownerId == 0) ownerId = parent.optInt("to_id", 0)
-                if (ownerId == 0) ownerId = parent.optInt("from_id", 0)
+            fun resolvePost(obj: JSONObject?) {
+                if (obj == null || itemId != 0) return
                 
-                if (type == "like_comment" || type == "reply_comment") {
-                    val postId = parent.optInt("post_id", 0)
-                    if (postId != 0) itemId = postId
+                // 1. Check for nested 'post' object (common in reply_comment)
+                val p = obj.optJSONObject("post")
+                if (p != null) {
+                    itemId = p.optInt("id", 0)
+                    ownerId = p.optInt("to_id", 0).takeIf { it != 0 } 
+                        ?: p.optInt("owner_id", 0).takeIf { it != 0 }
+                        ?: p.optInt("from_id", 0)
+                    if (itemId != 0) return
                 }
-            } else if (feedback != null) {
-                itemId = feedback.optInt("id", 0)
-                ownerId = feedback.optInt("owner_id", 0)
-                if (ownerId == 0) ownerId = feedback.optInt("to_id", 0)
+                
+                // 2. Check for 'post_id' field (common in like_comment)
+                val pid = obj.optInt("post_id", 0)
+                if (pid != 0) {
+                    itemId = pid
+                    ownerId = obj.optInt("to_id", 0).takeIf { it != 0 }
+                        ?: obj.optInt("owner_id", 0).takeIf { it != 0 }
+                        ?: obj.optInt("from_id", 0)
+                    if (itemId != 0) return
+                }
             }
+
+            // Try resolving post from all possible sources
+            resolvePost(parent)
+            resolvePost(feedback)
+            resolvePost(item)
+            
+            // Fallback to direct IDs if no post container was found
+            if (itemId == 0) {
+                if (type == "mention") {
+                    itemId = feedback?.optInt("id", 0) ?: 0
+                    ownerId = feedback?.optInt("to_id", 0) ?: feedback?.optInt("from_id", 0) ?: 0
+                } else if (parent != null) {
+                    itemId = parent.optInt("id", 0)
+                    ownerId = parent.optInt("owner_id", 0).takeIf { it != 0 } ?: parent.optInt("to_id", 0).takeIf { it != 0 } ?: parent.optInt("from_id", 0)
+                } else if (feedback != null) {
+                    itemId = feedback.optInt("id", 0)
+                    ownerId = feedback.optInt("owner_id", 0).takeIf { it != 0 } ?: feedback.optInt("to_id", 0).takeIf { it != 0 } ?: feedback.optInt("from_id", 0)
+                }
+            }
+            
+            android.util.Log.d("MatchaDebug", "Final IDs for type $type: ownerId=$ownerId, itemId=$itemId")
             
             val author = resolveAuthor(fromId, profileMap, groupMap)
             

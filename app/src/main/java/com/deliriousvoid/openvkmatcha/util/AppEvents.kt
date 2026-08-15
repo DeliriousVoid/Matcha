@@ -23,9 +23,11 @@ data class TopBarState(
     val actions: (@Composable RowScope.() -> Unit)? = null,
     val isSearchActive: Boolean = false,
     val isTransparent: Boolean = false,
+    val alpha: Float? = null,
     val customContent: (@Composable () -> Unit)? = null,
     val customTopBar: (@Composable () -> Unit)? = null,
-    val tag: String? = null
+    val tag: String? = null,
+    val route: String? = null
 )
 
 val LocalFullScreenVideoHandler = staticCompositionLocalOf<((Video, Boolean, ExoPlayer?) -> Unit)?> { null }
@@ -48,6 +50,9 @@ object AppEvents {
 
     private val _refreshNotifications = MutableSharedFlow<Unit>()
     val refreshNotifications = _refreshNotifications.asSharedFlow()
+
+    private val _accountChanged = MutableSharedFlow<Unit>()
+    val accountChanged = _accountChanged.asSharedFlow()
 
     private val _snackbarMessage = MutableSharedFlow<String>()
     val snackbarMessage = _snackbarMessage.asSharedFlow()
@@ -181,6 +186,10 @@ object AppEvents {
 
     suspend fun emitRefreshNotifications() {
         _refreshNotifications.emit(Unit)
+    }
+
+    suspend fun emitAccountChanged() {
+        _accountChanged.emit(Unit)
     }
 
     suspend fun showSnackbar(message: String) {

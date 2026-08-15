@@ -48,6 +48,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.deliriousvoid.openvkmatcha.OpenVKMatchaApp
+import com.deliriousvoid.openvkmatcha.ui.navigation.Routes
 import com.deliriousvoid.openvkmatcha.ui.components.ErrorText
 import com.deliriousvoid.openvkmatcha.ui.components.LoadingBox
 import com.deliriousvoid.openvkmatcha.ui.viewmodel.EditGroupTab
@@ -70,6 +71,7 @@ fun EditGroupScreen(
     DisposableEffect(state.currentTab) {
         AppEvents.setTopBarState(TopBarState(
             title = "Редактирование группы",
+            route = Routes.EDIT_GROUP,
             navigationIcon = {
                 IconButton(onClick = {
                     if (state.currentTab == EditGroupTab.ADVANCED) {

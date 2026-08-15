@@ -26,6 +26,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
+import com.deliriousvoid.openvkmatcha.ui.navigation.Routes
 import com.deliriousvoid.openvkmatcha.data.model.PhotoAlbum
 import com.deliriousvoid.openvkmatcha.ui.components.ErrorText
 import com.deliriousvoid.openvkmatcha.ui.components.LoadingBox
@@ -59,6 +60,7 @@ fun PhotoAlbumsScreen(
             TopBarState(
                 tag = "photo_albums",
                 title = "${selectedAlbums.size} выбрано",
+                route = Routes.PHOTO_ALBUMS,
                 navigationIcon = {
                     IconButton(onClick = { selectedAlbums = emptySet() }) {
                         Icon(Icons.Default.Close, "Отмена")
@@ -98,6 +100,7 @@ fun PhotoAlbumsScreen(
             TopBarState(
                 tag = "photo_albums",
                 title = if (name.isNotEmpty()) "Альбомы $name" else "Альбомы",
+                route = Routes.PHOTO_ALBUMS,
                 actions = {
                     if (state.currentUserId == userId) {
                         IconButton(onClick = { showCreateDialog = true }) {

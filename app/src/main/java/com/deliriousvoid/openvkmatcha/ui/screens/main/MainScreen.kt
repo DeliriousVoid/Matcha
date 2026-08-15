@@ -21,6 +21,8 @@ import com.deliriousvoid.openvkmatcha.ui.viewmodel.ExploreViewModel
 import com.deliriousvoid.openvkmatcha.ui.viewmodel.NotesViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
 
+import androidx.compose.runtime.key
+
 @Composable
 fun MainScreen(
     selectedTab: MainTab,
@@ -54,75 +56,78 @@ fun MainScreen(
 ) {
     Box(modifier = Modifier.fillMaxSize()) {
         val safeUserId = currentUserId ?: 0
-        when (selectedTab) {
-            MainTab.Home -> HomeScreen(
-                onOpenProfile = onOpenProfile,
-                onOpenComments = onOpenComments,
-                onOpenPlaylist = onOpenPlaylist,
-                onOpenMusic = onOpenMusic,
-                viewModel = feedViewModel
-            )
-            MainTab.Explore -> {
-                val exploreViewModel: ExploreViewModel = viewModel(factory = ExploreViewModel.factory())
-                
-                ExploreScreen(
-                    viewModel = exploreViewModel,
-                    onOpenFeature = { feature ->
-                        when (feature) {
-                            "music" -> onTabChange(MainTab.Music)
-                            "messages" -> onTabChange(MainTab.Messages)
-                            "friends" -> onOpenFriends(safeUserId, "")
-                            "groups" -> onOpenGroups(safeUserId, "")
-                            "video" -> onOpenVideos(safeUserId)
-                            "docs" -> onOpenDocs(safeUserId)
-                            "events" -> onOpenEvents(safeUserId)
-                            "notes" -> onOpenNotes(safeUserId)
-                            "transfer" -> onOpenTransfer()
-                        }
-                    },
-                    onOpenWebView = onOpenWebView,
-                    onOpenProfile = { onOpenProfile(it) }
+        key(safeUserId) {
+            when (selectedTab) {
+                MainTab.Home -> HomeScreen(
+                    onOpenProfile = onOpenProfile,
+                    onOpenComments = onOpenComments,
+                    onOpenPlaylist = onOpenPlaylist,
+                    onOpenMusic = onOpenMusic,
+                    viewModel = feedViewModel
                 )
-            }
-            MainTab.Messages -> MessagesScreen(onConversationClick = onOpenChat)
-            MainTab.Music -> MusicScreen(
-                onOpenPlaylist = onOpenPlaylist,
-                viewModel = musicViewModel,
-                isOfflineMode = isOfflineMode
-            )
-            MainTab.Profile -> ProfileScreen(
-                onOpenProfile = onOpenProfile,
-                onOpenComments = onOpenComments,
-                onOpenPlaylist = onOpenPlaylist,
-                onOpenFriends = onOpenFriends,
-                onOpenGroups = onOpenGroups,
-                onOpenMusic = onOpenMusic,
-                onOpenGifts = onOpenGifts,
-                onOpenTopics = onOpenTopics,
-                onOpenFollowers = onOpenFollowers,
-                onOpenPhotos = onOpenPhotos,
-                onOpenEditProfile = onOpenEditProfile,
-                onOpenEditGroup = onOpenEditGroup,
-                onOpenCreatePost = onOpenCreatePost
-            )
-            MainTab.Friends -> FriendsScreen(
-                userId = safeUserId,
-                currentUserId = safeUserId,
-                onOpenProfile = onOpenProfile
-            )
-            MainTab.Groups -> GroupsScreen(
-                userId = safeUserId,
-                currentUserId = safeUserId,
-                onOpenProfile = onOpenProfile
-            )
-            MainTab.Notes -> {
-                val notesViewModel: NotesViewModel = viewModel(factory = NotesViewModel.factory(safeUserId))
-                NotesScreen(
-                    viewModel = notesViewModel,
-                    onBack = {}, // Not applicable here
-                    onOpenNote = { note -> onOpenNoteDetails(note.ownerId, note.id) },
-                    onCreateNote = { onCreateNote(safeUserId) }
+                MainTab.Explore -> {
+                    val exploreViewModel: ExploreViewModel = viewModel(factory = ExploreViewModel.factory())
+                    
+                    ExploreScreen(
+                        viewModel = exploreViewModel,
+                        onOpenFeature = { feature ->
+                            when (feature) {
+                                "music" -> onTabChange(MainTab.Music)
+                                "messages" -> onTabChange(MainTab.Messages)
+                                "friends" -> onOpenFriends(safeUserId, "")
+                                "groups" -> onOpenGroups(safeUserId, "")
+                                "video" -> onOpenVideos(safeUserId)
+                                "docs" -> onOpenDocs(safeUserId)
+                                "events" -> onOpenEvents(safeUserId)
+                                "notes" -> onOpenNotes(safeUserId)
+                                "transfer" -> onOpenTransfer()
+                            }
+                        },
+                        onOpenWebView = onOpenWebView,
+                        onOpenProfile = { onOpenProfile(it) }
+                    )
+                }
+                MainTab.Messages -> MessagesScreen(onConversationClick = onOpenChat)
+                MainTab.Music -> MusicScreen(
+                    onOpenPlaylist = onOpenPlaylist,
+                    viewModel = musicViewModel,
+                    isOfflineMode = isOfflineMode
                 )
+                MainTab.Profile -> ProfileScreen(
+                    onOpenProfile = onOpenProfile,
+                    onOpenComments = onOpenComments,
+                    onOpenPlaylist = onOpenPlaylist,
+                    onOpenFriends = onOpenFriends,
+                    onOpenGroups = onOpenGroups,
+                    onOpenMusic = onOpenMusic,
+                    onOpenGifts = onOpenGifts,
+                    onOpenTopics = onOpenTopics,
+                    onOpenFollowers = onOpenFollowers,
+                    onOpenPhotos = onOpenPhotos,
+                    onOpenEditProfile = onOpenEditProfile,
+                    onOpenEditGroup = onOpenEditGroup,
+                    onOpenCreatePost = onOpenCreatePost
+                )
+                MainTab.Friends -> FriendsScreen(
+                    userId = safeUserId,
+                    currentUserId = safeUserId,
+                    onOpenProfile = onOpenProfile
+                )
+                MainTab.Groups -> GroupsScreen(
+                    userId = safeUserId,
+                    currentUserId = safeUserId,
+                    onOpenProfile = onOpenProfile
+                )
+                MainTab.Notes -> {
+                    val notesViewModel: NotesViewModel = viewModel(factory = NotesViewModel.factory(safeUserId))
+                    NotesScreen(
+                        viewModel = notesViewModel,
+                        onBack = {}, // Not applicable here
+                        onOpenNote = { note -> onOpenNoteDetails(note.ownerId, note.id) },
+                        onCreateNote = { onCreateNote(safeUserId) },
+                        route = com.deliriousvoid.openvkmatcha.ui.navigation.Routes.MAIN
+                    )
+                }
             }
         }
     }

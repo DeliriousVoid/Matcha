@@ -111,11 +111,25 @@ fun PlaylistDetailsScreen(
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var showMusicPicker by remember { mutableStateOf(false) }
     var showMenu by remember { mutableStateOf(false) }
+
+    val listState = rememberLazyListState()
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val toolbarAlpha by remember {
+        derivedStateOf {
+            if (listState.firstVisibleItemIndex > 0) 1f
+            else {
+                val threshold = with(density) { 200.dp.toPx() }
+                (listState.firstVisibleItemScrollOffset.toFloat() / threshold).coerceIn(0f, 1f)
+            }
+        }
+    }
     
-    DisposableEffect(state.playlist, state.isBookmarked, state.isOwner, showMenu) {
+    LaunchedEffect(state.playlist, state.isBookmarked, state.isOwner, showMenu, toolbarAlpha) {
         AppEvents.setTopBarState(TopBarState(
             title = state.playlist?.title ?: title,
             isTransparent = true,
+            alpha = toolbarAlpha,
+            route = com.deliriousvoid.openvkmatcha.ui.navigation.Routes.PLAYLIST_DETAILS,
             actions = {
                 Box {
                     IconButton(onClick = { showMenu = true }) {
@@ -164,6 +178,9 @@ fun PlaylistDetailsScreen(
                 }
             }
         ))
+    }
+
+    DisposableEffect(Unit) {
         onDispose {
             AppEvents.setTopBarState(null)
         }
@@ -184,7 +201,6 @@ fun PlaylistDetailsScreen(
                 onRetry = { viewModel.loadTracks(isRefresh = true) }
             )
             else -> {
-                val listState = rememberLazyListState()
                 val shouldLoadMore = remember {
                     derivedStateOf {
                         val layoutInfo = listState.layoutInfo

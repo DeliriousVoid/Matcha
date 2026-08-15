@@ -22,6 +22,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.deliriousvoid.openvkmatcha.data.model.UserProfile
+import com.deliriousvoid.openvkmatcha.ui.navigation.Routes
 import com.deliriousvoid.openvkmatcha.ui.components.UserListItem
 import com.deliriousvoid.openvkmatcha.ui.components.FriendshipStatusIcon
 import com.deliriousvoid.openvkmatcha.ui.viewmodel.TransferViewModel
@@ -43,6 +44,7 @@ fun TransferScreen(
         AppEvents.setTopBarState(TopBarState(
             tag = "transfer",
             title = if (state.selectedUser == null) "Выберите получателя" else "Перевод голосов",
+            route = Routes.TRANSFER,
             navigationIcon = {
                 IconButton(onClick = {
                     if (state.selectedUser != null) viewModel.selectUser(null)

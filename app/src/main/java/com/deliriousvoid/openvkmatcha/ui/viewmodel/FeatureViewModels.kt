@@ -77,6 +77,13 @@ class FeedViewModel(
                 loadFeed(refresh = true, shouldScroll = true)
             }
         }
+        viewModelScope.launch {
+            AppEvents.accountChanged.collect {
+                _uiState.update { it.copy(posts = emptyList(), isLoading = true, nextFrom = null) }
+                loadCurrentUserId()
+                loadFeed(refresh = true)
+            }
+        }
     }
 
     fun setFeedType(type: FeedType) {
@@ -310,6 +317,12 @@ class MessagesViewModel(
 
     init {
         loadConversations()
+        viewModelScope.launch {
+            AppEvents.accountChanged.collect {
+                _uiState.update { it.copy(conversations = emptyList(), isLoading = true) }
+                loadConversations()
+            }
+        }
     }
 
     fun loadConversations() {
@@ -463,6 +476,13 @@ class MusicViewModel(
         viewModelScope.launch {
             AppEvents.searchQuery.collect { query ->
                 _uiState.update { it.copy(searchQuery = query) }
+                loadMusic(isRefresh = true, isManual = false)
+            }
+        }
+        viewModelScope.launch {
+            AppEvents.accountChanged.collect {
+                userId = null
+                _uiState.update { MusicUiState(isLoading = true) }
                 loadMusic(isRefresh = true, isManual = false)
             }
         }
@@ -816,6 +836,13 @@ class ProfileViewModel(
                 _scrollToTop.emit(Unit)
             }
         }
+        viewModelScope.launch {
+            AppEvents.accountChanged.collect {
+                _uiState.update { ProfileUiState(isLoading = true) }
+                loadCurrentUserId()
+                loadProfile(refresh = true)
+            }
+        }
     }
 
     private fun loadCurrentUserId() {
@@ -1139,6 +1166,12 @@ class PlaylistDetailsViewModel(
 
     init {
         loadTracks()
+        viewModelScope.launch {
+            AppEvents.accountChanged.collect {
+                _uiState.update { it.copy(tracks = emptyList(), isLoading = true, playlist = null) }
+                loadTracks(isRefresh = true)
+            }
+        }
     }
 
     fun loadTracks(isRefresh: Boolean = false) {
@@ -1376,6 +1409,13 @@ class NotificationsViewModel(
                     delay(1000) // Small delay to allow the server to index the notification
                     loadNotifications(refresh = true)
                 }
+            }
+        }
+        viewModelScope.launch {
+            AppEvents.accountChanged.collect {
+                _uiState.update { NotificationsUiState(isLoading = true) }
+                loadNotifications(refresh = true)
+                refreshUnreadCount()
             }
         }
         startPolling()
@@ -2385,6 +2425,13 @@ class FriendsViewModel(
                 updateSearchQuery(query)
             }
         }
+        viewModelScope.launch {
+            AppEvents.accountChanged.collect {
+                _uiState.update { FriendsUiState(isLoading = true, isMe = userId == currentUserId) }
+                loadFriends()
+                if (userId == currentUserId) loadRequests() else loadFollowers()
+            }
+        }
     }
 
     fun loadFriends() {
@@ -2635,6 +2682,13 @@ class GroupsViewModel(
                 updateSearchQuery(query)
             }
         }
+        viewModelScope.launch {
+            AppEvents.accountChanged.collect {
+                _uiState.update { GroupsUiState(isLoading = true, isMe = userId == currentUserId) }
+                loadGroups()
+                if (userId == currentUserId) loadManagedGroups()
+            }
+        }
     }
 
     fun loadGroups() {
@@ -2773,6 +2827,13 @@ class GiftsViewModel(
     init {
         loadGifts()
         loadCurrentUserId()
+        viewModelScope.launch {
+            AppEvents.accountChanged.collect {
+                _uiState.update { it.copy(gifts = emptyList(), isLoading = true) }
+                loadGifts()
+                loadCurrentUserId()
+            }
+        }
     }
 
     private fun loadCurrentUserId() {
@@ -2978,6 +3039,12 @@ class FollowersViewModel(
 
     init {
         loadFollowers(isRefresh = true)
+        viewModelScope.launch {
+            AppEvents.accountChanged.collect {
+                _uiState.update { FollowersUiState(isLoading = true) }
+                loadFollowers(isRefresh = true)
+            }
+        }
     }
 
     fun loadFollowers(isRefresh: Boolean = false) {
@@ -3058,6 +3125,13 @@ class PhotosViewModel(
     init {
         loadCurrentUserId()
         loadPhotos()
+        viewModelScope.launch {
+            AppEvents.accountChanged.collect {
+                _uiState.update { PhotosUiState(isLoading = true) }
+                loadCurrentUserId()
+                loadPhotos(isRefresh = true)
+            }
+        }
     }
 
     private fun loadCurrentUserId() {
@@ -3245,6 +3319,13 @@ class PhotoAlbumsViewModel(
     init {
         loadCurrentUserId()
         loadAlbums()
+        viewModelScope.launch {
+            AppEvents.accountChanged.collect {
+                _uiState.update { PhotoAlbumsUiState(isLoading = true) }
+                loadCurrentUserId()
+                loadAlbums()
+            }
+        }
     }
 
     private fun loadCurrentUserId() {

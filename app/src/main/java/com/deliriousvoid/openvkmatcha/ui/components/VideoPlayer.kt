@@ -234,6 +234,7 @@ fun VideoPlayer(
     }
     
     val scope = rememberCoroutineScope()
+    val lifecycleState by lifecycleOwner.lifecycle.currentStateFlow.collectAsState()
 
     val isGlobalFullScreen by AppEvents.isFullScreenOpened.collectAsState()
     val isVideoFloating by AppEvents.isVideoFloating.collectAsState()
@@ -304,13 +305,17 @@ fun VideoPlayer(
                     factory = { ctx ->
                         val view = LayoutInflater.from(ctx).inflate(R.layout.matcha_player_view, null) as PlayerView
                         view.apply {
-                            player = if (isInPipMode || isVideoFloating || (isGlobalFullScreen && !isFull)) null else exoPlayer
+                            val shouldShowPlayer = lifecycleState.isAtLeast(Lifecycle.State.STARTED) && 
+                                !isInPipMode && !isVideoFloating && !(isGlobalFullScreen && !isFull)
+                            player = if (shouldShowPlayer) exoPlayer else null
                             setBackgroundColor(android.graphics.Color.BLACK)
                             setEnableComposeSurfaceSyncWorkaround(true)
                         }
                     },
                     update = {
-                        it.player = if (isInPipMode || isVideoFloating || (isGlobalFullScreen && !isFull)) null else exoPlayer
+                        val shouldShowPlayer = lifecycleState.isAtLeast(Lifecycle.State.STARTED) && 
+                            !isInPipMode && !isVideoFloating && !(isGlobalFullScreen && !isFull)
+                        it.player = if (shouldShowPlayer) exoPlayer else null
                     },
                     onRelease = {
                         it.player = null
@@ -390,7 +395,10 @@ fun VideoPlayer(
                     },
                     onSetSpeed = { playbackSpeed = it },
                     isExternal = isExternal && resolvedUrl == null,
-                    onOpenInYouTube = {
+                    canDownload = !video.videoUrl.isNullOrBlank(),
+                    isYouTube = com.deliriousvoid.openvkmatcha.util.VideoResolver.isYouTube(video.playerUrl),
+                    hasPlayerUrl = video.playerUrl != null,
+                    onOpenExternal = {
                         video.playerUrl?.let { url ->
                             val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
                             context.startActivity(intent)
@@ -571,7 +579,10 @@ private fun VideoControls(
     onPip: () -> Unit,
     onSetSpeed: (Float) -> Unit,
     isExternal: Boolean = false,
-    onOpenInYouTube: () -> Unit = {}
+    canDownload: Boolean = true,
+    isYouTube: Boolean = false,
+    hasPlayerUrl: Boolean = false,
+    onOpenExternal: () -> Unit = {}
 ) {
     var showMenu by remember { mutableStateOf(false) }
 
@@ -696,16 +707,21 @@ private fun VideoControls(
                         expanded = showMenu,
                         onDismissRequest = { showMenu = false }
                     ) {
-                        DropdownMenuItem(
-                            text = { Text("Смотреть на YouTube") },
-                            onClick = {
-                                showMenu = false
-                                onOpenInYouTube()
-                            },
-                            leadingIcon = { Icon(Icons.AutoMirrored.Filled.OpenInNew, null) }
-                        )
-                        HorizontalDivider()
-                        if (!isExternal) {
+                        var needsDivider = false
+                        if (hasPlayerUrl) {
+                            DropdownMenuItem(
+                                text = { Text(if (isYouTube) "Смотреть на YouTube" else "Открыть в браузере") },
+                                onClick = {
+                                    showMenu = false
+                                    onOpenExternal()
+                                },
+                                leadingIcon = { Icon(Icons.AutoMirrored.Filled.OpenInNew, null) }
+                            )
+                            needsDivider = true
+                        }
+                        
+                        if (canDownload) {
+                            if (needsDivider) HorizontalDivider()
                             DropdownMenuItem(
                                 text = { Text("Скачать") },
                                 onClick = {
@@ -714,9 +730,11 @@ private fun VideoControls(
                                 },
                                 leadingIcon = { Icon(Icons.Default.Download, null) }
                             )
+                            needsDivider = true
                         }
+
                         if (isFullscreen && !isExternal) {
-                            HorizontalDivider()
+                            if (needsDivider) HorizontalDivider()
                             DropdownMenuItem(
                                 text = { Text("Скорость воспроизведения") },
                                 onClick = {

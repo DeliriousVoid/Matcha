@@ -292,7 +292,13 @@ class MainActivity : ComponentActivity() {
                             val isQr = (currentRoute?.startsWith("qr_display/") == true) || (currentRoute == Routes.QR_SCANNER)
                             val isTwoFactor = currentRoute?.startsWith("two_factor/") == true
 
-                            val topBarState by AppEvents.topBarState.collectAsState()
+                            val rawTopBarState by AppEvents.topBarState.collectAsState()
+                            val topBarState = remember(rawTopBarState, currentRoute) {
+                                val state = rawTopBarState
+                                if (state == null) null
+                                else if (state.route == null || currentRoute == state.route) state
+                                else null
+                            }
                             val showOuterTopBar = (currentRoute != Routes.SPLASH) && (currentRoute != Routes.LOGIN) && !isTwoFactor && (currentRoute != Routes.GRAFFITI) && !isQr && !isCreatePost
 
                             LaunchedEffect(deepLinkRoute, currentRoute) {
@@ -702,7 +708,11 @@ class MainActivity : ComponentActivity() {
                                                     }
                                                 },
                                                 colors = TopAppBarDefaults.topAppBarColors(
-                                                    containerColor = if (topBarState?.isTransparent == true) Color.Transparent else MaterialTheme.colorScheme.surface
+                                                    containerColor = if (topBarState?.isTransparent == true) {
+                                                        MaterialTheme.colorScheme.surface.copy(alpha = topBarState?.alpha ?: 0f)
+                                                    } else {
+                                                        MaterialTheme.colorScheme.surface
+                                                    }
                                                 )
                                             )
                                         }

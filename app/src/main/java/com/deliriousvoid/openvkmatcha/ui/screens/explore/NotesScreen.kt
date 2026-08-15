@@ -32,12 +32,13 @@ fun NotesScreen(
     viewModel: NotesViewModel,
     onBack: () -> Unit,
     onOpenNote: (Note) -> Unit,
-    onCreateNote: () -> Unit
+    onCreateNote: () -> Unit,
+    route: String? = null
 ) {
     val state by viewModel.uiState.collectAsState()
 
     DisposableEffect(Unit) {
-        AppEvents.setTopBarState(TopBarState(tag = "notes", title = "Заметки"))
+        AppEvents.setTopBarState(TopBarState(tag = "notes", title = "Заметки", route = route))
         onDispose {
             if (AppEvents.topBarState.value?.tag == "notes") {
                 AppEvents.setTopBarState(null)

@@ -23,4 +23,9 @@ object StringUtils {
             else -> "голосов"
         }
     }
+
+    fun stripMentions(text: String?): String? {
+        if (text == null) return null
+        return text.replace(Regex("\\[(?:id|club|user)\\d+\\|([^]]+)\\]")) { it.groupValues[1] }
+    }
 }

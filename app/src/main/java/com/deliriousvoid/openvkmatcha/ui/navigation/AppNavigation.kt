@@ -300,7 +300,8 @@ fun AppNavigation(
                 },
                 onCreateNote = {
                     navController.navigate(Routes.createEditNoteRoute())
-                }
+                },
+                route = Routes.NOTES
             )
         }
 

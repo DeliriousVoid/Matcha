@@ -40,6 +40,7 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
+import com.deliriousvoid.openvkmatcha.ui.navigation.Routes
 import com.deliriousvoid.openvkmatcha.data.model.Photo
 import com.deliriousvoid.openvkmatcha.ui.components.EmptyState
 import com.deliriousvoid.openvkmatcha.ui.components.ErrorText
@@ -77,6 +78,7 @@ fun PhotosScreen(
             TopBarState(
                 tag = "photos",
                 title = "${selectedPhotos.size} выбрано",
+                route = Routes.PHOTOS,
                 navigationIcon = {
                     IconButton(onClick = { selectedPhotos = emptySet() }) {
                         Icon(Icons.Default.Close, "Отмена")
@@ -99,6 +101,7 @@ fun PhotosScreen(
             TopBarState(
                 tag = "photos",
                 title = title,
+                route = Routes.PHOTOS,
                 actions = {
                     IconButton(onClick = { viewModel.toggleSort() }) {
                         Icon(
