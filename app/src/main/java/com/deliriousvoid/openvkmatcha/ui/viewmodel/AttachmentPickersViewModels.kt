@@ -44,7 +44,7 @@ class VideoPickerViewModel(
         viewModelScope.launch {
             val currentUserId = userId ?: profileRepository.loadCurrentUser().getOrNull()?.id.also { userId = it }
             if (currentUserId == null) {
-                _uiState.update { it.copy(isLoading = false, isLoadingMore = false, error = "Ошибка профиля") }
+                _uiState.update { it.copy(isLoading = false, isLoadingMore = false, error = OpenVKMatchaApp.instance.languageManager.getStringOrDefault(com.deliriousvoid.openvkmatcha.R.string.error_load_profile)) }
                 return@launch
             }
 
@@ -121,7 +121,7 @@ class DocsPickerViewModel(
         viewModelScope.launch {
             val currentUserId = userId ?: profileRepository.loadCurrentUser().getOrNull()?.id.also { userId = it }
             if (currentUserId == null) {
-                _uiState.update { it.copy(isLoading = false, isLoadingMore = false, error = "Ошибка профиля") }
+                _uiState.update { it.copy(isLoading = false, isLoadingMore = false, error = OpenVKMatchaApp.instance.languageManager.getStringOrDefault(com.deliriousvoid.openvkmatcha.R.string.error_load_profile)) }
                 return@launch
             }
 

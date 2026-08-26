@@ -17,6 +17,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.deliriousvoid.openvkmatcha.R
+import com.deliriousvoid.openvkmatcha.ui.util.matchaStringResource
 import com.deliriousvoid.openvkmatcha.data.model.Note
 import com.deliriousvoid.openvkmatcha.ui.viewmodel.NotesViewModel
 import java.text.SimpleDateFormat
@@ -37,8 +39,9 @@ fun NotesScreen(
 ) {
     val state by viewModel.uiState.collectAsState()
 
+    val title = matchaStringResource(R.string.title_notes)
     DisposableEffect(Unit) {
-        AppEvents.setTopBarState(TopBarState(tag = "notes", title = "Заметки", route = route))
+        AppEvents.setTopBarState(TopBarState(tag = "notes", title = title, route = route))
         onDispose {
             if (AppEvents.topBarState.value?.tag == "notes") {
                 AppEvents.setTopBarState(null)
@@ -52,7 +55,7 @@ fun NotesScreen(
         } else if (state.error != null) {
             Text(state.error!!, modifier = Modifier.align(Alignment.Center), color = MaterialTheme.colorScheme.error)
         } else if (state.notes.isEmpty()) {
-             Text("Заметок пока нет", modifier = Modifier.align(Alignment.Center))
+             Text(matchaStringResource(R.string.no_notes), modifier = Modifier.align(Alignment.Center))
         } else {
             LazyColumn(modifier = Modifier.fillMaxSize()) {
                 items(state.notes) { note ->
@@ -69,7 +72,7 @@ fun NotesScreen(
             containerColor = MaterialTheme.colorScheme.primaryContainer,
             contentColor = MaterialTheme.colorScheme.onPrimaryContainer
         ) {
-            Icon(Icons.Default.Add, contentDescription = "Создать заметку")
+            Icon(Icons.Default.Add, contentDescription = matchaStringResource(R.string.create_note))
         }
     }
 }
@@ -81,7 +84,7 @@ fun NoteItem(note: Note, onClick: (Note) -> Unit) {
             Text(note.title, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Bold)
         },
         supportingContent = {
-            Text("${formatDate(note.date)} • ${note.commentsCount} коммент.")
+            Text(matchaStringResource(R.string.note_item_format, formatDate(note.date), note.commentsCount))
         },
         leadingContent = {
             Icon(

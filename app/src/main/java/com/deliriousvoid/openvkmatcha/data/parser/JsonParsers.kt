@@ -1,5 +1,7 @@
 package com.deliriousvoid.openvkmatcha.data.parser
 
+import com.deliriousvoid.openvkmatcha.OpenVKMatchaApp
+import com.deliriousvoid.openvkmatcha.R
 import com.deliriousvoid.openvkmatcha.data.model.*
 import org.json.JSONArray
 import org.json.JSONException
@@ -64,6 +66,9 @@ object JsonParsers {
             else -> defaultValue
         }
     }
+
+    private fun getString(id: Int) = OpenVKMatchaApp.instance.languageManager.getStringOrDefault(id)
+    private fun getString(id: Int, vararg args: Any) = OpenVKMatchaApp.instance.languageManager.getStringOrDefault(id, *args)
 
     fun parseUser(json: JSONObject): UserProfile {
         val counters = json.optJSONObject("counters")
@@ -213,7 +218,7 @@ object JsonParsers {
         val nextFrom = responseObj.optString("next_from").takeIf { it.isNotBlank() }
         
         return com.deliriousvoid.openvkmatcha.data.model.NewsfeedResponse(
-            posts = parsePosts(items, profiles, groups),
+            posts = parsePosts(items, profiles, groups, 0),
             nextFrom = nextFrom
         )
     }
@@ -223,10 +228,10 @@ object JsonParsers {
         val items = responseObj.optJSONArray("items") ?: JSONArray()
         val profiles = responseObj.optJSONArray("profiles") ?: JSONArray()
         val groups = responseObj.optJSONArray("groups") ?: JSONArray()
-        return parsePosts(items, profiles, groups)
+        return parsePosts(items, profiles, groups, 0)
     }
 
-    private fun parsePosts(items: JSONArray, profiles: JSONArray, groups: JSONArray): List<Post> {
+    private fun parsePosts(items: JSONArray, profiles: JSONArray, groups: JSONArray, depth: Int): List<Post> {
         val profileMap = parseProfileMap(profiles)
         val groupMap = parseGroupMap(groups)
         val posts = mutableListOf<Post>()
@@ -252,8 +257,8 @@ object JsonParsers {
 
             val geo = postData.optJSONObject("geo")?.let { parseGeo(it) }
 
-            val copyHistory = if (copyHistoryArray != null && copyHistoryArray.length() > 0) {
-                parsePosts(copyHistoryArray, profiles, groups)
+            val copyHistory = if (copyHistoryArray != null && copyHistoryArray.length() > 0 && depth < 5) {
+                parsePosts(copyHistoryArray, profiles, groups, depth + 1)
             } else null
 
             val postSource = postData.optJSONObject("post_source")
@@ -321,7 +326,7 @@ object JsonParsers {
             val peerId = peer.optInt("id")
             val peerType = peer.optString("type", "user")
             val author = if (peerType == "chat") {
-                AuthorInfo(peerId, conversation.optJSONObject("chat_settings")?.optStringClean("title") ?: "Чат", "", false)
+                AuthorInfo(peerId, conversation.optJSONObject("chat_settings")?.optStringClean("title") ?: getString(R.string.title_chat), "", false)
             } else {
                 resolveAuthor(peerId, profileMap, groupMap)
             }
@@ -369,8 +374,8 @@ object JsonParsers {
         return AudioTrack(
             id = audio.optInt("id"),
             ownerId = audio.optInt("owner_id"),
-            artist = audio.optStringClean("artist") ?: "Неизвестный исполнитель",
-            title = audio.optStringClean("title") ?: "Без названия",
+            artist = audio.optStringClean("artist") ?: getString(R.string.audio_unknown_artist),
+            title = audio.optStringClean("title") ?: getString(R.string.audio_unknown_title),
             duration = audio.optInt("duration", 0),
             url = url,
             remoteUrl = url,
@@ -378,7 +383,8 @@ object JsonParsers {
             isAdded = audio.optBool("is_added", false) ||
                       audio.optBool("added", false) ||
                       audio.optBool("user_added", false),
-            accessKey = audio.optString("access_key").takeIf { it.isNotBlank() }
+            accessKey = audio.optString("access_key").takeIf { it.isNotBlank() },
+            isReady = audio.optBool("ready", true)
         )
     }
 
@@ -417,7 +423,7 @@ object JsonParsers {
             Playlist(
                 id = item.optInt("id"),
                 ownerId = item.optInt("owner_id"),
-                title = item.optStringClean("title") ?: "Плейлист",
+                title = item.optStringClean("title") ?: getString(R.string.title_playlist),
                 description = item.optStringClean("description") ?: "",
                 trackCount = count,
                 photoUrl = photoUrl
@@ -608,18 +614,18 @@ object JsonParsers {
             val author = resolveAuthor(fromId, profileMap, groupMap)
             
             val actionText = when (type) {
-                "like_post" -> "понравился ваш пост"
-                "like_comment" -> "оценил ваш комментарий"
-                "reply_comment" -> "ответил на ваш комментарий"
-                "reply_post" -> "ответил на ваш пост"
-                "mention" -> "упомянул вас"
-                "comment_post" -> "прокомментировал ваш пост"
-                "comment_photo" -> "оставил(а) комментарий под вашей фотографией"
-                "copy_post" -> "поделился(-ась) вашим постом"
-                "follow" -> "подписался на вас"
-                "sent_gift" -> "отправил вам подарок"
-                "wall" -> "написал(а) на вашей стене пост"
-                else -> "выполнил действие ($type)"
+                "like_post" -> getString(R.string.notif_like_post)
+                "like_comment" -> getString(R.string.notif_like_comment)
+                "reply_comment" -> getString(R.string.notif_reply_comment)
+                "reply_post" -> getString(R.string.notif_reply_post)
+                "mention" -> getString(R.string.notif_mention)
+                "comment_post" -> getString(R.string.notif_comment_post)
+                "comment_photo" -> getString(R.string.notif_comment_photo)
+                "copy_post" -> getString(R.string.notif_copy_post)
+                "follow" -> getString(R.string.notif_follow)
+                "sent_gift" -> getString(R.string.notif_sent_gift)
+                "wall" -> getString(R.string.notif_wall_post)
+                else -> getString(R.string.notif_unknown_action, type)
             }
 
             fun extractCleanText(obj: JSONObject?): String? {
@@ -645,12 +651,12 @@ object JsonParsers {
                         seen.add(attType)
                         
                         val label = when (attType) {
-                            "photo" -> "[изображение]"
-                            "video" -> "[видео]"
-                            "audio" -> "[аудио]"
-                            "doc" -> "[файл]"
-                            "link" -> "[ссылка]"
-                            "wall" -> "[Запись]"
+                            "photo" -> getString(R.string.attach_photo_marker)
+                            "video" -> getString(R.string.attach_video_marker)
+                            "audio" -> getString(R.string.attach_audio_marker)
+                            "doc" -> getString(R.string.attach_doc_marker)
+                            "link" -> getString(R.string.attach_link_marker)
+                            "wall" -> getString(R.string.attach_wall_marker)
                             else -> "[$attType]"
                         }
                         if (sb.isNotEmpty()) sb.append(" ")
@@ -696,7 +702,7 @@ object JsonParsers {
                     null to boxText
                 }
                 "sent_gift" -> {
-                    val giftText = if (author.name.isNotBlank()) "Подарок от ${author.name}" else "Подарок"
+                    val giftText = if (author.name.isNotBlank()) getString(R.string.notif_gift_from, author.name) else getString(R.string.title_gift)
                     giftText to null
                 }
                 else -> {
@@ -1275,7 +1281,7 @@ object JsonParsers {
 
         // Final name resolution: geo.name -> place.title -> geo.title -> default "Место"
         val hasCoords = lat != 0.0 || lon != 0.0
-        val resolvedName = name ?: parsedPlace?.title?.takeIf { it.isNotBlank() } ?: if (hasCoords) "Место" else null
+        val resolvedName = name ?: parsedPlace?.title?.takeIf { it.isNotBlank() } ?: if (hasCoords) getString(R.string.geo_place) else null
         
         var finalPlace = if (parsedPlace != null) {
             if (resolvedName != null) parsedPlace.copy(title = resolvedName) else parsedPlace
@@ -1340,7 +1346,7 @@ object JsonParsers {
         return Document(
             id = json.optInt("id"),
             ownerId = json.optInt("owner_id"),
-            title = json.optStringClean("title") ?: "Файл",
+            title = json.optStringClean("title") ?: getString(R.string.title_file),
             size = json.optInt("size"),
             ext = json.optString("ext", ""),
             url = docUrl,

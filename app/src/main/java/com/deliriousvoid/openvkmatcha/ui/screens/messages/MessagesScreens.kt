@@ -37,6 +37,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.deliriousvoid.openvkmatcha.R
+import com.deliriousvoid.openvkmatcha.ui.util.matchaStringResource
 import com.deliriousvoid.openvkmatcha.ui.components.ConversationItem
 import com.deliriousvoid.openvkmatcha.ui.components.EmptyState
 import com.deliriousvoid.openvkmatcha.ui.components.ErrorText
@@ -61,7 +63,7 @@ fun MessagesScreen(
             onRetry = { viewModel.loadConversations() }
         )
         state.conversations.isEmpty() -> EmptyState(
-            message = "У вас пока нет сообщений",
+            message = matchaStringResource(R.string.messages_empty),
             modifier = modifier.fillMaxSize()
         )
         else -> LazyColumn(modifier = modifier.fillMaxSize()) {
@@ -132,7 +134,7 @@ fun ChatScreen(
                 OutlinedTextField(
                     value = state.inputText,
                     onValueChange = viewModel::updateInput,
-                    placeholder = { Text("Сообщение") },
+                    placeholder = { Text(matchaStringResource(R.string.chat_input_placeholder)) },
                     modifier = Modifier.weight(1f),
                     keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
                     maxLines = 4,
@@ -141,7 +143,7 @@ fun ChatScreen(
                     onClick = viewModel::sendMessage,
                     enabled = state.inputText.isNotBlank() && !state.isSending,
                 ) {
-                    Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Отправить")
+                    Icon(Icons.AutoMirrored.Filled.Send, contentDescription = matchaStringResource(R.string.chat_send))
                 }
             }
         }

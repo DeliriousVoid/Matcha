@@ -22,6 +22,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
+import com.deliriousvoid.openvkmatcha.R
+import com.deliriousvoid.openvkmatcha.ui.util.matchaStringResource
 import com.deliriousvoid.openvkmatcha.data.model.Notification
 import com.deliriousvoid.openvkmatcha.ui.components.LoadingBox
 import com.deliriousvoid.openvkmatcha.ui.components.VerifiedBadge
@@ -74,12 +76,12 @@ fun NotificationsScreen(
             Tab(
                 selected = !state.isArchive,
                 onClick = { viewModel.setArchive(false) },
-                text = { Text("Новые") }
+                text = { Text(matchaStringResource(R.string.notifications_new)) }
             )
             Tab(
                 selected = state.isArchive,
                 onClick = { viewModel.setArchive(true) },
-                text = { Text("Архив") }
+                text = { Text(matchaStringResource(R.string.notifications_archive)) }
             )
         }
 
@@ -93,7 +95,7 @@ fun NotificationsScreen(
             } else if (state.notifications.isEmpty()) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text(
-                        text = if (state.isArchive) "Архив пуст" else "Уведомлений пока нет",
+                        text = if (state.isArchive) matchaStringResource(R.string.archive_empty) else matchaStringResource(R.string.no_notifications),
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
@@ -175,9 +177,9 @@ fun NotificationItem(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                if (notification.authorVerified) {
+                if (notification.authorVerified || com.deliriousvoid.openvkmatcha.Constants.CUSTOM_VERIFIED_IDS.contains(notification.authorId)) {
                     Spacer(modifier = Modifier.width(4.dp))
-                    VerifiedBadge(userId = notification.authorId, isVerified = true)
+                    VerifiedBadge(userId = notification.authorId, isVerified = notification.authorVerified)
                 }
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(

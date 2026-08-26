@@ -1,5 +1,7 @@
 package com.deliriousvoid.openvkmatcha.ui.screens.settings
 
+import com.deliriousvoid.openvkmatcha.R
+import com.deliriousvoid.openvkmatcha.ui.util.matchaStringResource
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -36,7 +38,7 @@ fun AccountManagementScreen(
     Scaffold(
         floatingActionButton = {
             FloatingActionButton(onClick = onAddAccount) {
-                Icon(Icons.Default.Add, contentDescription = "Добавить аккаунт")
+                Icon(Icons.Default.Add, contentDescription = matchaStringResource(R.string.add_account))
             }
         }
     ) { padding ->
@@ -71,19 +73,19 @@ fun AccountManagementScreen(
     if (accountToRemove != null) {
         AlertDialog(
             onDismissRequest = { accountToRemove = null },
-            title = { Text("Удалить аккаунт") },
-            text = { Text("Вы уверены, что хотите выйти из этого аккаунта?") },
+            title = { Text(matchaStringResource(R.string.delete_account_q)) },
+            text = { Text(matchaStringResource(R.string.logout_confirm)) },
             confirmButton = {
                 TextButton(onClick = {
                     accountToRemove?.let { viewModel.removeAccount(it) }
                     accountToRemove = null
                 }) {
-                    Text("Удалить", color = MaterialTheme.colorScheme.error)
+                    Text(matchaStringResource(R.string.action_delete), color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { accountToRemove = null }) {
-                    Text("Отмена")
+                    Text(matchaStringResource(R.string.cancel))
                 }
             }
         )
@@ -147,7 +149,7 @@ fun AccountItem(
                 IconButton(onClick = onRemove) {
                     Icon(
                         imageVector = Icons.Default.Delete,
-                        contentDescription = "Удалить",
+                        contentDescription = matchaStringResource(R.string.action_delete),
                         tint = MaterialTheme.colorScheme.error
                     )
                 }

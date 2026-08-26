@@ -21,6 +21,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import com.deliriousvoid.openvkmatcha.R
+import com.deliriousvoid.openvkmatcha.ui.util.matchaStringResource
 import com.deliriousvoid.openvkmatcha.data.model.UserProfile
 import com.deliriousvoid.openvkmatcha.ui.navigation.Routes
 import com.deliriousvoid.openvkmatcha.ui.components.UserListItem
@@ -40,17 +42,21 @@ fun TransferScreen(
 ) {
     val state by viewModel.uiState.collectAsState()
 
+    val selectRecipientLabel = matchaStringResource(R.string.select_recipient)
+    val transferVotesLabel = matchaStringResource(R.string.transfer_votes)
+    val backLabel = matchaStringResource(R.string.desc_back)
+
     DisposableEffect(state.selectedUser) {
         AppEvents.setTopBarState(TopBarState(
             tag = "transfer",
-            title = if (state.selectedUser == null) "Выберите получателя" else "Перевод голосов",
+            title = if (state.selectedUser == null) selectRecipientLabel else transferVotesLabel,
             route = Routes.TRANSFER,
             navigationIcon = {
                 IconButton(onClick = {
                     if (state.selectedUser != null) viewModel.selectUser(null)
                     else onBack()
                 }) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Назад")
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = backLabel)
                 }
             }
         ))
@@ -89,7 +95,7 @@ private fun UserSelectionContent(viewModel: TransferViewModel, state: com.deliri
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(16.dp),
-            placeholder = { Text("Имя, фамилия или ID") },
+            placeholder = { Text(matchaStringResource(R.string.name_surname_id)) },
             leadingIcon = { Icon(Icons.Default.Search, null) },
             trailingIcon = if (state.searchQuery.isNotEmpty()) {
                 {
@@ -145,14 +151,14 @@ private fun TransferDetailsContent(viewModel: TransferViewModel, state: com.deli
         )
         Spacer(modifier = Modifier.height(16.dp))
         Text(text = "${user.firstName} ${user.lastName}", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-        Text(text = user.screenName.ifBlank { "ID: ${user.id}" }, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(text = user.screenName.ifBlank { matchaStringResource(R.string.id_label, user.id) }, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         
         Spacer(modifier = Modifier.height(32.dp))
         
         OutlinedTextField(
             value = amount,
             onValueChange = { if (it.all { char -> char.isDigit() }) amount = it },
-            label = { Text("Количество голосов") },
+            label = { Text(matchaStringResource(R.string.votes_count)) },
             modifier = Modifier.fillMaxWidth(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             singleLine = true
@@ -163,7 +169,7 @@ private fun TransferDetailsContent(viewModel: TransferViewModel, state: com.deli
         OutlinedTextField(
             value = message,
             onValueChange = { message = it },
-            label = { Text("Сообщение (необязательно)") },
+            label = { Text(matchaStringResource(R.string.message_optional)) },
             modifier = Modifier.fillMaxWidth(),
             maxLines = 3
         )
@@ -188,7 +194,7 @@ private fun TransferDetailsContent(viewModel: TransferViewModel, state: com.deli
             if (state.isSending) {
                 CircularProgressIndicator(modifier = Modifier.size(24.dp), color = MaterialTheme.colorScheme.onPrimary, strokeWidth = 2.dp)
             } else {
-                Text("Перевести")
+                Text(matchaStringResource(R.string.action_transfer))
             }
         }
     }

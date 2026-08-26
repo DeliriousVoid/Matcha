@@ -1,5 +1,7 @@
 package com.deliriousvoid.openvkmatcha.ui.screens.settings
 
+import com.deliriousvoid.openvkmatcha.R
+import com.deliriousvoid.openvkmatcha.ui.util.matchaStringResource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -78,7 +80,7 @@ fun IgnoredSourcesScreen(
                 onRetry = { viewModel.loadSources() }
             )
             state.sources.isEmpty() -> EmptyState(
-                message = "Список игнорируемых пуст",
+                message = matchaStringResource(R.string.ignored_empty),
                 icon = Icons.Default.Block,
                 modifier = Modifier.fillMaxSize()
             )
@@ -90,7 +92,7 @@ fun IgnoredSourcesScreen(
                             onClick = { onOpenProfile(source.id) },
                             trailingContent = {
                                 TextButton(onClick = { viewModel.unignore(source.id) }) {
-                                    Text("Не игнорировать")
+                                    Text(matchaStringResource(R.string.unignore))
                                 }
                             }
                         )

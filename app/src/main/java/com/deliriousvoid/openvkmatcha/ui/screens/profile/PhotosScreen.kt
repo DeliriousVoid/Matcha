@@ -1,5 +1,7 @@
 package com.deliriousvoid.openvkmatcha.ui.screens.profile
 
+import com.deliriousvoid.openvkmatcha.R
+import com.deliriousvoid.openvkmatcha.ui.util.matchaStringResource
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -73,15 +75,21 @@ fun PhotosScreen(
     
     val isSelectionMode = selectedPhotos.isNotEmpty()
 
+    val selectedCountLabel = matchaStringResource(R.string.selected_count, selectedPhotos.size)
+    val cancelLabel = matchaStringResource(R.string.cancel)
+    val editLabel = matchaStringResource(R.string.action_edit)
+    val deleteLabel = matchaStringResource(R.string.action_delete)
+    val sortLabel = matchaStringResource(R.string.sort)
+
     DisposableEffect(isSelectionMode, selectedPhotos, title, state.reversed) {
         AppEvents.setTopBarState(if (isSelectionMode) {
             TopBarState(
                 tag = "photos",
-                title = "${selectedPhotos.size} выбрано",
+                title = selectedCountLabel,
                 route = Routes.PHOTOS,
                 navigationIcon = {
                     IconButton(onClick = { selectedPhotos = emptySet() }) {
-                        Icon(Icons.Default.Close, "Отмена")
+                        Icon(Icons.Default.Close, cancelLabel)
                     }
                 },
                 actions = {
@@ -89,11 +97,11 @@ fun PhotosScreen(
                         IconButton(onClick = {
                             photoToEdit = state.photos.find { it.id == selectedPhotos.first() }
                         }) {
-                            Icon(Icons.Default.Edit, "Изменить")
+                            Icon(Icons.Default.Edit, editLabel)
                         }
                     }
                     IconButton(onClick = { showDeleteDialog = true }) {
-                        Icon(Icons.Default.Delete, "Удалить")
+                        Icon(Icons.Default.Delete, deleteLabel)
                     }
                 }
             )
@@ -106,7 +114,7 @@ fun PhotosScreen(
                     IconButton(onClick = { viewModel.toggleSort() }) {
                         Icon(
                             imageVector = if (state.reversed) Icons.Default.ArrowUpward else Icons.Default.ArrowDownward,
-                            contentDescription = "Сортировка",
+                            contentDescription = sortLabel,
                             tint = MaterialTheme.colorScheme.primary
                         )
                     }
@@ -194,7 +202,7 @@ fun PhotosScreen(
                 onRetry = { viewModel.loadPhotos() }
             )
             state.photos.isEmpty() -> EmptyState(
-                message = "Нет фотографий",
+                message = matchaStringResource(R.string.no_photos),
                 modifier = Modifier.fillMaxSize()
             )
             else -> {
@@ -204,7 +212,7 @@ fun PhotosScreen(
                         .pointerInput(Unit) {
                             awaitEachGesture {
                                 while (true) {
-                                    val event = awaitPointerEvent(PointerEventPass.Initial)
+                                    val event = awaitPointerEvent(PointerEventPass.Main)
                                     if (event.changes.size > 1) {
                                         if (!isPinching) {
                                             isPinching = true
@@ -319,25 +327,17 @@ fun PhotosScreen(
         }
     }
 
-    selectedPhotoIndex?.let { index ->
-        ImageViewer(
-            imageUrls = state.photos.map { it.url },
-            initialIndex = index,
-            onDismiss = { selectedPhotoIndex = null }
-        )
-    }
-
     photoToEdit?.let { photo ->
         var caption by remember { mutableStateOf(photo.text) }
         AlertDialog(
             onDismissRequest = { photoToEdit = null },
-            title = { Text("Редактировать описание") },
+            title = { Text(matchaStringResource(R.string.edit_description)) },
             text = {
                 OutlinedTextField(
                     value = caption,
                     onValueChange = { caption = it },
                     modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Описание") }
+                    label = { Text(matchaStringResource(R.string.description_label)) }
                 )
             },
             confirmButton = {
@@ -346,12 +346,12 @@ fun PhotosScreen(
                     photoToEdit = null
                     selectedPhotos = emptySet()
                 }) {
-                    Text("Сохранить")
+                    Text(matchaStringResource(R.string.action_save))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { photoToEdit = null }) {
-                    Text("Отмена")
+                    Text(matchaStringResource(R.string.cancel))
                 }
             }
         )
@@ -360,8 +360,8 @@ fun PhotosScreen(
     if (showDeleteDialog) {
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
-            title = { Text("Удалить фото?") },
-            text = { Text("Вы действительно хотите удалить ${selectedPhotos.size} фото?") },
+            title = { Text(matchaStringResource(R.string.delete_photos_q)) },
+            text = { Text(matchaStringResource(R.string.delete_photos_confirm, selectedPhotos.size)) },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -371,14 +371,22 @@ fun PhotosScreen(
                     },
                     colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
                 ) {
-                    Text("Удалить")
+                    Text(matchaStringResource(R.string.action_delete))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showDeleteDialog = false }) {
-                    Text("Отмена")
+                    Text(matchaStringResource(R.string.cancel))
                 }
             }
+        )
+    }
+
+    selectedPhotoIndex?.let { index ->
+        ImageViewer(
+            imageUrls = state.photos.map { it.url },
+            initialIndex = index,
+            onDismiss = { selectedPhotoIndex = null }
         )
     }
 }

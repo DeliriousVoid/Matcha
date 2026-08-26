@@ -1,5 +1,7 @@
 package com.deliriousvoid.openvkmatcha.ui.screens.profile
 
+import com.deliriousvoid.openvkmatcha.R
+import com.deliriousvoid.openvkmatcha.ui.util.matchaStringResource
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -55,21 +57,31 @@ fun PhotoAlbumsScreen(
 
     val isSelectionMode = selectedAlbums.isNotEmpty()
 
+    val selectedCountLabel = matchaStringResource(R.string.selected_count, selectedAlbums.size)
+    val cancelLabel = matchaStringResource(R.string.cancel)
+    val menuLabel = matchaStringResource(R.string.desc_menu)
+    val editLabel = matchaStringResource(R.string.action_edit)
+    val deleteLabel = matchaStringResource(R.string.action_delete)
+    val albumsWithNameLabel = matchaStringResource(R.string.albums_with_name, name)
+    val albumsTitle = matchaStringResource(R.string.title_albums)
+    val createAlbumLabel = matchaStringResource(R.string.create_album)
+    val allPhotosLabel = matchaStringResource(R.string.all_photos)
+
     DisposableEffect(isSelectionMode, selectedAlbums, showMenu, name, state.currentUserId, userId) {
         AppEvents.setTopBarState(if (isSelectionMode) {
             TopBarState(
                 tag = "photo_albums",
-                title = "${selectedAlbums.size} выбрано",
+                title = selectedCountLabel,
                 route = Routes.PHOTO_ALBUMS,
                 navigationIcon = {
                     IconButton(onClick = { selectedAlbums = emptySet() }) {
-                        Icon(Icons.Default.Close, "Отмена")
+                        Icon(Icons.Default.Close, cancelLabel)
                     }
                 },
                 actions = {
                     Box {
                         IconButton(onClick = { showMenu = true }) {
-                            Icon(Icons.Default.MoreVert, "Меню")
+                            Icon(Icons.Default.MoreVert, menuLabel)
                         }
                         DropdownMenu(
                             expanded = showMenu,
@@ -77,7 +89,7 @@ fun PhotoAlbumsScreen(
                         ) {
                             if (selectedAlbums.size == 1) {
                                 DropdownMenuItem(
-                                    text = { Text("Изменить") },
+                                    text = { Text(editLabel) },
                                     onClick = {
                                         showMenu = false
                                         albumToEdit = state.albums.find { it.id == selectedAlbums.first() }
@@ -86,7 +98,7 @@ fun PhotoAlbumsScreen(
                                 )
                             }
                             DropdownMenuItem(
-                                text = { Text("Удалить", color = MaterialTheme.colorScheme.error) },
+                                text = { Text(deleteLabel, color = MaterialTheme.colorScheme.error) },
                                 onClick = {
                                     showMenu = false
                                     albumToDelete = selectedAlbums.toList()
@@ -99,12 +111,12 @@ fun PhotoAlbumsScreen(
         } else {
             TopBarState(
                 tag = "photo_albums",
-                title = if (name.isNotEmpty()) "Альбомы $name" else "Альбомы",
+                title = if (name.isNotEmpty()) albumsWithNameLabel else albumsTitle,
                 route = Routes.PHOTO_ALBUMS,
                 actions = {
                     if (state.currentUserId == userId) {
                         IconButton(onClick = { showCreateDialog = true }) {
-                            Icon(Icons.Default.Add, "Создать альбом")
+                            Icon(Icons.Default.Add, createAlbumLabel)
                         }
                     }
                 }
@@ -140,7 +152,7 @@ fun PhotoAlbumsScreen(
                                 if (isSelectionMode) {
                                     selectedAlbums = emptySet()
                                 } else {
-                                    onOpenAlbum(null, "Все фотографии")
+                                    onOpenAlbum(null, allPhotosLabel)
                                 }
                             }
                         )
@@ -198,8 +210,8 @@ fun PhotoAlbumsScreen(
         val titles = state.albums.filter { ids.contains(it.id) }.joinToString { it.title }
         AlertDialog(
             onDismissRequest = { albumToDelete = null },
-            title = { Text(if (ids.size == 1) "Удалить альбом?" else "Удалить альбомы?") },
-            text = { Text("Вы действительно хотите удалить ${if (ids.size == 1) "альбом \"$titles\"" else "${ids.size} альбома(ов)"} и все фотографии в них?") },
+            title = { Text(if (ids.size == 1) matchaStringResource(R.string.delete_album_q) else matchaStringResource(R.string.delete_albums_q)) },
+            text = { Text(if (ids.size == 1) matchaStringResource(R.string.delete_album_confirm, titles) else matchaStringResource(R.string.delete_albums_confirm, ids.size)) },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -209,12 +221,12 @@ fun PhotoAlbumsScreen(
                     },
                     colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
                 ) {
-                    Text("Удалить")
+                    Text(matchaStringResource(R.string.action_delete))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { albumToDelete = null }) {
-                    Text("Отмена")
+                    Text(matchaStringResource(R.string.cancel))
                 }
             }
         )
@@ -281,7 +293,7 @@ fun AlbumCard(
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    text = "${album.size} фото",
+                    text = matchaStringResource(R.string.photos_count_format, album.size),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -306,7 +318,7 @@ fun AllPhotosCard(onClick: () -> Unit) {
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
-                    text = "Все фото",
+                    text = matchaStringResource(R.string.all_photos),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onPrimaryContainer
@@ -328,13 +340,13 @@ fun AlbumEditDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(if (initialTitle.isEmpty()) "Новый альбом" else "Редактировать альбом") },
+        title = { Text(if (initialTitle.isEmpty()) matchaStringResource(R.string.new_album) else matchaStringResource(R.string.edit_album)) },
         text = {
             Column {
                 OutlinedTextField(
                     value = title,
                     onValueChange = { title = it },
-                    label = { Text("Название") },
+                    label = { Text(matchaStringResource(R.string.group_name)) },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true
                 )
@@ -342,7 +354,7 @@ fun AlbumEditDialog(
                 OutlinedTextField(
                     value = description,
                     onValueChange = { description = it },
-                    label = { Text("Описание") },
+                    label = { Text(matchaStringResource(R.string.description_label)) },
                     modifier = Modifier.fillMaxWidth()
                 )
             }
@@ -352,12 +364,12 @@ fun AlbumEditDialog(
                 onClick = { onConfirm(title, description) },
                 enabled = title.isNotBlank()
             ) {
-                Text("OK")
+                Text(matchaStringResource(R.string.action_ok))
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Отмена")
+                Text(matchaStringResource(R.string.cancel))
             }
         }
     )

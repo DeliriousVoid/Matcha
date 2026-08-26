@@ -49,6 +49,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import android.Manifest
 import android.os.Build
 import com.deliriousvoid.openvkmatcha.OpenVKMatchaApp
+import com.deliriousvoid.openvkmatcha.R
+import com.deliriousvoid.openvkmatcha.ui.util.matchaStringResource
 import com.deliriousvoid.openvkmatcha.ui.components.AudioTrackItem
 import com.deliriousvoid.openvkmatcha.ui.components.ErrorText
 import com.deliriousvoid.openvkmatcha.ui.components.StateView
@@ -106,7 +108,7 @@ fun MusicScreen(
 
     LaunchedEffect(state.userProfile) {
         state.userProfile?.let {
-            AppEvents.setCustomTitle("Музыка ${it.fullName}")
+            AppEvents.setCustomTitle(OpenVKMatchaApp.instance.languageManager.getStringOrDefault(R.string.title_music_user, it.fullName))
         }
     }
 
@@ -132,19 +134,19 @@ fun MusicScreen(
                         FilterChip(
                             selected = state.mode == MusicMode.Tracks,
                             onClick = { viewModel.setMode(MusicMode.Tracks) },
-                            label = { Text("Треки") }
+                            label = { Text(matchaStringResource(R.string.music_tracks)) }
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         FilterChip(
                             selected = state.mode == MusicMode.Playlists,
                             onClick = { viewModel.setMode(MusicMode.Playlists) },
-                            label = { Text("Плейлисты") }
+                            label = { Text(matchaStringResource(R.string.music_playlists)) }
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         FilterChip(
                             selected = state.mode == MusicMode.Downloaded,
                             onClick = { viewModel.setMode(MusicMode.Downloaded) },
-                            label = { Text("Скачанное") }
+                            label = { Text(matchaStringResource(R.string.music_downloaded)) }
                         )
                     }
                 }
@@ -158,12 +160,12 @@ fun MusicScreen(
                     )
                     state.mode == MusicMode.Tracks && state.tracks.isEmpty() && !state.isLoading -> {
                         if (state.searchQuery.isNotBlank()) {
-                            StateView(icon = Icons.Default.Search, message = "Ничего не найдено", modifier = Modifier.fillMaxSize())
+                            StateView(icon = Icons.Default.Search, message = matchaStringResource(R.string.music_not_found), modifier = Modifier.fillMaxSize())
                         } else {
-                            StateView(icon = Icons.Default.MusicNote, message = "Нет аудиозаписей", modifier = Modifier.fillMaxSize())
+                            StateView(icon = Icons.Default.MusicNote, message = matchaStringResource(R.string.music_empty), modifier = Modifier.fillMaxSize())
                         }
                     }
-                    state.mode == MusicMode.Playlists && state.playlists.isEmpty() -> StateView(icon = Icons.Default.MusicNote, message = "Плейлисты не найдены", modifier = Modifier.fillMaxSize())
+                    state.mode == MusicMode.Playlists && state.playlists.isEmpty() -> StateView(icon = Icons.Default.MusicNote, message = matchaStringResource(R.string.music_playlists_not_found), modifier = Modifier.fillMaxSize())
                     state.mode == MusicMode.Downloaded && state.downloadedTracks.isEmpty() -> {
                         Column(
                             modifier = Modifier.fillMaxSize(),
@@ -172,7 +174,7 @@ fun MusicScreen(
                         ) {
                             StateView(
                                 icon = Icons.Default.GetApp,
-                                message = if (hasPermission) "У вас пока нет скачанных треков" else "Нет доступа к памяти",
+                                message = if (hasPermission) matchaStringResource(R.string.music_no_downloaded) else matchaStringResource(R.string.music_no_storage_permission),
                                 modifier = Modifier.wrapContentSize()
                             )
                             if (!hasPermission) {
@@ -187,7 +189,7 @@ fun MusicScreen(
                                     },
                                     modifier = Modifier.padding(top = 16.dp)
                                 ) {
-                                    Text("Предоставить доступ")
+                                    Text(matchaStringResource(R.string.music_grant_permission))
                                 }
                             }
                         }

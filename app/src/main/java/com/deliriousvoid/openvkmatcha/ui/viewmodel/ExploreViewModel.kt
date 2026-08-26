@@ -61,12 +61,13 @@ class ExploreViewModel(
 
     fun getGreeting(): String {
         val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
-        return when (hour) {
-            in 5..11 -> "Доброе утро"
-            in 12..17 -> "Добрый день"
-            in 18..23 -> "Добрый вечер"
-            else -> "Доброй ночи"
+        val resId = when (hour) {
+            in 5..11 -> com.deliriousvoid.openvkmatcha.R.string.explore_greeting_morning
+            in 12..17 -> com.deliriousvoid.openvkmatcha.R.string.explore_greeting_afternoon
+            in 18..23 -> com.deliriousvoid.openvkmatcha.R.string.explore_greeting_evening
+            else -> com.deliriousvoid.openvkmatcha.R.string.explore_greeting_night
         }
+        return OpenVKMatchaApp.instance.languageManager.getStringOrDefault(resId)
     }
 
     companion object {

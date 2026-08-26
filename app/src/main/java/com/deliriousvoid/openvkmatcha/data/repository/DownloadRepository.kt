@@ -1,10 +1,13 @@
 package com.deliriousvoid.openvkmatcha.data.repository
 
 import android.app.DownloadManager
+import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.os.Environment
+import android.provider.MediaStore
 import android.webkit.MimeTypeMap
 import android.widget.Toast
 import com.deliriousvoid.openvkmatcha.data.model.AudioTrack
@@ -15,6 +18,7 @@ import okhttp3.Request
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
+import java.io.FileInputStream
 import java.io.FileOutputStream
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -81,23 +85,59 @@ class DownloadRepository(private val context: Context) {
 
     suspend fun downloadTrack(track: AudioTrack): Result<Unit> = withContext(Dispatchers.IO) {
         try {
-            val url = track.url ?: return@withContext Result.failure(Exception("URL трека отсутствует"))
+            val url = track.url ?: return@withContext Result.failure(Exception(context.getString(com.deliriousvoid.openvkmatcha.R.string.error_no_track_url)))
             val request = Request.Builder().url(url).build()
             val response = client.newCall(request).execute()
             
-            if (!response.isSuccessful) return@withContext Result.failure(Exception("Ошибка загрузки: ${response.code}"))
+            if (!response.isSuccessful) return@withContext Result.failure(Exception(context.getString(com.deliriousvoid.openvkmatcha.R.string.error_download_failed, response.code.toString())))
             
             val fileName = sanitizeFileName("${track.artist} - ${track.title}.mp3")
-            val file = File(musicDir, fileName)
+            
+            // 1. Download to cacheDir first
+            val tempFile = File(context.cacheDir, "download_${track.stableId}.mp3")
             response.body?.byteStream()?.use { input ->
-                FileOutputStream(file).use { output ->
+                FileOutputStream(tempFile).use { output ->
                     input.copyTo(output)
                 }
             }
 
-            writeMetadata(file, track)
+            // 2. Write metadata in cacheDir
+            writeMetadata(tempFile, track)
 
-            saveToManifest(track.copy(url = file.absolutePath))
+            // 3. Move/Copy to public storage
+            val finalPath: String
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val values = ContentValues().apply {
+                    put(MediaStore.Audio.Media.DISPLAY_NAME, fileName)
+                    put(MediaStore.Audio.Media.MIME_TYPE, "audio/mpeg")
+                    put(MediaStore.Audio.Media.RELATIVE_PATH, "Music/OpenVK")
+                    put(MediaStore.Audio.Media.IS_PENDING, 1)
+                }
+
+                val resolver = context.contentResolver
+                val collection = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
+                val uri = resolver.insert(collection, values) ?: throw Exception("Failed to create MediaStore entry")
+
+                resolver.openOutputStream(uri)?.use { output ->
+                    FileInputStream(tempFile).use { input ->
+                        input.copyTo(output)
+                    }
+                }
+
+                values.clear()
+                values.put(MediaStore.Audio.Media.IS_PENDING, 0)
+                resolver.update(uri, values, null, null)
+                
+                finalPath = uri.toString()
+            } else {
+                val destFile = File(musicDir, fileName)
+                tempFile.copyTo(destFile, overwrite = true)
+                finalPath = destFile.absolutePath
+            }
+
+            tempFile.delete()
+
+            saveToManifest(track.copy(url = finalPath))
             updateDownloadedFlow()
             Result.success(Unit)
         } catch (e: Exception) {
@@ -181,7 +221,7 @@ class DownloadRepository(private val context: Context) {
                 val id3v2 = if (mp3File.hasId3v2Tag()) mp3File.id3v2Tag else null
                 val id3v1 = if (mp3File.hasId3v1Tag()) mp3File.id3v1Tag else null
                 
-                val artist = id3v2?.artist ?: id3v1?.artist ?: "Неизвестный исполнитель"
+                val artist = id3v2?.artist ?: id3v1?.artist ?: context.getString(com.deliriousvoid.openvkmatcha.R.string.audio_unknown_artist)
                 val title = id3v2?.title ?: id3v1?.title ?: file.nameWithoutExtension
                 
                 val comment = id3v2?.comment ?: ""
@@ -299,7 +339,19 @@ class DownloadRepository(private val context: Context) {
                     artworkUrl = obj.optString("artworkUrl").takeIf { it.isNotBlank() },
                     isAdded = true
                 )
-            }.filter { File(it.url!!).exists() }
+            }.filter { 
+                val url = it.url ?: return@filter false
+                if (url.startsWith("content://")) {
+                    try {
+                        context.contentResolver.openInputStream(Uri.parse(url))?.close()
+                        true
+                    } catch (_: Exception) {
+                        false
+                    }
+                } else {
+                    File(url).exists()
+                }
+            }
         } catch (e: Exception) {
             emptyList()
         }
@@ -313,8 +365,26 @@ class DownloadRepository(private val context: Context) {
         val tracks = getDownloadedTracksInternal().toMutableList()
         val track = tracks.find { it.id == trackId && it.ownerId == ownerId }
         if (track != null) {
-            val file = File(track.url!!)
-            if (file.exists()) file.delete()
+            val url = track.url ?: return
+            if (url.startsWith("content://")) {
+                try {
+                    context.contentResolver.delete(Uri.parse(url), null, null)
+                } catch (e: Exception) {
+                    android.util.Log.e("DownloadRepository", "Error deleting via MediaStore: ${e.message}")
+                }
+            } else {
+                val file = File(url)
+                if (file.exists()) file.delete()
+                
+                // Also try to remove from MediaStore if it's in public storage
+                if (url.contains("/Music/OpenVK/")) {
+                    try {
+                        val selection = "${MediaStore.Audio.Media.DATA} = ?"
+                        val selectionArgs = arrayOf(url)
+                        context.contentResolver.delete(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, selection, selectionArgs)
+                    } catch (_: Exception) {}
+                }
+            }
             tracks.remove(track)
             val array = JSONArray()
             tracks.forEach { t ->
@@ -351,7 +421,7 @@ class DownloadRepository(private val context: Context) {
             val downloadUri = Uri.parse(cleanUrl)
             val request = DownloadManager.Request(downloadUri)
                 .setTitle(finalFileName)
-                .setDescription("Загрузка из OpenVK")
+                .setDescription(context.getString(com.deliriousvoid.openvkmatcha.R.string.download_description))
                 .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
                 .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, finalFileName)
                 .addRequestHeader("User-Agent", "Mozilla/5.0")

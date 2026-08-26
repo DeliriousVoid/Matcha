@@ -17,6 +17,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import com.deliriousvoid.openvkmatcha.R
+import com.deliriousvoid.openvkmatcha.ui.util.matchaStringResource
 import com.deliriousvoid.openvkmatcha.data.model.UserProfile
 import com.deliriousvoid.openvkmatcha.ui.navigation.Routes
 import com.deliriousvoid.openvkmatcha.ui.components.VerifiedBadge
@@ -35,8 +37,9 @@ fun EventsScreen(
 ) {
     val state by viewModel.uiState.collectAsState()
 
+    val title = matchaStringResource(R.string.title_events)
     DisposableEffect(Unit) {
-        AppEvents.setTopBarState(TopBarState(tag = "events", title = "События", route = Routes.EVENTS))
+        AppEvents.setTopBarState(TopBarState(tag = "events", title = title, route = Routes.EVENTS))
         onDispose {
             if (AppEvents.topBarState.value?.tag == "events") {
                 AppEvents.setTopBarState(null)
@@ -52,7 +55,7 @@ fun EventsScreen(
             } else if (state.error != null) {
                 Text(state.error!!, modifier = Modifier.align(Alignment.Center), color = MaterialTheme.colorScheme.error)
             } else if (state.events.isEmpty()) {
-                Text("У вас пока нет событий", modifier = Modifier.align(Alignment.Center))
+                Text(matchaStringResource(R.string.no_events), modifier = Modifier.align(Alignment.Center))
             } else {
                 LazyColumn(modifier = Modifier.fillMaxSize()) {
                     items(state.events) { event ->
@@ -75,9 +78,9 @@ fun EventItem(event: UserProfile, onClick: (Int) -> Unit) {
                     overflow = TextOverflow.Ellipsis,
                     fontWeight = FontWeight.Bold
                 )
-                if (event.verified) {
+                if (event.verified || com.deliriousvoid.openvkmatcha.Constants.CUSTOM_VERIFIED_IDS.contains(event.id)) {
                     Spacer(modifier = Modifier.width(4.dp))
-                    VerifiedBadge(userId = event.id, isVerified = true)
+                    VerifiedBadge(userId = event.id, isVerified = event.verified)
                 }
             }
         },

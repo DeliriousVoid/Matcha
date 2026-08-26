@@ -13,6 +13,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.deliriousvoid.openvkmatcha.R
+import com.deliriousvoid.openvkmatcha.ui.util.matchaStringResource
 import com.deliriousvoid.openvkmatcha.data.model.Topic
 import com.deliriousvoid.openvkmatcha.ui.components.EmptyState
 import com.deliriousvoid.openvkmatcha.ui.components.ErrorText
@@ -59,7 +61,7 @@ fun TopicsScreen(
                 onRetry = { viewModel.loadTopics() }
             )
             state.topics.isEmpty() -> EmptyState(
-                message = "В этом обсуждении пока нет тем",
+                message = matchaStringResource(R.string.topic_no_topics),
                 modifier = Modifier.fillMaxSize()
             )
             else -> {
@@ -119,12 +121,12 @@ private fun TopicItem(
             modifier = Modifier.fillMaxWidth()
         ) {
             Text(
-                text = "${topic.commentsCount} сообщений",
+                text = matchaStringResource(R.string.messages_count_format, topic.commentsCount),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Text(
-                text = "Обновлено ${formatTimeAgo(topic.updated)}",
+                text = matchaStringResource(R.string.updated_at_format, formatTimeAgo(topic.updated)),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

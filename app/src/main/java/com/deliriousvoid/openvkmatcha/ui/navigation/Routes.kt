@@ -5,6 +5,7 @@ import androidx.compose.material.icons.automirrored.filled.StickyNote2
 import androidx.compose.material.icons.automirrored.outlined.StickyNote2
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.vector.ImageVector
 import android.net.Uri
 
@@ -18,11 +19,15 @@ object Routes {
     const val SETTINGS_ACCOUNTS = "settings/accounts"
     const val SETTINGS_GENERAL = "settings/general"
     const val SETTINGS_APPEARANCE = "settings/appearance"
+    const val SETTINGS_LANGUAGE = "settings/language"
     const val SETTINGS_MUSIC = "settings/music"
     const val SETTINGS_IGNORED = "settings/ignored"
     const val SETTINGS_DEVELOPER = "settings/developer"
     const val SETTINGS_NAVIGATION = "settings/navigation"
+    const val SETTINGS_APP_ICON = "settings/app_icon"
     const val SETTINGS_ABOUT_INSTANCE = "settings/about_instance"
+    const val SETTINGS_THEME_EDITOR = "settings/appearance/theme_editor?id={id}"
+    const val SETTINGS_ACCENT_EDITOR = "settings/appearance/accent_editor?id={id}"
     const val CHAT = "chat/{peerId}?title={title}"
     const val PLAYLIST_DETAILS = "playlist/{ownerId}/{playlistId}?title={title}"
     const val PROFILE = "profile/{id}"
@@ -112,6 +117,12 @@ object Routes {
     }
     fun eventsRoute(userId: Int): String = "events/$userId"
 
+    fun themeEditorRoute(id: String? = null): String =
+        if (id != null) "settings/appearance/theme_editor?id=$id" else "settings/appearance/theme_editor"
+
+    fun accentEditorRoute(id: String? = null): String =
+        if (id != null) "settings/appearance/accent_editor?id=$id" else "settings/appearance/accent_editor"
+
     fun sendGiftRoute(userId: Int? = null): String = 
         if (userId != null) "send_gift?userId=$userId" else "send_gift"
 
@@ -120,15 +131,17 @@ object Routes {
     }
 }
 
-enum class MainTab(val title: String) {
-    Home("Новости"),
-    Explore("Обзор"),
-    Messages("Сообщения"),
-    Music("Музыка"),
-    Profile("Профиль"),
-    Friends("Друзья"),
-    Groups("Сообщества"),
-    Notes("Заметки");
+enum class MainTab(val titleRes: Int) {
+    Home(com.deliriousvoid.openvkmatcha.R.string.tab_home),
+    Explore(com.deliriousvoid.openvkmatcha.R.string.tab_explore),
+    Messages(com.deliriousvoid.openvkmatcha.R.string.tab_messages),
+    Music(com.deliriousvoid.openvkmatcha.R.string.tab_music),
+    Profile(com.deliriousvoid.openvkmatcha.R.string.tab_profile),
+    Friends(com.deliriousvoid.openvkmatcha.R.string.tab_friends),
+    Groups(com.deliriousvoid.openvkmatcha.R.string.tab_groups),
+    Notes(com.deliriousvoid.openvkmatcha.R.string.tab_notes);
+
+    val title: String @Composable get() = com.deliriousvoid.openvkmatcha.ui.util.matchaStringResource(titleRes)
 
     fun icon(selected: Boolean): ImageVector = when (this) {
         Home -> if (selected) Icons.Filled.Newspaper else Icons.Outlined.Newspaper

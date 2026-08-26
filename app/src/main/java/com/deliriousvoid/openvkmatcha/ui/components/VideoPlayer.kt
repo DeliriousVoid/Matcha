@@ -51,6 +51,8 @@ import coil.compose.AsyncImage
 import com.deliriousvoid.openvkmatcha.OpenVKMatchaApp
 import com.deliriousvoid.openvkmatcha.R
 import com.deliriousvoid.openvkmatcha.data.model.Video
+import com.deliriousvoid.openvkmatcha.ui.theme.LocalOpaqueColorScheme
+import com.deliriousvoid.openvkmatcha.ui.util.matchaStringResource
 import com.deliriousvoid.openvkmatcha.ui.viewmodel.SettingsViewModel
 import com.deliriousvoid.openvkmatcha.util.AppEvents
 import com.deliriousvoid.openvkmatcha.util.LocalFullScreenVideoHandler
@@ -287,7 +289,7 @@ fun VideoPlayer(
                     )
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        text = "Не удалось загрузить видео",
+                        text = matchaStringResource(R.string.error_load_video),
                         color = Color.White,
                         style = MaterialTheme.typography.bodyMedium
                     )
@@ -297,7 +299,7 @@ fun VideoPlayer(
                             context.startActivity(intent)
                         }
                     }) {
-                        Text("Открыть в браузере")
+                        Text(matchaStringResource(R.string.open_in_browser))
                     }
                 }
             } else {
@@ -340,7 +342,7 @@ fun VideoPlayer(
                                 modifier = Modifier.size(48.dp)
                             )
                             Text(
-                                text = "${if (isForward) "+" else "-"}$amount сек",
+                                text = matchaStringResource(R.string.seconds_short, amount),
                                 color = Color.White,
                                 fontSize = 16.sp
                             )
@@ -435,7 +437,7 @@ fun VideoPlayer(
                     )
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        text = if (isVideoFloating) "Видео воспроизводится в плавающем окне" else "Видео воспроизводится в отдельном окне",
+                        text = if (isVideoFloating) matchaStringResource(R.string.video_playing_floating) else matchaStringResource(R.string.video_playing_pip),
                         color = Color.White,
                         style = MaterialTheme.typography.bodyMedium,
                         textAlign = androidx.compose.ui.text.style.TextAlign.Center,
@@ -448,7 +450,7 @@ fun VideoPlayer(
                             AppEvents.setInPipMode(false)
                         }
                     }) {
-                        Text("Вернуть")
+                        Text(matchaStringResource(R.string.action_restore))
                     }
                 }
             }
@@ -480,7 +482,7 @@ fun VideoPlayer(
                     ) {
                         Icon(
                             imageVector = Icons.Default.PlayArrow,
-                            contentDescription = "Play",
+                            contentDescription = matchaStringResource(R.string.desc_play),
                             tint = Color.White,
                             modifier = Modifier
                                 .padding(16.dp)
@@ -585,6 +587,7 @@ private fun VideoControls(
     onOpenExternal: () -> Unit = {}
 ) {
     var showMenu by remember { mutableStateOf(false) }
+    val opaqueColorScheme = LocalOpaqueColorScheme.current
 
     Box(
         modifier = Modifier
@@ -605,7 +608,7 @@ private fun VideoControls(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.95f))
+                    .background(opaqueColorScheme.surface.copy(alpha = 0.95f))
                     .padding(24.dp)
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
@@ -619,7 +622,7 @@ private fun VideoControls(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        "Скорость воспроизведения: ${"%.2f".format(playbackSpeed)}x",
+                        matchaStringResource(R.string.video_playback_speed_format, formatSpeed(playbackSpeed)),
                         style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.onSurface
                     )
@@ -634,13 +637,15 @@ private fun VideoControls(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Text("0.50x", style = MaterialTheme.typography.labelMedium)
+                    Text(formatSpeed(0.5f), style = MaterialTheme.typography.labelMedium, maxLines = 1, softWrap = false)
                     Text(
-                        "${"%.2f".format(playbackSpeed)}x",
+                        formatSpeed(playbackSpeed),
                         style = MaterialTheme.typography.headlineSmall,
-                        color = MaterialTheme.colorScheme.primary
+                        color = MaterialTheme.colorScheme.primary,
+                        maxLines = 1,
+                        softWrap = false
                     )
-                    Text("2.00x", style = MaterialTheme.typography.labelMedium)
+                    Text(formatSpeed(2.0f), style = MaterialTheme.typography.labelMedium, maxLines = 1, softWrap = false)
                 }
                 
                 Slider(
@@ -655,7 +660,7 @@ private fun VideoControls(
                 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceEvenly
+                    horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterHorizontally)
                 ) {
                     listOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f).forEach { speed ->
                         FilterChip(
@@ -664,7 +669,15 @@ private fun VideoControls(
                                 val roundedSpeed = Math.round(speed * 100f) / 100f
                                 onSetSpeed(roundedSpeed)
                             },
-                            label = { Text("${"%.2f".format(speed)}x") }
+                            label = { 
+                                Text(
+                                    text = formatSpeed(speed),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    maxLines = 1,
+                                    softWrap = false
+                                ) 
+                            },
+                            modifier = Modifier.height(32.dp)
                         )
                     }
                 }
@@ -693,7 +706,7 @@ private fun VideoControls(
                     IconButton(onClick = onPip) {
                         Icon(
                             imageVector = Icons.Default.PictureInPicture,
-                            contentDescription = "PiP",
+                            contentDescription = matchaStringResource(R.string.desc_pip),
                             tint = Color.White
                         )
                     }
@@ -710,7 +723,7 @@ private fun VideoControls(
                         var needsDivider = false
                         if (hasPlayerUrl) {
                             DropdownMenuItem(
-                                text = { Text(if (isYouTube) "Смотреть на YouTube" else "Открыть в браузере") },
+                                text = { Text(if (isYouTube) matchaStringResource(R.string.action_watch_on_youtube) else matchaStringResource(R.string.open_in_browser)) },
                                 onClick = {
                                     showMenu = false
                                     onOpenExternal()
@@ -723,7 +736,7 @@ private fun VideoControls(
                         if (canDownload) {
                             if (needsDivider) HorizontalDivider()
                             DropdownMenuItem(
-                                text = { Text("Скачать") },
+                                text = { Text(matchaStringResource(R.string.action_download)) },
                                 onClick = {
                                     showMenu = false
                                     onDownload()
@@ -736,13 +749,20 @@ private fun VideoControls(
                         if (isFullscreen && !isExternal) {
                             if (needsDivider) HorizontalDivider()
                             DropdownMenuItem(
-                                text = { Text("Скорость воспроизведения") },
+                                text = { Text(matchaStringResource(R.string.video_playback_speed)) },
                                 onClick = {
                                     showMenu = false
                                     onShowSpeedSelector(true)
                                 },
                                 leadingIcon = { Icon(Icons.Default.Speed, null) },
-                                trailingIcon = { Text("${"%.2f".format(playbackSpeed)}x", style = MaterialTheme.typography.bodySmall) }
+                                trailingIcon = { 
+                                    Text(
+                                        text = formatSpeed(playbackSpeed), 
+                                        style = MaterialTheme.typography.bodySmall,
+                                        maxLines = 1,
+                                        softWrap = false
+                                    ) 
+                                }
                             )
                         }
                     }
@@ -790,7 +810,7 @@ private fun VideoControls(
                         IconButton(onClick = onToggleFullscreen) {
                             Icon(
                                 imageVector = if (isFullscreen) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
-                                contentDescription = "Fullscreen",
+                                contentDescription = matchaStringResource(R.string.desc_fullscreen),
                                 tint = Color.White
                             )
                         }
@@ -834,6 +854,14 @@ private fun formatTime(ms: Long): String {
     val minutes = totalSeconds / 60
     val seconds = totalSeconds % 60
     return "%d:%02d".format(minutes, seconds)
+}
+
+private fun formatSpeed(speed: Float): String {
+    return if (speed == 1.0f || speed == 2.0f) {
+        "${speed.toInt()}x"
+    } else {
+        "${"%.2f".format(speed)}x"
+    }
 }
 
 fun Context.findActivity(): Activity? {

@@ -87,7 +87,9 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -99,8 +101,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import androidx.media3.common.Player
 import coil.compose.AsyncImage
+import coil.compose.rememberAsyncImagePainter
+import com.deliriousvoid.openvkmatcha.R
 import com.deliriousvoid.openvkmatcha.data.model.AudioTrack
 import com.deliriousvoid.openvkmatcha.data.model.LrcLine
+import com.deliriousvoid.openvkmatcha.ui.theme.AppTheme
+import com.deliriousvoid.openvkmatcha.ui.theme.CustomTheme
+import com.deliriousvoid.openvkmatcha.ui.theme.LocalOpaqueColorScheme
+import com.deliriousvoid.openvkmatcha.ui.util.matchaStringResource
 import com.deliriousvoid.openvkmatcha.ui.viewmodel.PlayerViewModel
 import kotlinx.coroutines.launch
 
@@ -213,9 +221,9 @@ fun MiniPlayer(
                             modifier = Modifier.basicMarquee(),
                         )
                         Text(
-                            text = track.artist,
+                            text = if (track.isReady) track.artist else matchaStringResource(R.string.audio_converting),
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            color = if (track.isReady) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error,
                             maxLines = 1,
                             modifier = Modifier.basicMarquee(),
                         )
@@ -226,7 +234,7 @@ fun MiniPlayer(
             IconButton(onClick = onToggleAdded) {
                 Icon(
                     imageVector = if (currentTrack.isAdded) Icons.Default.Check else Icons.Default.Add,
-                    contentDescription = if (currentTrack.isAdded) "Убрать" else "Добавить",
+                    contentDescription = if (currentTrack.isAdded) matchaStringResource(R.string.action_remove) else matchaStringResource(R.string.action_add),
                     tint = if (currentTrack.isAdded) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
@@ -241,7 +249,7 @@ fun MiniPlayer(
                 } else {
                     Icon(
                         imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                        contentDescription = if (isPlaying) "Pause" else "Play",
+                        contentDescription = if (isPlaying) matchaStringResource(R.string.desc_pause) else matchaStringResource(R.string.desc_play),
                     )
                 }
             }
@@ -260,6 +268,8 @@ fun FullPlayer(
     queue: List<AudioTrack>,
     hidePlayedTracks: Boolean,
     playerViewModel: PlayerViewModel,
+    appTheme: AppTheme = AppTheme.AMOLED,
+    customTheme: CustomTheme? = null,
     onPlayPause: () -> Unit,
     onNext: () -> Unit,
     onPrevious: () -> Unit,
@@ -274,6 +284,7 @@ fun FullPlayer(
     onDismiss: () -> Unit,
 ) {
     if (currentTrack == null) return
+    val opaqueColorScheme = LocalOpaqueColorScheme.current
 
     var showLyrics by remember { mutableStateOf(false) }
     var showQueue by remember { mutableStateOf(false) }
@@ -338,13 +349,30 @@ fun FullPlayer(
         }
     }
 
+    val hasWallpaper = appTheme == AppTheme.CUSTOM && customTheme?.backgroundImagePath != null
+
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
         dragHandle = null,
-        containerColor = MaterialTheme.colorScheme.surface,
+        containerColor = if (hasWallpaper) Color.Transparent else opaqueColorScheme.surface,
+        contentColor = MaterialTheme.colorScheme.onSurface,
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
+            if (hasWallpaper) {
+                androidx.compose.foundation.Image(
+                    painter = rememberAsyncImagePainter(customTheme.backgroundImagePath),
+                    contentDescription = null,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .blur(customTheme.backgroundBlur.dp)
+                        .drawWithContent {
+                            drawContent()
+                            drawRect(Color.Black.copy(alpha = customTheme.backgroundDim))
+                        },
+                    contentScale = ContentScale.Crop
+                )
+            }
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -364,7 +392,7 @@ fun FullPlayer(
                     ) {
                         Icon(
                             imageVector = Icons.Default.Share,
-                            contentDescription = "Share",
+                            contentDescription = matchaStringResource(R.string.action_share),
                             tint = MaterialTheme.colorScheme.onSurface
                         )
                     }
@@ -434,9 +462,9 @@ fun FullPlayer(
                             modifier = Modifier.basicMarquee(),
                         )
                         Text(
-                            text = currentTrack.artist,
+                            text = if (currentTrack.isReady) currentTrack.artist else matchaStringResource(R.string.audio_converting),
                             style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            color = if (currentTrack.isReady) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error,
                             maxLines = 1,
                             modifier = Modifier.basicMarquee(),
                         )
@@ -446,7 +474,7 @@ fun FullPlayer(
                         IconButton(onClick = onToggleAdded) {
                             Icon(
                                 imageVector = if (currentTrack.isAdded) Icons.Default.Check else Icons.Default.Add,
-                                contentDescription = if (currentTrack.isAdded) "Убрать" else "Добавить",
+                                contentDescription = if (currentTrack.isAdded) matchaStringResource(R.string.action_remove) else matchaStringResource(R.string.action_add),
                                 tint = if (currentTrack.isAdded) MaterialTheme.colorScheme.primary else LocalContentColor.current,
                             )
                         }
@@ -463,7 +491,7 @@ fun FullPlayer(
                             } else {
                                 Icon(
                                     imageVector = Icons.Default.Lyrics,
-                                    contentDescription = "Lyrics",
+                                    contentDescription = matchaStringResource(R.string.desc_lyrics),
                                     tint = when {
                                         showLyrics && syncedLyrics.isNotEmpty() -> MaterialTheme.colorScheme.primary
                                         syncedLyrics.isNotEmpty() -> LocalContentColor.current
@@ -475,7 +503,7 @@ fun FullPlayer(
                         IconButton(onClick = { showQueue = !showQueue }) {
                             Icon(
                                 imageVector = Icons.AutoMirrored.Filled.QueueMusic,
-                                contentDescription = "Queue",
+                                contentDescription = matchaStringResource(R.string.desc_queue),
                                 tint = if (showQueue) MaterialTheme.colorScheme.primary else LocalContentColor.current
                             )
                         }
@@ -531,7 +559,7 @@ fun FullPlayer(
                     IconButton(onClick = onToggleShuffle) {
                         Icon(
                             imageVector = Icons.Default.Shuffle,
-                            contentDescription = "Shuffle",
+                            contentDescription = matchaStringResource(R.string.desc_shuffle),
                             tint = if (shuffleMode) MaterialTheme.colorScheme.primary else LocalContentColor.current,
                         )
                     }
@@ -539,7 +567,7 @@ fun FullPlayer(
                     IconButton(onClick = onPrevious, modifier = Modifier.size(48.dp)) {
                         Icon(
                             imageVector = Icons.Default.SkipPrevious,
-                            contentDescription = "Previous",
+                            contentDescription = matchaStringResource(R.string.desc_previous),
                             modifier = Modifier.size(32.dp),
                         )
                     }
@@ -561,7 +589,7 @@ fun FullPlayer(
                         } else {
                             Icon(
                                 imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                                contentDescription = if (isPlaying) "Pause" else "Play",
+                                contentDescription = if (isPlaying) matchaStringResource(R.string.desc_pause) else matchaStringResource(R.string.desc_play),
                                 modifier = Modifier.size(40.dp),
                             )
                         }
@@ -570,7 +598,7 @@ fun FullPlayer(
                     IconButton(onClick = onNext, modifier = Modifier.size(48.dp)) {
                         Icon(
                             imageVector = Icons.Default.SkipNext,
-                            contentDescription = "Next",
+                            contentDescription = matchaStringResource(R.string.desc_next),
                             modifier = Modifier.size(32.dp),
                         )
                     }
@@ -581,7 +609,7 @@ fun FullPlayer(
                                 Player.REPEAT_MODE_ONE -> Icons.Default.RepeatOne
                                 else -> Icons.Default.Repeat
                             },
-                            contentDescription = "Repeat",
+                            contentDescription = matchaStringResource(R.string.desc_repeat),
                             tint = if (repeatMode != Player.REPEAT_MODE_OFF) MaterialTheme.colorScheme.primary else LocalContentColor.current,
                         )
                     }
@@ -625,17 +653,19 @@ fun FullPlayer(
                                 }
                             )
                         },
-                    color = MaterialTheme.colorScheme.surface,
-                    tonalElevation = 8.dp
+                    color = Color.Transparent,
+                    tonalElevation = 0.dp
                 ) {
-                    QueueView(
-                        queue = queue,
-                        currentTrackStableId = currentTrack.stableId,
-                        hidePlayedTracks = hidePlayedTracks,
-                        onTrackClick = onSkipToQueueItem,
-                        onRemove = onRemoveFromQueue,
-                        onMove = onMoveInQueue
-                    )
+                    ThemedPopupBackground {
+                        QueueView(
+                            queue = queue,
+                            currentTrackStableId = currentTrack.stableId,
+                            hidePlayedTracks = hidePlayedTracks,
+                            onTrackClick = onSkipToQueueItem,
+                            onRemove = onRemoveFromQueue,
+                            onMove = onMoveInQueue
+                        )
+                    }
                 }
             }
         }
@@ -716,6 +746,7 @@ fun QueueView(
     onRemove: (Int) -> Unit,
     onMove: (Int, Int) -> Unit
 ) {
+    val opaqueColorScheme = LocalOpaqueColorScheme.current
     val listState = rememberLazyListState()
     var draggedItemIndex by remember { mutableStateOf<Int?>(null) }
     var draggingOffset by remember { mutableStateOf(0f) }
@@ -738,7 +769,7 @@ fun QueueView(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                text = "Очередь воспроизведения",
+                text = matchaStringResource(R.string.title_queue),
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold
             )
@@ -781,7 +812,7 @@ fun QueueView(
                             .shadow(elevation)
                             .background(
                                 if (isPlaying) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f) 
-                                else MaterialTheme.colorScheme.surface
+                                else Color.Transparent
                             )
                             .clickable { onTrackClick(originalIndex) }
                             .padding(horizontal = 16.dp, vertical = 8.dp),
@@ -789,7 +820,7 @@ fun QueueView(
                     ) {
                         Icon(
                             imageVector = Icons.Default.DragHandle,
-                            contentDescription = "Перетащить",
+                            contentDescription = matchaStringResource(R.string.desc_drag),
                             modifier = Modifier
                                 .size(24.dp)
                                 .pointerInput(track.stableId) {
@@ -861,14 +892,15 @@ fun QueueView(
                                 overflow = TextOverflow.Ellipsis
                             )
                             Text(
-                                text = track.artist,
+                                text = if (track.isReady) track.artist else matchaStringResource(R.string.audio_converting),
                                 style = MaterialTheme.typography.bodySmall,
+                                color = if (track.isReady) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
                         }
                         IconButton(onClick = { onRemove(originalIndex) }) {
-                            Icon(Icons.Default.Close, contentDescription = "Удалить", modifier = Modifier.size(20.dp))
+                            Icon(Icons.Default.Close, contentDescription = matchaStringResource(R.string.action_delete), modifier = Modifier.size(20.dp))
                         }
                     }
                     HorizontalDivider(

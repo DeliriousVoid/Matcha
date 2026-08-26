@@ -1,5 +1,7 @@
 package com.deliriousvoid.openvkmatcha.data.repository
 
+import com.deliriousvoid.openvkmatcha.OpenVKMatchaApp
+import com.deliriousvoid.openvkmatcha.R
 import com.deliriousvoid.openvkmatcha.data.api.OpenVKApi
 import com.deliriousvoid.openvkmatcha.data.parser.JsonParsers
 import com.deliriousvoid.openvkmatcha.data.model.UserProfile
@@ -16,7 +18,10 @@ class ProfileRepository(private val api: OpenVKApi) {
 
     suspend fun loadCurrentUser() = api.callMethod(
         "users.get",
-        mapOf("fields" to userFields),
+        mapOf(
+            "user_ids" to "0",
+            "fields" to userFields
+        ),
     ).map { JsonParsers.parseCurrentUser(it) }
 
     suspend fun getProfileInfo() = api.callMethod("account.getProfileInfo")
@@ -104,7 +109,7 @@ class ProfileRepository(private val api: OpenVKApi) {
                 } else if (type == "group") {
                     loadProfileById(-objectId).getOrThrow()
                 } else {
-                    throw Exception("Не удалось разрешить имя")
+                    throw Exception(OpenVKMatchaApp.instance.languageManager.getStringOrDefault(R.string.error_resolve_name))
                 }
             }
         }

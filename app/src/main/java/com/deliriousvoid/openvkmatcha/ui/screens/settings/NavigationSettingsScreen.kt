@@ -1,5 +1,7 @@
 package com.deliriousvoid.openvkmatcha.ui.screens.settings
 
+import com.deliriousvoid.openvkmatcha.R
+import com.deliriousvoid.openvkmatcha.ui.util.matchaStringResource
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
@@ -48,9 +50,12 @@ fun NavigationSettingsScreen(
     val density = LocalDensity.current
     val haptic = LocalHapticFeedback.current
 
+    val titleLabel = matchaStringResource(R.string.nav_settings)
+    val resetLabel = matchaStringResource(R.string.reset)
+    
     DisposableEffect(Unit) {
         AppEvents.setTopBarState(TopBarState(
-            title = "Настройка навигации",
+            title = titleLabel,
             route = Routes.SETTINGS_NAVIGATION,
             actions = {
                 TextButton(onClick = {
@@ -60,7 +65,7 @@ fun NavigationSettingsScreen(
                 }) {
                     Icon(Icons.Default.Refresh, null)
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("Сброс")
+                    Text(resetLabel)
                 }
             }
         ))
@@ -76,13 +81,13 @@ fun NavigationSettingsScreen(
     ) {
         item {
             Text(
-                text = "Активные вкладки",
+                text = matchaStringResource(R.string.active_tabs),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(vertical = 16.dp)
             )
             Text(
-                text = "Перетаскивайте для изменения порядка. Минимум 3, максимум 5.",
+                text = matchaStringResource(R.string.nav_drag_desc),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(bottom = 8.dp)
@@ -144,7 +149,7 @@ fun NavigationSettingsScreen(
         if (availableTabs.isNotEmpty()) {
             item {
                 Text(
-                    text = "Доступные вкладки",
+                    text = matchaStringResource(R.string.available_tabs),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.padding(top = 24.dp, bottom = 16.dp)
@@ -226,7 +231,7 @@ fun DraggableTabItem(
             ) {
                 Icon(
                     imageVector = Icons.Default.DragHandle,
-                    contentDescription = "Перетащить",
+                    contentDescription = matchaStringResource(R.string.desc_drag),
                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
@@ -242,14 +247,14 @@ fun DraggableTabItem(
             Spacer(modifier = Modifier.width(16.dp))
 
             Text(
-                text = tab.title,
+                text = matchaStringResource(tab.titleRes),
                 modifier = Modifier.weight(1f),
                 style = MaterialTheme.typography.bodyLarge
             )
 
             if (canRemove) {
                 IconButton(onClick = onRemove) {
-                    Icon(Icons.Default.Close, contentDescription = "Удалить")
+                    Icon(Icons.Default.Close, contentDescription = matchaStringResource(R.string.action_delete))
                 }
             }
         }
@@ -283,7 +288,7 @@ fun AvailableTabItem(
             Spacer(modifier = Modifier.width(16.dp))
 
             Text(
-                text = tab.title,
+                text = matchaStringResource(tab.titleRes),
                 modifier = Modifier.weight(1f),
                 style = MaterialTheme.typography.bodyLarge
             )
@@ -294,7 +299,7 @@ fun AvailableTabItem(
             ) {
                 Icon(
                     Icons.Default.Add,
-                    contentDescription = "Добавить",
+                    contentDescription = matchaStringResource(R.string.action_add),
                     tint = if (canAdd) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
                 )
             }

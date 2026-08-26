@@ -1,5 +1,7 @@
 package com.deliriousvoid.openvkmatcha.ui.screens.profile
 
+import com.deliriousvoid.openvkmatcha.R
+import com.deliriousvoid.openvkmatcha.ui.util.matchaStringResource
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -27,7 +29,6 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
-import com.deliriousvoid.openvkmatcha.R
 import com.deliriousvoid.openvkmatcha.data.model.AttachmentType
 import com.deliriousvoid.openvkmatcha.data.model.PendingAttachment
 import com.deliriousvoid.openvkmatcha.ui.components.DocsPickerBottomSheet
@@ -84,10 +85,10 @@ fun CreatePostScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Новая запись") },
+                title = { Text(matchaStringResource(R.string.title_create_post)) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.Close, contentDescription = "Закрыть")
+                        Icon(Icons.Default.Close, contentDescription = matchaStringResource(R.string.close))
                     }
                 },
                 actions = {
@@ -103,7 +104,7 @@ fun CreatePostScreen(
                             onClick = { viewModel.post() },
                             enabled = state.inputText.isNotBlank() || state.pendingAttachments.isNotEmpty() || state.pollQuestion != null
                         ) {
-                            Text("Опубликовать", fontWeight = FontWeight.Bold)
+                            Text(matchaStringResource(R.string.publish), fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -137,7 +138,7 @@ fun CreatePostScreen(
                     .fillMaxWidth()
                     .weight(1f, fill = false)
                     .heightIn(min = 150.dp),
-                placeholder = { Text("Что у вас нового?") },
+                placeholder = { Text(matchaStringResource(R.string.whats_new)) },
                 keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
                 colors = TextFieldDefaults.colors(
                     focusedContainerColor = Color.Transparent,
@@ -165,12 +166,15 @@ fun CreatePostScreen(
             }
 
             if (state.latitude != null && state.longitude != null) {
+                val lat = state.latitude!!
+                val lon = state.longitude!!
+                val locationName = state.locationName
                 AssistChip(
                     onClick = { 
-                        tempLocationName = state.locationName ?: ""
+                        tempLocationName = locationName ?: ""
                         showLocationNameDialog = true 
                     },
-                    label = { Text(state.locationName ?: "Местоположение: ${"%.4f".format(state.latitude)}, ${"%.4f".format(state.longitude)}") },
+                    label = { Text(locationName ?: matchaStringResource(R.string.location_format, "%.4f".format(lat), "%.4f".format(lon))) },
                     leadingIcon = { Icon(Icons.Default.LocationOn, null, Modifier.size(18.dp)) },
                     trailingIcon = {
                         IconButton(onClick = { viewModel.setLocation(null, null) }, modifier = Modifier.size(18.dp)) {
@@ -182,9 +186,10 @@ fun CreatePostScreen(
             }
 
             if (state.pollQuestion != null) {
+                val pollQuestion = state.pollQuestion!!
                 AssistChip(
                     onClick = { showPollDialog = true },
-                    label = { Text("Опрос: ${state.pollQuestion}") },
+                    label = { Text(matchaStringResource(R.string.poll_label, pollQuestion)) },
                     leadingIcon = { Icon(Icons.Default.Poll, null, Modifier.size(18.dp)) },
                     trailingIcon = {
                         IconButton(onClick = { viewModel.removePoll() }, modifier = Modifier.size(18.dp)) {
@@ -196,12 +201,13 @@ fun CreatePostScreen(
             }
 
             if (state.copyright != null) {
+                val copyright = state.copyright!!
                 AssistChip(
                     onClick = { 
-                        tempSourceUrl = state.copyright ?: ""
+                        tempSourceUrl = copyright
                         showSourceDialog = true 
                     },
-                    label = { Text("Источник: ${state.copyright}") },
+                    label = { Text(matchaStringResource(R.string.source_label, copyright)) },
                     leadingIcon = { Icon(Icons.Default.Link, null, Modifier.size(18.dp)) },
                     trailingIcon = {
                         IconButton(onClick = { viewModel.updateCopyright(null) }, modifier = Modifier.size(18.dp)) {
@@ -221,35 +227,35 @@ fun CreatePostScreen(
                 horizontalArrangement = Arrangement.SpaceAround
             ) {
                 IconButton(onClick = { photoPicker.launch("image/*") }) {
-                    Icon(Icons.Default.PhotoCamera, "Фото", tint = MaterialTheme.colorScheme.primary)
+                    Icon(Icons.Default.PhotoCamera, matchaStringResource(R.string.attachment_photo), tint = MaterialTheme.colorScheme.primary)
                 }
                 IconButton(onClick = onOpenGraffiti) {
-                    Icon(Icons.Default.Gesture, "Граффити", tint = MaterialTheme.colorScheme.primary)
+                    Icon(Icons.Default.Gesture, matchaStringResource(R.string.graffiti), tint = MaterialTheme.colorScheme.primary)
                 }
                 if (state.isDeveloperMode) {
                     IconButton(onClick = { showVideoPicker = true }) {
-                        Icon(Icons.Default.PlayCircle, "Видео", tint = MaterialTheme.colorScheme.primary)
+                        Icon(Icons.Default.PlayCircle, matchaStringResource(R.string.attachment_video), tint = MaterialTheme.colorScheme.primary)
                     }
                 }
                 IconButton(onClick = { showMusicPicker = true }) {
-                    Icon(Icons.Default.MusicNote, "Аудио", tint = MaterialTheme.colorScheme.primary)
+                    Icon(Icons.Default.MusicNote, matchaStringResource(R.string.attachment_audio), tint = MaterialTheme.colorScheme.primary)
                 }
                 IconButton(onClick = { showPollDialog = true }) {
-                    Icon(Icons.Default.Poll, "Опрос", tint = MaterialTheme.colorScheme.primary)
+                    Icon(Icons.Default.Poll, matchaStringResource(R.string.poll), tint = MaterialTheme.colorScheme.primary)
                 }
                 if (state.isDeveloperMode) {
                     IconButton(onClick = { showDocsPicker = true }) {
-                        Icon(Icons.Default.Description, "Документ", tint = MaterialTheme.colorScheme.primary)
+                        Icon(Icons.Default.Description, matchaStringResource(R.string.attachment_document), tint = MaterialTheme.colorScheme.primary)
                     }
                     IconButton(onClick = { 
                         tempSourceUrl = state.copyright ?: ""
                         showSourceDialog = true 
                     }) {
-                        Icon(Icons.Default.Link, "Источник", tint = MaterialTheme.colorScheme.primary)
+                        Icon(Icons.Default.Link, matchaStringResource(R.string.source), tint = MaterialTheme.colorScheme.primary)
                     }
                 }
                 IconButton(onClick = { onOpenMap(state.latitude, state.longitude) }) {
-                    Icon(Icons.Default.LocationOn, "Местоположение", tint = MaterialTheme.colorScheme.primary)
+                    Icon(Icons.Default.LocationOn, matchaStringResource(R.string.geo_place), tint = MaterialTheme.colorScheme.primary)
                 }
             }
 
@@ -266,7 +272,7 @@ fun CreatePostScreen(
                             onCheckedChange = { viewModel.setFromGroup(it) }
                         )
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("От имени сообщества", style = MaterialTheme.typography.bodyMedium)
+                        Text(matchaStringResource(R.string.post_from_group), style = MaterialTheme.typography.bodyMedium)
                     }
                     if (state.fromGroup) {
                         Row(
@@ -280,7 +286,7 @@ fun CreatePostScreen(
                                 onCheckedChange = { viewModel.setSigned(it) }
                             )
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("Подпись автора", style = MaterialTheme.typography.bodyMedium)
+                            Text(matchaStringResource(R.string.author_signature), style = MaterialTheme.typography.bodyMedium)
                         }
                     }
 
@@ -295,7 +301,7 @@ fun CreatePostScreen(
                             onCheckedChange = { viewModel.setNsfw(it) }
                         )
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Пометить как NSFW", style = MaterialTheme.typography.bodyMedium)
+                        Text(matchaStringResource(R.string.mark_nsfw), style = MaterialTheme.typography.bodyMedium)
                     }
                 }
             } else {
@@ -311,7 +317,7 @@ fun CreatePostScreen(
                         onCheckedChange = { viewModel.setNsfw(it) }
                     )
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Пометить как NSFW", style = MaterialTheme.typography.bodyMedium)
+                    Text(matchaStringResource(R.string.mark_nsfw), style = MaterialTheme.typography.bodyMedium)
                 }
             }
         }
@@ -362,12 +368,12 @@ fun CreatePostScreen(
     if (showLocationNameDialog) {
         AlertDialog(
             onDismissRequest = { showLocationNameDialog = false },
-            title = { Text("Название места") },
+            title = { Text(matchaStringResource(R.string.place_name)) },
             text = {
                 OutlinedTextField(
                     value = tempLocationName,
                     onValueChange = { tempLocationName = it },
-                    label = { Text("Введите название") },
+                    label = { Text(matchaStringResource(R.string.enter_name)) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -377,12 +383,12 @@ fun CreatePostScreen(
                     viewModel.updateLocationName(tempLocationName.ifBlank { null })
                     showLocationNameDialog = false
                 }) {
-                    Text("OK")
+                    Text(matchaStringResource(R.string.action_ok))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showLocationNameDialog = false }) {
-                    Text("Отмена")
+                    Text(matchaStringResource(R.string.cancel))
                 }
             }
         )
@@ -391,12 +397,12 @@ fun CreatePostScreen(
     if (showSourceDialog) {
         AlertDialog(
             onDismissRequest = { showSourceDialog = false },
-            title = { Text("Источник") },
+            title = { Text(matchaStringResource(R.string.source)) },
             text = {
                 OutlinedTextField(
                     value = tempSourceUrl,
                     onValueChange = { tempSourceUrl = it },
-                    label = { Text("Введите ссылку") },
+                    label = { Text(matchaStringResource(R.string.enter_link)) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                     keyboardOptions = KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Uri)
@@ -407,12 +413,12 @@ fun CreatePostScreen(
                     viewModel.updateCopyright(tempSourceUrl.ifBlank { null })
                     showSourceDialog = false
                 }) {
-                    Text("OK")
+                    Text(matchaStringResource(R.string.action_ok))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showSourceDialog = false }) {
-                    Text("Отмена")
+                    Text(matchaStringResource(R.string.cancel))
                 }
             }
         )
@@ -456,7 +462,7 @@ fun PollCreationDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Опрос") },
+        title = { Text(matchaStringResource(R.string.poll)) },
         text = {
             Column(
                 modifier = Modifier
@@ -466,11 +472,11 @@ fun PollCreationDialog(
                 OutlinedTextField(
                     value = question,
                     onValueChange = { question = it },
-                    label = { Text("Тема опроса") },
+                    label = { Text(matchaStringResource(R.string.poll_question)) },
                     modifier = Modifier.fillMaxWidth()
                 )
                 Spacer(modifier = Modifier.height(16.dp))
-                Text("Варианты ответов", style = MaterialTheme.typography.titleSmall)
+                Text(matchaStringResource(R.string.answer_options), style = MaterialTheme.typography.titleSmall)
                 
                 answers.forEachIndexed { index, answer ->
                     Row(
@@ -484,7 +490,7 @@ fun PollCreationDialog(
                                 newAnswers[index] = it
                                 answers = newAnswers
                             },
-                            label = { Text("Вариант ${index + 1}") },
+                            label = { Text(matchaStringResource(R.string.answer_option_n, index + 1)) },
                             modifier = Modifier.weight(1f),
                             singleLine = true
                         )
@@ -511,7 +517,7 @@ fun PollCreationDialog(
                     ) {
                         Icon(Icons.Default.Add, null)
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Добавить вариант")
+                        Text(matchaStringResource(R.string.add_option))
                     }
                 }
 
@@ -521,26 +527,31 @@ fun PollCreationDialog(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Checkbox(checked = anonymous, onCheckedChange = { anonymous = it })
-                    Text("Анонимный опрос", style = MaterialTheme.typography.bodyMedium)
+                    Text(matchaStringResource(R.string.anonymous_poll), style = MaterialTheme.typography.bodyMedium)
                 }
                 Row(
                     modifier = Modifier.fillMaxWidth().clickable { multiple = !multiple },
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Checkbox(checked = multiple, onCheckedChange = { multiple = it })
-                    Text("Выбор нескольких вариантов", style = MaterialTheme.typography.bodyMedium)
+                    Text(matchaStringResource(R.string.multiple_choice), style = MaterialTheme.typography.bodyMedium)
                 }
                 Row(
                     modifier = Modifier.fillMaxWidth().clickable { disableUnvote = !disableUnvote },
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Checkbox(checked = disableUnvote, onCheckedChange = { disableUnvote = it })
-                    Text("Запретить отмену голоса", style = MaterialTheme.typography.bodyMedium)
+                    Text(matchaStringResource(R.string.disable_unvote), style = MaterialTheme.typography.bodyMedium)
                 }
 
                 Spacer(modifier = Modifier.height(8.dp))
-                Text("Срок опроса", style = MaterialTheme.typography.titleSmall)
-                val options = listOf("Без ограничений", "1 час", "1 день", "1 неделя")
+                Text(matchaStringResource(R.string.poll_duration), style = MaterialTheme.typography.titleSmall)
+                val options = listOf(
+                    matchaStringResource(R.string.no_limit),
+                    matchaStringResource(R.string.one_hour),
+                    matchaStringResource(R.string.one_day),
+                    matchaStringResource(R.string.one_week)
+                )
                 options.forEachIndexed { index, option ->
                     Row(
                         modifier = Modifier.fillMaxWidth().clickable { endDateOption = index },
@@ -570,12 +581,12 @@ fun PollCreationDialog(
                 },
                 enabled = question.trim().isNotBlank() && answers.count { it.trim().isNotBlank() } >= 2
             ) {
-                Text("Создать")
+                Text(matchaStringResource(R.string.create))
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Отмена")
+                Text(matchaStringResource(R.string.cancel))
             }
         }
     )

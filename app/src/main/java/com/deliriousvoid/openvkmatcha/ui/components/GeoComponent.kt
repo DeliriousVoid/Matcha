@@ -16,7 +16,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.deliriousvoid.openvkmatcha.R
 import com.deliriousvoid.openvkmatcha.data.model.Geo
+import com.deliriousvoid.openvkmatcha.ui.util.matchaStringResource
 
 @Composable
 fun GeoComponent(
@@ -27,16 +29,16 @@ fun GeoComponent(
     val place = geo.place
     val title = place?.title?.takeIf { it.isNotBlank() }
         ?: if (!geo.coordinates.isNullOrBlank()) {
-            "Местоположение: ${geo.coordinates}"
+            matchaStringResource(R.string.location_label) + ": ${geo.coordinates}"
         } else {
-            "Местоположение"
+            matchaStringResource(R.string.location_label)
         }
     
     val addressParts = mutableListOf<String>()
     if (place != null) {
         // If title is "Место" or coordinates, try to use city/address as secondary info
         // Otherwise only add if they differ from title
-        val isGenericTitle = title == "Место" || title.startsWith("Местоположение")
+        val isGenericTitle = title == matchaStringResource(R.string.geo_place) || title.startsWith(matchaStringResource(R.string.location_label))
         
         place.city?.takeIf { it.isNotBlank() && (isGenericTitle || it != title) }?.let { addressParts.add(it) }
         place.address?.takeIf { it.isNotBlank() && (isGenericTitle || it != title) }?.let { addressParts.add(it) }

@@ -38,6 +38,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.deliriousvoid.openvkmatcha.R
+import com.deliriousvoid.openvkmatcha.ui.util.matchaStringResource
 import com.deliriousvoid.openvkmatcha.data.model.UserProfile
 import com.deliriousvoid.openvkmatcha.ui.components.EmptyState
 import com.deliriousvoid.openvkmatcha.ui.components.ErrorText
@@ -61,10 +63,15 @@ fun FriendsScreen(
     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
     val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
 
+    val friendsLabel = matchaStringResource(R.string.friends)
+    val onlineLabel = matchaStringResource(R.string.online)
+    val requestsLabel = matchaStringResource(R.string.requests)
+    val followersLabel = matchaStringResource(R.string.followers)
+
     val tabs = if (state.isMe) {
-        listOf("Друзья", "Онлайн", "Заявки")
+        listOf(friendsLabel, onlineLabel, requestsLabel)
     } else {
-        listOf("Друзья", "Онлайн", "Подписчики")
+        listOf(friendsLabel, onlineLabel, followersLabel)
     }
 
     LaunchedEffect(selectedTab) {
@@ -150,12 +157,12 @@ fun FriendsScreen(
                     if (listToDisplay.isEmpty()) {
                         EmptyState(
                             message = if (state.searchQuery.isNotEmpty()) {
-                                "Ничего не найдено"
+                                matchaStringResource(R.string.nothing_found)
                             } else {
                                 when (selectedTab) {
-                                    0 -> "Список друзей пуст"
-                                    1 -> "Никого нет в сети"
-                                    2 -> if (state.isMe) "У вас нет новых заявок" else "Список подписчиков пуст"
+                                    0 -> matchaStringResource(R.string.friends_empty)
+                                    1 -> matchaStringResource(R.string.nobody_online)
+                                    2 -> if (state.isMe) matchaStringResource(R.string.no_new_requests) else matchaStringResource(R.string.followers_empty)
                                     else -> ""
                                 }
                             },
@@ -179,12 +186,12 @@ fun FriendsScreen(
                                         } else if (selectedTab == 2 && state.isMe) {
                                             Row {
                                                 IconButton(onClick = { viewModel.acceptRequest(user) }) {
-                                                    Icon(Icons.Default.Check, "Принять", tint = MaterialTheme.colorScheme.primary)
+                                                    Icon(Icons.Default.Check, matchaStringResource(R.string.action_accept), tint = MaterialTheme.colorScheme.primary)
                                                 }
                                                 IconButton(onClick = { viewModel.deleteFriend(user) }) {
                                                     Icon(
                                                         imageVector = Icons.Default.Close, 
-                                                        contentDescription = "Отклонить", 
+                                                        contentDescription = matchaStringResource(R.string.action_decline), 
                                                         tint = androidx.compose.ui.graphics.Color.Red
                                                     )
                                                 }

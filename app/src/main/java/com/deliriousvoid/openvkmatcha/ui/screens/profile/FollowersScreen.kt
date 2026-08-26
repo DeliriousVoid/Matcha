@@ -12,6 +12,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.deliriousvoid.openvkmatcha.R
+import com.deliriousvoid.openvkmatcha.ui.util.matchaStringResource
 import com.deliriousvoid.openvkmatcha.ui.components.EmptyState
 import com.deliriousvoid.openvkmatcha.ui.components.ErrorText
 import com.deliriousvoid.openvkmatcha.ui.components.LoadingBox
@@ -63,7 +65,7 @@ fun FollowersScreen(
                 onRetry = { viewModel.loadFollowers(isRefresh = true) }
             )
             state.users.isEmpty() -> EmptyState(
-                message = "Список пуст",
+                message = matchaStringResource(R.string.list_empty),
                 modifier = Modifier.fillMaxSize()
             )
             else -> {

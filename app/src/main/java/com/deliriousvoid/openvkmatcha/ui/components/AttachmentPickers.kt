@@ -24,10 +24,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
+import com.deliriousvoid.openvkmatcha.R
 import com.deliriousvoid.openvkmatcha.data.model.Document
 import com.deliriousvoid.openvkmatcha.data.model.Video
+import com.deliriousvoid.openvkmatcha.ui.theme.LocalOpaqueColorScheme
 import com.deliriousvoid.openvkmatcha.ui.util.formatDuration
 import com.deliriousvoid.openvkmatcha.ui.util.formatFileSize
+import com.deliriousvoid.openvkmatcha.ui.util.matchaStringResource
 import com.deliriousvoid.openvkmatcha.ui.viewmodel.DocsPickerViewModel
 import com.deliriousvoid.openvkmatcha.ui.viewmodel.VideoPickerViewModel
 
@@ -39,6 +42,7 @@ fun VideoPickerBottomSheet(
     viewModel: VideoPickerViewModel = viewModel(factory = VideoPickerViewModel.factory())
 ) {
     val state by viewModel.uiState.collectAsState()
+    val opaqueColorScheme = LocalOpaqueColorScheme.current
     val listState = rememberLazyListState()
     var showUpload by remember { mutableStateOf(false) }
     
@@ -59,51 +63,54 @@ fun VideoPickerBottomSheet(
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = Color.Transparent
     ) {
-        Column(modifier = Modifier.fillMaxHeight(0.8f).padding(horizontal = 16.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "Выбор видео",
-                    style = MaterialTheme.typography.titleLarge
-                )
-                Button(onClick = { showUpload = true }) {
-                    Icon(Icons.Default.Upload, null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text("Загрузить")
+        ThemedPopupBackground {
+            Column(modifier = Modifier.fillMaxHeight(0.8f).padding(horizontal = 16.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = matchaStringResource(R.string.title_video_picker),
+                        style = MaterialTheme.typography.titleLarge
+                    )
+                    Button(onClick = { showUpload = true }) {
+                        Icon(Icons.Default.Upload, null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text(matchaStringResource(R.string.action_upload))
+                    }
                 }
-            }
-            
-            OutlinedTextField(
-                value = state.searchQuery,
-                onValueChange = { viewModel.updateSearchQuery(it) },
-                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-                placeholder = { Text("Поиск...") },
-                leadingIcon = { Icon(Icons.Default.Search, null) },
-                singleLine = true
-            )
+                
+                OutlinedTextField(
+                    value = state.searchQuery,
+                    onValueChange = { viewModel.updateSearchQuery(it) },
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                    placeholder = { Text(matchaStringResource(R.string.search_placeholder)) },
+                    leadingIcon = { Icon(Icons.Default.Search, null) },
+                    singleLine = true
+                )
 
-            Box(modifier = Modifier.weight(1f)) {
-                if (state.isLoading && state.videos.isEmpty()) {
-                    LoadingBox(modifier = Modifier.fillMaxSize())
-                } else {
-                    LazyColumn(
-                        state = listState,
-                        modifier = Modifier.fillMaxSize()
-                    ) {
-                        items(state.videos) { video ->
-                            VideoPickerItem(
-                                video = video,
-                                onClick = { onVideoSelect(video) }
-                            )
-                            HorizontalDivider(modifier = Modifier.padding(start = 120.dp))
-                        }
-                        if (state.isLoadingMore) {
-                            item { LoadingBox(modifier = Modifier.padding(16.dp)) }
+                Box(modifier = Modifier.weight(1f)) {
+                    if (state.isLoading && state.videos.isEmpty()) {
+                        LoadingBox(modifier = Modifier.fillMaxSize())
+                    } else {
+                        LazyColumn(
+                            state = listState,
+                            modifier = Modifier.fillMaxSize()
+                        ) {
+                            items(state.videos) { video ->
+                                VideoPickerItem(
+                                    video = video,
+                                    onClick = { onVideoSelect(video) }
+                                )
+                                HorizontalDivider(modifier = Modifier.padding(start = 120.dp))
+                            }
+                            if (state.isLoadingMore) {
+                                item { LoadingBox(modifier = Modifier.padding(16.dp)) }
+                            }
                         }
                     }
                 }
@@ -178,6 +185,7 @@ fun DocsPickerBottomSheet(
     viewModel: DocsPickerViewModel = viewModel(factory = DocsPickerViewModel.factory())
 ) {
     val state by viewModel.uiState.collectAsState()
+    val opaqueColorScheme = LocalOpaqueColorScheme.current
     val listState = rememberLazyListState()
     var showUpload by remember { mutableStateOf(false) }
     
@@ -198,51 +206,54 @@ fun DocsPickerBottomSheet(
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = Color.Transparent
     ) {
-        Column(modifier = Modifier.fillMaxHeight(0.8f).padding(horizontal = 16.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "Выбор документа",
-                    style = MaterialTheme.typography.titleLarge
-                )
-                Button(onClick = { showUpload = true }) {
-                    Icon(Icons.Default.Upload, null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text("Загрузить")
+        ThemedPopupBackground {
+            Column(modifier = Modifier.fillMaxHeight(0.8f).padding(horizontal = 16.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = matchaStringResource(R.string.title_doc_picker),
+                        style = MaterialTheme.typography.titleLarge
+                    )
+                    Button(onClick = { showUpload = true }) {
+                        Icon(Icons.Default.Upload, null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text(matchaStringResource(R.string.action_upload))
+                    }
                 }
-            }
-            
-            OutlinedTextField(
-                value = state.searchQuery,
-                onValueChange = { viewModel.updateSearchQuery(it) },
-                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-                placeholder = { Text("Поиск...") },
-                leadingIcon = { Icon(Icons.Default.Search, null) },
-                singleLine = true
-            )
+                
+                OutlinedTextField(
+                    value = state.searchQuery,
+                    onValueChange = { viewModel.updateSearchQuery(it) },
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                    placeholder = { Text(matchaStringResource(R.string.search_placeholder)) },
+                    leadingIcon = { Icon(Icons.Default.Search, null) },
+                    singleLine = true
+                )
 
-            Box(modifier = Modifier.weight(1f)) {
-                if (state.isLoading && state.docs.isEmpty()) {
-                    LoadingBox(modifier = Modifier.fillMaxSize())
-                } else {
-                    LazyColumn(
-                        state = listState,
-                        modifier = Modifier.fillMaxSize()
-                    ) {
-                        items(state.docs) { doc ->
-                            DocumentItem(
-                                document = doc,
-                                onClick = { onDocSelect(doc) }
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
-                        }
-                        if (state.isLoadingMore) {
-                            item { LoadingBox(modifier = Modifier.padding(16.dp)) }
+                Box(modifier = Modifier.weight(1f)) {
+                    if (state.isLoading && state.docs.isEmpty()) {
+                        LoadingBox(modifier = Modifier.fillMaxSize())
+                    } else {
+                        LazyColumn(
+                            state = listState,
+                            modifier = Modifier.fillMaxSize()
+                        ) {
+                            items(state.docs) { doc ->
+                                DocumentItem(
+                                    document = doc,
+                                    onClick = { onDocSelect(doc) }
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                            }
+                            if (state.isLoadingMore) {
+                                item { LoadingBox(modifier = Modifier.padding(16.dp)) }
+                            }
                         }
                     }
                 }
@@ -267,26 +278,30 @@ fun WebViewBottomSheet(
     url: String,
     onDismiss: () -> Unit
 ) {
+    val opaqueColorScheme = LocalOpaqueColorScheme.current
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = Color.Transparent
     ) {
-        Box(modifier = Modifier.fillMaxSize()) {
-            AndroidView(
-                factory = { context ->
-                    WebView(context).apply {
-                        webViewClient = WebViewClient()
-                        settings.javaScriptEnabled = true
-                        loadUrl(url)
-                    }
-                },
-                modifier = Modifier.fillMaxSize()
-            )
-            IconButton(
-                onClick = onDismiss,
-                modifier = Modifier.align(Alignment.TopEnd).padding(8.dp).background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
-            ) {
-                Icon(Icons.Default.Close, null, tint = Color.White)
+        ThemedPopupBackground {
+            Box(modifier = Modifier.fillMaxSize()) {
+                AndroidView(
+                    factory = { context ->
+                        WebView(context).apply {
+                            webViewClient = WebViewClient()
+                            settings.javaScriptEnabled = true
+                            loadUrl(url)
+                        }
+                    },
+                    modifier = Modifier.fillMaxSize()
+                )
+                IconButton(
+                    onClick = onDismiss,
+                    modifier = Modifier.align(Alignment.TopEnd).padding(8.dp).background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                ) {
+                    Icon(Icons.Default.Close, null, tint = Color.White)
+                }
             }
         }
     }

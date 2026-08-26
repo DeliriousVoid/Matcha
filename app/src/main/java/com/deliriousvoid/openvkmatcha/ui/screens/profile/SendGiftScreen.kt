@@ -22,9 +22,14 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
+import com.deliriousvoid.openvkmatcha.OpenVKMatchaApp
+import com.deliriousvoid.openvkmatcha.R
+import com.deliriousvoid.openvkmatcha.ui.theme.LocalOpaqueColorScheme
 import com.deliriousvoid.openvkmatcha.ui.navigation.Routes
 import com.deliriousvoid.openvkmatcha.data.model.SelectableGift
 import com.deliriousvoid.openvkmatcha.ui.components.LoadingBox
+import com.deliriousvoid.openvkmatcha.ui.components.ThemedPopupBackground
+import com.deliriousvoid.openvkmatcha.ui.util.matchaStringResource
 import com.deliriousvoid.openvkmatcha.ui.viewmodel.SendGiftViewModel
 
 import androidx.compose.runtime.DisposableEffect
@@ -40,11 +45,13 @@ fun SendGiftScreen(
     viewModel: SendGiftViewModel = viewModel(factory = SendGiftViewModel.factory(userId))
 ) {
     val state by viewModel.uiState.collectAsState()
+    val opaqueColorScheme = LocalOpaqueColorScheme.current
     var showFriendPicker by remember { mutableStateOf(false) }
     var showGiftPicker by remember { mutableStateOf(false) }
+    val title = matchaStringResource(R.string.action_send_gift)
 
     DisposableEffect(Unit) {
-        AppEvents.setTopBarState(TopBarState(title = "Отправить подарок", route = Routes.SEND_GIFT))
+        AppEvents.setTopBarState(TopBarState(title = title, route = Routes.SEND_GIFT))
         onDispose {
             AppEvents.setTopBarState(null)
         }
@@ -95,8 +102,8 @@ fun SendGiftScreen(
                     }
                     Spacer(modifier = Modifier.width(12.dp))
                     Column(modifier = Modifier.weight(1f)) {
-                        Text("Получатель", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
-                        Text(selectedFriend?.fullName ?: "Нажмите, чтобы выбрать", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                        Text(matchaStringResource(R.string.gift_recipient), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                        Text(selectedFriend?.fullName ?: matchaStringResource(R.string.gift_choose_hint), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
                     }
                     Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
@@ -128,7 +135,7 @@ fun SendGiftScreen(
                         )
                         if (state.selectedGift!!.left != null && state.selectedGift!!.left!! > 0) {
                             Text(
-                                text = "Осталось: ${state.selectedGift!!.left}",
+                                text = matchaStringResource(R.string.gift_left_format, state.selectedGift!!.left!!),
                                 style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.primary
                             )
@@ -153,7 +160,7 @@ fun SendGiftScreen(
                             )
                             Spacer(modifier = Modifier.height(8.dp))
                             Text(
-                                "Нажмите для\nвыбора подарка",
+                                matchaStringResource(R.string.gift_choose_picker_hint),
                                 textAlign = TextAlign.Center,
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -171,7 +178,7 @@ fun SendGiftScreen(
                 OutlinedTextField(
                     value = state.message,
                     onValueChange = { viewModel.setMessage(it) },
-                    label = { Text("Сообщение") },
+                    label = { Text(matchaStringResource(R.string.chat_input_placeholder)) },
                     modifier = Modifier.fillMaxWidth(),
                     minLines = 2,
                     maxLines = 4,
@@ -188,8 +195,8 @@ fun SendGiftScreen(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Column {
-                        Text("Анонимно", style = MaterialTheme.typography.bodyLarge)
-                        Text("Скрыть моё имя от всех", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(matchaStringResource(R.string.gift_anonymous_label), style = MaterialTheme.typography.bodyLarge)
+                        Text(matchaStringResource(R.string.gift_anonymous_desc), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Switch(
                         checked = state.isAnonymous,
@@ -217,7 +224,7 @@ fun SendGiftScreen(
                     if (state.isLoading) {
                         CircularProgressIndicator(modifier = Modifier.size(24.dp), color = MaterialTheme.colorScheme.onPrimary, strokeWidth = 2.dp)
                     } else {
-                        Text("Отправить", style = MaterialTheme.typography.titleMedium)
+                        Text(matchaStringResource(R.string.action_send), style = MaterialTheme.typography.titleMedium)
                     }
                 }
             }
@@ -227,34 +234,37 @@ fun SendGiftScreen(
     if (showFriendPicker) {
         ModalBottomSheet(
             onDismissRequest = { showFriendPicker = false },
-            dragHandle = { BottomSheetDefaults.DragHandle() }
+            dragHandle = { BottomSheetDefaults.DragHandle() },
+            containerColor = Color.Transparent
         ) {
-            Column(modifier = Modifier.fillMaxHeight(0.7f).padding(horizontal = 16.dp)) {
-                Text(
-                    "Кому отправить?",
-                    style = MaterialTheme.typography.titleLarge,
-                    modifier = Modifier.padding(bottom = 16.dp)
-                )
-                androidx.compose.foundation.lazy.LazyColumn(modifier = Modifier.fillMaxWidth()) {
-                    items(state.friends) { friend ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    viewModel.selectUser(friend.id)
-                                    showFriendPicker = false
-                                }
-                                .padding(vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            AsyncImage(
-                                model = friend.photo200,
-                                contentDescription = null,
-                                modifier = Modifier.size(48.dp).clip(CircleShape),
-                                contentScale = ContentScale.Crop
-                            )
-                            Spacer(modifier = Modifier.width(16.dp))
-                            Text(friend.fullName, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+            ThemedPopupBackground {
+                Column(modifier = Modifier.fillMaxHeight(0.7f).padding(horizontal = 16.dp)) {
+                    Text(
+                        matchaStringResource(R.string.gift_who_to_send),
+                        style = MaterialTheme.typography.titleLarge,
+                        modifier = Modifier.padding(bottom = 16.dp)
+                    )
+                    androidx.compose.foundation.lazy.LazyColumn(modifier = Modifier.fillMaxWidth()) {
+                        items(state.friends) { friend ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        viewModel.selectUser(friend.id)
+                                        showFriendPicker = false
+                                    }
+                                    .padding(vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                AsyncImage(
+                                    model = friend.photo200,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(48.dp).clip(CircleShape),
+                                    contentScale = ContentScale.Crop
+                                )
+                                Spacer(modifier = Modifier.width(16.dp))
+                                Text(friend.fullName, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                            }
                         }
                     }
                 }
@@ -265,71 +275,78 @@ fun SendGiftScreen(
     if (showGiftPicker) {
         ModalBottomSheet(
             onDismissRequest = { showGiftPicker = false },
-            dragHandle = { BottomSheetDefaults.DragHandle() }
+            dragHandle = { BottomSheetDefaults.DragHandle() },
+            containerColor = Color.Transparent
         ) {
-            Column(modifier = Modifier.fillMaxHeight(0.8f)) {
-                Text(
-                    "Выберите подарок",
-                    style = MaterialTheme.typography.titleLarge,
-                    modifier = Modifier.padding(16.dp)
-                )
-                if (state.isLoading) {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        LoadingBox()
-                    }
-                } else {
-                    androidx.compose.foundation.lazy.LazyColumn(
-                        modifier = Modifier.fillMaxSize(),
-                        verticalArrangement = Arrangement.spacedBy(24.dp),
-                        contentPadding = PaddingValues(bottom = 32.dp)
-                    ) {
-                        items(state.categoriesWithGifts) { item ->
-                            Column {
-                                Text(
-                                    text = item.category.title,
-                                    style = MaterialTheme.typography.titleMedium,
-                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                                    fontWeight = FontWeight.Bold
-                                )
-                                LazyRow(
-                                    contentPadding = PaddingValues(horizontal = 16.dp),
-                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                                ) {
-                                    items(item.gifts) { gift ->
-                                        Column(
-                                            horizontalAlignment = Alignment.CenterHorizontally,
-                                            modifier = Modifier
-                                                .width(100.dp)
-                                                .clickable {
-                                                    viewModel.selectGift(gift)
-                                                    showGiftPicker = false
-                                                }
-                                        ) {
-                                            Box(
+            ThemedPopupBackground {
+                Column(modifier = Modifier.fillMaxHeight(0.8f)) {
+                    Text(
+                        matchaStringResource(R.string.gift_select_title),
+                        style = MaterialTheme.typography.titleLarge,
+                        modifier = Modifier.padding(16.dp)
+                    )
+                    if (state.isLoading) {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            LoadingBox()
+                        }
+                    } else {
+                        androidx.compose.foundation.lazy.LazyColumn(
+                            modifier = Modifier.fillMaxSize(),
+                            verticalArrangement = Arrangement.spacedBy(24.dp),
+                            contentPadding = PaddingValues(bottom = 32.dp)
+                        ) {
+                            items(state.categoriesWithGifts) { item ->
+                                Column {
+                                    Text(
+                                        text = item.category.title,
+                                        style = MaterialTheme.typography.titleMedium,
+                                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    LazyRow(
+                                        contentPadding = PaddingValues(horizontal = 16.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                    ) {
+                                        items(item.gifts) { gift ->
+                                            Column(
+                                                horizontalAlignment = Alignment.CenterHorizontally,
                                                 modifier = Modifier
-                                                    .size(100.dp)
-                                                    .clip(RoundedCornerShape(12.dp))
-                                                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
-                                                contentAlignment = Alignment.Center
+                                                    .width(100.dp)
+                                                    .clickable {
+                                                        viewModel.selectGift(gift)
+                                                        showGiftPicker = false
+                                                    }
                                             ) {
-                                                AsyncImage(
-                                                    model = gift.thumb256,
-                                                    contentDescription = null,
-                                                    modifier = Modifier.fillMaxSize().padding(8.dp),
-                                                    contentScale = ContentScale.Fit
+                                                Box(
+                                                    modifier = Modifier
+                                                        .size(100.dp)
+                                                        .clip(RoundedCornerShape(12.dp))
+                                                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    AsyncImage(
+                                                        model = gift.thumb256,
+                                                        contentDescription = null,
+                                                        modifier = Modifier.fillMaxSize().padding(8.dp),
+                                                        contentScale = ContentScale.Fit
+                                                    )
+                                                }
+                                                Spacer(modifier = Modifier.height(4.dp))
+                                                val priceText = getPriceText(gift)
+                                                val outOfStock = matchaStringResource(R.string.gift_out_of_stock)
+                                                val leftPrefix = matchaStringResource(R.string.gift_left_format, 0).split(":")[0]
+                                                val isFree = matchaStringResource(R.string.gift_free)
+                                                
+                                                Text(
+                                                    text = priceText,
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = if (priceText.startsWith(leftPrefix) || priceText == outOfStock) Color.Red.copy(alpha = 0.7f) 
+                                                            else if (priceText == isFree) MaterialTheme.colorScheme.primary 
+                                                            else MaterialTheme.colorScheme.onSurfaceVariant,
+                                                    maxLines = 1,
+                                                    textAlign = TextAlign.Center
                                                 )
                                             }
-                                            Spacer(modifier = Modifier.height(4.dp))
-                                            val priceText = getPriceText(gift)
-                                            Text(
-                                                text = priceText,
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = if (priceText.startsWith("Осталось") || priceText == "Закончились") Color.Red.copy(alpha = 0.7f) 
-                                                        else if (priceText == "Бесплатно") MaterialTheme.colorScheme.primary 
-                                                        else MaterialTheme.colorScheme.onSurfaceVariant,
-                                                maxLines = 1,
-                                                textAlign = TextAlign.Center
-                                            )
                                         }
                                     }
                                 }
@@ -348,10 +365,10 @@ private fun getPriceText(gift: SelectableGift): String {
     val price = gift.price ?: 0
 
     return when {
-        hasLimit && left > 0 -> "Осталось: $left"
-        hasLimit && left == 0 && price == 0 -> "Закончились"
+        hasLimit && left > 0 -> OpenVKMatchaApp.instance.languageManager.getStringOrDefault(R.string.gift_left_format, left)
+        hasLimit && left == 0 && price == 0 -> OpenVKMatchaApp.instance.languageManager.getStringOrDefault(R.string.gift_out_of_stock)
         gift.priceStr != null -> gift.priceStr!!
-        price == 0 -> "Бесплатно"
+        price == 0 -> OpenVKMatchaApp.instance.languageManager.getStringOrDefault(R.string.gift_free)
         else -> "$price ${StringUtils.getGolosString(price)}"
     }
 }

@@ -39,6 +39,8 @@ import androidx.compose.ui.platform.LocalContext
 import android.content.res.Configuration
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import com.deliriousvoid.openvkmatcha.R
+import com.deliriousvoid.openvkmatcha.ui.util.matchaStringResource
 import java.io.File
 import java.io.FileOutputStream
 
@@ -91,10 +93,10 @@ fun GraffitiScreen(
 
     val topBar = @Composable {
         TopAppBar(
-            title = { if (!isLandscape) Text("Рисование") },
+            title = { if (!isLandscape) Text(matchaStringResource(R.string.graffiti_title)) },
             navigationIcon = {
                 IconButton(onClick = onBack) {
-                    Icon(Icons.Default.Close, "Отмена")
+                    Icon(Icons.Default.Close, matchaStringResource(R.string.cancel))
                 }
             },
             actions = {
@@ -102,10 +104,10 @@ fun GraffitiScreen(
                     onClick = { if (lines.isNotEmpty()) lines.removeAt(lines.size - 1) },
                     enabled = lines.isNotEmpty()
                 ) {
-                    Icon(Icons.AutoMirrored.Filled.Undo, "Отмена действия")
+                    Icon(Icons.AutoMirrored.Filled.Undo, matchaStringResource(R.string.graffiti_undo))
                 }
                 IconButton(onClick = { lines.clear() }) {
-                    Icon(Icons.Default.Delete, "Очистить")
+                    Icon(Icons.Default.Delete, matchaStringResource(R.string.desc_clear))
                 }
                 IconButton(
                     onClick = {
@@ -142,7 +144,7 @@ fun GraffitiScreen(
                     },
                     enabled = lines.isNotEmpty()
                 ) {
-                    Icon(Icons.Default.Check, "Готово")
+                    Icon(Icons.Default.Check, matchaStringResource(R.string.action_save))
                 }
             },
             colors = TopAppBarDefaults.topAppBarColors(
@@ -177,7 +179,7 @@ fun GraffitiScreen(
                                 .width(100.dp)
                         )
                     }
-                    Text("Вес", style = MaterialTheme.typography.labelSmall)
+                    Text(matchaStringResource(R.string.graffiti_weight), style = MaterialTheme.typography.labelSmall)
                     
                     Spacer(modifier = Modifier.height(16.dp))
                     
@@ -221,7 +223,7 @@ fun GraffitiScreen(
             } else {
                 Column(modifier = Modifier.padding(padding)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Толщина:", style = MaterialTheme.typography.bodyMedium)
+                        Text(matchaStringResource(R.string.graffiti_thickness), style = MaterialTheme.typography.bodyMedium)
                         Slider(
                             value = currentStrokeWidth,
                             onValueChange = { currentStrokeWidth = it },
@@ -420,7 +422,7 @@ fun ColorPickerDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Выбор цвета") },
+        title = { Text(matchaStringResource(R.string.color_picker_title)) },
         text = {
             Column {
                 Box(
@@ -433,19 +435,19 @@ fun ColorPickerDialog(
                 
                 Spacer(modifier = Modifier.height(16.dp))
                 
-                ColorSlider(label = "Красный", value = red, onValueChange = { red = it }, color = Color.Red)
-                ColorSlider(label = "Зеленый", value = green, onValueChange = { green = it }, color = Color.Green)
-                ColorSlider(label = "Синий", value = blue, onValueChange = { blue = it }, color = Color.Blue)
+                ColorSlider(label = matchaStringResource(R.string.color_red), value = red, onValueChange = { red = it }, color = Color.Red)
+                ColorSlider(label = matchaStringResource(R.string.color_green), value = green, onValueChange = { green = it }, color = Color.Green)
+                ColorSlider(label = matchaStringResource(R.string.color_blue), value = blue, onValueChange = { blue = it }, color = Color.Blue)
             }
         },
         confirmButton = {
             TextButton(onClick = { onColorSelected(Color(red / 255f, green / 255f, blue / 255f)) }) {
-                Text("Выбрать")
+                Text(matchaStringResource(R.string.action_select))
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Отмена")
+                Text(matchaStringResource(R.string.cancel))
             }
         }
     )

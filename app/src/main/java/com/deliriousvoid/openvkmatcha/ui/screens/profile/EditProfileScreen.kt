@@ -55,6 +55,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.deliriousvoid.openvkmatcha.ui.navigation.Routes
 import com.deliriousvoid.openvkmatcha.OpenVKMatchaApp
+import com.deliriousvoid.openvkmatcha.R
+import com.deliriousvoid.openvkmatcha.ui.util.matchaStringResource
 import com.deliriousvoid.openvkmatcha.ui.components.ErrorText
 import com.deliriousvoid.openvkmatcha.ui.components.LoadingBox
 import com.deliriousvoid.openvkmatcha.ui.viewmodel.EditProfileTab
@@ -64,7 +66,6 @@ import com.deliriousvoid.openvkmatcha.ui.viewmodel.EditProfileViewModel
 import androidx.compose.runtime.DisposableEffect
 import com.deliriousvoid.openvkmatcha.util.AppEvents
 import com.deliriousvoid.openvkmatcha.util.TopBarState
-import androidx.compose.ui.graphics.Color
 import androidx.compose.material3.Surface
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -75,6 +76,8 @@ fun EditProfileScreen(
 ) {
     val state by viewModel.uiState.collectAsState()
     val baseUrl = OpenVKMatchaApp.instance.api.baseUrl
+    val title = matchaStringResource(R.string.title_edit_profile)
+    val descBack = matchaStringResource(R.string.desc_back)
 
     DisposableEffect(state.currentTab) {
         AppEvents.setTopBarState(TopBarState(
@@ -83,12 +86,12 @@ fun EditProfileScreen(
                 Surface(color = MaterialTheme.colorScheme.surface, tonalElevation = 3.dp) {
                     Column {
                         CenterAlignedTopAppBar(
-                            title = { Text("Редактирование профиля") },
+                            title = { Text(title) },
                             navigationIcon = {
                                 IconButton(onClick = onBack) {
                                     Icon(
                                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                        contentDescription = "Назад"
+                                        contentDescription = descBack
                                     )
                                 }
                             }
@@ -97,22 +100,22 @@ fun EditProfileScreen(
                             Tab(
                                 selected = state.currentTab == EditProfileTab.MAIN,
                                 onClick = { viewModel.setTab(EditProfileTab.MAIN) },
-                                text = { Text("Основное") }
+                                text = { Text(matchaStringResource(R.string.edit_profile_main)) }
                             )
                             Tab(
                                 selected = state.currentTab == EditProfileTab.CONTACTS,
                                 onClick = { viewModel.setTab(EditProfileTab.CONTACTS) },
-                                text = { Text("Контакты") }
+                                text = { Text(matchaStringResource(R.string.edit_profile_contacts)) }
                             )
                             Tab(
                                 selected = state.currentTab == EditProfileTab.INTERESTS,
                                 onClick = { viewModel.setTab(EditProfileTab.INTERESTS) },
-                                text = { Text("Интересы") }
+                                text = { Text(matchaStringResource(R.string.edit_profile_interests)) }
                             )
                             Tab(
                                 selected = state.currentTab == EditProfileTab.ADDITIONAL,
                                 onClick = { viewModel.setTab(EditProfileTab.ADDITIONAL) },
-                                text = { Text("Доп.") }
+                                text = { Text(matchaStringResource(R.string.edit_profile_additional)) }
                             )
                         }
                     }
@@ -167,7 +170,7 @@ private fun MainTabContent(
             OutlinedTextField(
                 value = state.info.firstName,
                 onValueChange = { newValue -> viewModel.updateInfo { it.copy(firstName = newValue) } },
-                label = { Text("Имя") },
+                label = { Text(matchaStringResource(R.string.first_name)) },
                 modifier = Modifier.fillMaxWidth()
             )
             Spacer(modifier = Modifier.height(12.dp))
@@ -175,7 +178,7 @@ private fun MainTabContent(
             OutlinedTextField(
                 value = state.info.lastName,
                 onValueChange = { newValue -> viewModel.updateInfo { it.copy(lastName = newValue) } },
-                label = { Text("Фамилия") },
+                label = { Text(matchaStringResource(R.string.last_name)) },
                 modifier = Modifier.fillMaxWidth()
             )
             Spacer(modifier = Modifier.height(12.dp))
@@ -183,7 +186,7 @@ private fun MainTabContent(
             OutlinedTextField(
                 value = state.info.screenName,
                 onValueChange = { newValue -> viewModel.updateInfo { it.copy(screenName = newValue) } },
-                label = { Text("Короткое имя (shortcode)") },
+                label = { Text(matchaStringResource(R.string.screen_name_label)) },
                 modifier = Modifier.fillMaxWidth()
             )
             Spacer(modifier = Modifier.height(12.dp))
@@ -191,7 +194,7 @@ private fun MainTabContent(
             OutlinedTextField(
                 value = state.info.status,
                 onValueChange = { newValue -> viewModel.updateInfo { it.copy(status = newValue) } },
-                label = { Text("Статус") },
+                label = { Text(matchaStringResource(R.string.status)) },
                 modifier = Modifier.fillMaxWidth()
             )
             Spacer(modifier = Modifier.height(12.dp))
@@ -205,7 +208,7 @@ private fun MainTabContent(
             OutlinedTextField(
                 value = state.info.bdate,
                 onValueChange = { newValue -> viewModel.updateInfo { it.copy(bdate = newValue) } },
-                label = { Text("День рождения (Д.М.ГГГГ)") },
+                label = { Text(matchaStringResource(R.string.bdate_label)) },
                 modifier = Modifier.fillMaxWidth()
             )
             Spacer(modifier = Modifier.height(12.dp))
@@ -219,7 +222,7 @@ private fun MainTabContent(
             OutlinedTextField(
                 value = state.info.homeTown,
                 onValueChange = { newValue -> viewModel.updateInfo { it.copy(homeTown = newValue) } },
-                label = { Text("Родной город") },
+                label = { Text(matchaStringResource(R.string.home_town)) },
                 modifier = Modifier.fillMaxWidth()
             )
 
@@ -236,7 +239,7 @@ private fun MainTabContent(
                         color = MaterialTheme.colorScheme.onPrimary
                     )
                 } else {
-                    Text("Сохранить изменения")
+                    Text(matchaStringResource(R.string.save_changes))
                 }
             }
         }
@@ -253,7 +256,7 @@ private fun AvatarSection(
     val imagePicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri ->
-        uri?.let { viewModel.uploadAvatar(it, contentResolver) }
+        uri?.let { viewModel.uploadAvatar(uri, contentResolver) }
     }
 
     Column(
@@ -268,7 +271,7 @@ private fun AvatarSection(
         ) {
             AsyncImage(
                 model = state.newAvatarUri ?: state.info.photo200,
-                contentDescription = "Аватарка",
+                contentDescription = matchaStringResource(R.string.avatar),
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Crop
             )
@@ -285,7 +288,7 @@ private fun AvatarSection(
         
         Spacer(modifier = Modifier.height(4.dp))
         TextButton(onClick = { imagePicker.launch("image/*") }) {
-            Text("Сменить аватар")
+            Text(matchaStringResource(R.string.change_avatar))
         }
     }
     
@@ -319,7 +322,7 @@ private fun InterestsTabContent(
             OutlinedTextField(
                 value = state.info.about,
                 onValueChange = { newValue -> viewModel.updateInfo { it.copy(about = newValue) } },
-                label = { Text("О себе") },
+                label = { Text(matchaStringResource(R.string.about_me)) },
                 modifier = Modifier.fillMaxWidth(),
                 minLines = 3
             )
@@ -328,7 +331,7 @@ private fun InterestsTabContent(
             OutlinedTextField(
                 value = state.info.interests,
                 onValueChange = { newValue -> viewModel.updateInfo { it.copy(interests = newValue) } },
-                label = { Text("Интересы") },
+                label = { Text(matchaStringResource(R.string.profile_info_interests).replace(": %1\$s", "")) },
                 modifier = Modifier.fillMaxWidth(),
                 minLines = 2
             )
@@ -337,7 +340,7 @@ private fun InterestsTabContent(
             OutlinedTextField(
                 value = state.info.music,
                 onValueChange = { newValue -> viewModel.updateInfo { it.copy(music = newValue) } },
-                label = { Text("Любимая музыка") },
+                label = { Text(matchaStringResource(R.string.fav_music)) },
                 modifier = Modifier.fillMaxWidth(),
                 minLines = 2
             )
@@ -346,7 +349,7 @@ private fun InterestsTabContent(
             OutlinedTextField(
                 value = state.info.movies,
                 onValueChange = { newValue -> viewModel.updateInfo { it.copy(movies = newValue) } },
-                label = { Text("Любимые фильмы") },
+                label = { Text(matchaStringResource(R.string.fav_movies)) },
                 modifier = Modifier.fillMaxWidth(),
                 minLines = 2
             )
@@ -355,7 +358,7 @@ private fun InterestsTabContent(
             OutlinedTextField(
                 value = state.info.tv,
                 onValueChange = { newValue -> viewModel.updateInfo { it.copy(tv = newValue) } },
-                label = { Text("Любимые телешоу") },
+                label = { Text(matchaStringResource(R.string.fav_tv)) },
                 modifier = Modifier.fillMaxWidth(),
                 minLines = 2
             )
@@ -364,7 +367,7 @@ private fun InterestsTabContent(
             OutlinedTextField(
                 value = state.info.books,
                 onValueChange = { newValue -> viewModel.updateInfo { it.copy(books = newValue) } },
-                label = { Text("Любимые книги") },
+                label = { Text(matchaStringResource(R.string.fav_books)) },
                 modifier = Modifier.fillMaxWidth(),
                 minLines = 2
             )
@@ -373,7 +376,7 @@ private fun InterestsTabContent(
             OutlinedTextField(
                 value = state.info.games,
                 onValueChange = { newValue -> viewModel.updateInfo { it.copy(games = newValue) } },
-                label = { Text("Любимые игры") },
+                label = { Text(matchaStringResource(R.string.fav_games)) },
                 modifier = Modifier.fillMaxWidth(),
                 minLines = 2
             )
@@ -382,7 +385,7 @@ private fun InterestsTabContent(
             OutlinedTextField(
                 value = state.info.quotes,
                 onValueChange = { newValue -> viewModel.updateInfo { it.copy(quotes = newValue) } },
-                label = { Text("Любимые цитаты") },
+                label = { Text(matchaStringResource(R.string.fav_quotes)) },
                 modifier = Modifier.fillMaxWidth(),
                 minLines = 3
             )
@@ -400,7 +403,7 @@ private fun InterestsTabContent(
                         color = MaterialTheme.colorScheme.onPrimary
                     )
                 } else {
-                    Text("Сохранить изменения")
+                    Text(matchaStringResource(R.string.save_changes))
                 }
             }
         }
@@ -449,8 +452,12 @@ private fun SexDropdown(
     onSexSelected: (Int) -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
-    val sexOptions = listOf("Не указан" to 0, "Женский" to 1, "Мужской" to 2)
-    val selectedOption = sexOptions.find { it.second == selectedSex }?.first ?: "Не указан"
+    val sexOptions = listOf(
+        matchaStringResource(R.string.sex_not_specified) to 0, 
+        matchaStringResource(R.string.sex_female) to 1, 
+        matchaStringResource(R.string.sex_male) to 2
+    )
+    val selectedOption = sexOptions.find { it.second == selectedSex }?.first ?: matchaStringResource(R.string.sex_not_specified)
 
     ExposedDropdownMenuBox(
         expanded = expanded,
@@ -461,7 +468,7 @@ private fun SexDropdown(
             value = selectedOption,
             onValueChange = {},
             readOnly = true,
-            label = { Text("Пол") },
+            label = { Text(matchaStringResource(R.string.profile_info_sex).replace(": %1\$s", "")) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
             modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable).fillMaxWidth()
         )
@@ -490,11 +497,11 @@ private fun BdateVisibilityDropdown(
 ) {
     var expanded by remember { mutableStateOf(false) }
     val options = listOf(
-        "Показывать дату рождения" to 1,
-        "Показывать только месяц и день" to 2
+        matchaStringResource(R.string.bdate_visibility_full) to 1,
+        matchaStringResource(R.string.bdate_visibility_month_day) to 2
         // Visibility 0 (Hide) is not supported by OpenVK and causes HTTP 400
     )
-    val selectedOption = options.find { it.second == selectedVisibility }?.first ?: "Показывать дату рождения"
+    val selectedOption = options.find { it.second == selectedVisibility }?.first ?: matchaStringResource(R.string.bdate_visibility_full)
 
     ExposedDropdownMenuBox(
         expanded = expanded,
@@ -505,7 +512,7 @@ private fun BdateVisibilityDropdown(
             value = selectedOption,
             onValueChange = {},
             readOnly = true,
-            label = { Text("Видимость даты рождения") },
+            label = { Text(matchaStringResource(R.string.bdate_visibility)) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
             modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable).fillMaxWidth()
         )

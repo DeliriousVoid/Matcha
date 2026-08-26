@@ -62,6 +62,7 @@ class PlaybackService : MediaSessionService() {
         
         val intent = Intent(this, Class.forName("com.deliriousvoid.openvkmatcha.MainActivity")).apply {
             action = "com.deliriousvoid.openvkmatcha.ACTION_OPEN_PLAYER"
+            addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_NEW_TASK)
         }
         val pendingIntent = PendingIntent.getActivity(
             this, 0, intent, 
@@ -131,6 +132,7 @@ class PlaybackService : MediaSessionService() {
         if (activeVideo != null && player != null) {
             val intent = Intent(this, Class.forName("com.deliriousvoid.openvkmatcha.MainActivity")).apply {
                 action = "com.deliriousvoid.openvkmatcha.ACTION_OPEN_VIDEO_PLAYER"
+                addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             val pendingIntent = PendingIntent.getActivity(
                 this, 0, intent,

@@ -119,7 +119,7 @@ class TwoFactorViewModel(
     fun verify(onSuccess: () -> Unit) {
         val state = _uiState.value
         if (state.code.length != 6) {
-            _uiState.update { it.copy(error = "Код должен состоять из 6 цифр") }
+            _uiState.update { it.copy(error = OpenVKMatchaApp.instance.languageManager.getStringOrDefault(com.deliriousvoid.openvkmatcha.R.string.error_2fa_code_length)) }
             return
         }
 
@@ -142,7 +142,7 @@ class TwoFactorViewModel(
                     _uiState.update {
                         it.copy(
                             isLoading = false,
-                            error = error.message ?: "Ошибка проверки кода",
+                            error = error.message ?: OpenVKMatchaApp.instance.languageManager.getStringOrDefault(com.deliriousvoid.openvkmatcha.R.string.error_2fa_verification_failed),
                         )
                     }
                 }

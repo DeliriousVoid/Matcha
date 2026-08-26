@@ -11,8 +11,8 @@ android {
         applicationId = "com.deliriousvoid.openvkmatcha"
         minSdk = 24
         targetSdk = 36
-        versionCode = 12
-        versionName = "1.0.4"
+        versionCode = 14
+        versionName = "1.1-dev"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -73,7 +73,9 @@ dependencies {
     implementation(libs.androidx.camera.view)
     implementation(libs.mlkit.barcode.scanning)
     implementation(libs.newpipeextractor)
+    implementation(libs.commonmark)
     testImplementation(libs.junit)
+    testImplementation(libs.robolectric)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     androidTestImplementation(libs.androidx.espresso.core)

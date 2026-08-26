@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.rememberAsyncImagePainter
 import com.deliriousvoid.openvkmatcha.R
+import com.deliriousvoid.openvkmatcha.ui.util.matchaStringResource
 import com.deliriousvoid.openvkmatcha.ui.components.MatchaButton
 import com.deliriousvoid.openvkmatcha.ui.components.MatchaTextField
 import com.deliriousvoid.openvkmatcha.ui.components.ErrorText
@@ -86,7 +87,7 @@ fun LoginScreen(
             )
             
             Text(
-                text = "Добро пожаловать в OpenVK",
+                text = matchaStringResource(R.string.welcome_to_openvk),
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
@@ -98,7 +99,7 @@ fun LoginScreen(
             MatchaTextField(
                 value = state.instanceUrl,
                 onValueChange = viewModel::updateInstance,
-                label = "URL инстанса",
+                label = matchaStringResource(R.string.instance_url),
                 placeholder = "https://api.openvk.org"
             )
 
@@ -113,13 +114,13 @@ fun LoginScreen(
                     MatchaTextField(
                         value = state.username,
                         onValueChange = viewModel::updateUsername,
-                        label = "Логин или email"
+                        label = matchaStringResource(R.string.login_or_email)
                     )
                     Spacer(modifier = Modifier.height(16.dp))
                     MatchaTextField(
                         value = state.password,
                         onValueChange = viewModel::updatePassword,
-                        label = "Пароль",
+                        label = matchaStringResource(R.string.password),
                         visualTransformation = PasswordVisualTransformation(),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password)
                     )
@@ -134,7 +135,7 @@ fun LoginScreen(
                 MatchaTextField(
                     value = state.token,
                     onValueChange = viewModel::updateToken,
-                    label = "Access token"
+                    label = matchaStringResource(R.string.access_token)
                 )
             }
 
@@ -149,7 +150,7 @@ fun LoginScreen(
             Spacer(modifier = Modifier.height(32.dp))
 
             MatchaButton(
-                text = if (state.useTokenLogin) "Войти по токену" else "Войти",
+                text = if (state.useTokenLogin) matchaStringResource(R.string.login_by_token) else matchaStringResource(R.string.login),
                 onClick = { viewModel.login(onLoginSuccess) },
                 isLoading = state.isLoading
             )
@@ -163,7 +164,7 @@ fun LoginScreen(
                 )
             ) {
                 Text(
-                    text = if (state.useTokenLogin) "Войти по логину" else "Войти по токену",
+                    text = if (state.useTokenLogin) matchaStringResource(R.string.login_by_credentials) else matchaStringResource(R.string.login_by_token),
                     fontWeight = FontWeight.SemiBold
                 )
             }

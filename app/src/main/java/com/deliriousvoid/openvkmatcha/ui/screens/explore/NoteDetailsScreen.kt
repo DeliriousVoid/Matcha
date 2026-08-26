@@ -16,9 +16,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.deliriousvoid.openvkmatcha.R
+import com.deliriousvoid.openvkmatcha.ui.theme.LocalOpaqueColorScheme
+import com.deliriousvoid.openvkmatcha.ui.util.matchaStringResource
 import com.deliriousvoid.openvkmatcha.ui.navigation.Routes
 import com.deliriousvoid.openvkmatcha.data.model.Note
 import com.deliriousvoid.openvkmatcha.ui.screens.comments.CommentItem
+import com.deliriousvoid.openvkmatcha.ui.components.ImageViewer
 import com.deliriousvoid.openvkmatcha.ui.viewmodel.NoteDetailsViewModel
 import java.text.SimpleDateFormat
 import java.util.*
@@ -37,25 +41,31 @@ fun NoteDetailsScreen(
     currentUserId: Int
 ) {
     val state by viewModel.uiState.collectAsState()
+    val opaqueColorScheme = LocalOpaqueColorScheme.current
     var commentText by remember { mutableStateOf("") }
     var showMenu by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
+    var viewerInitialIndex by remember { mutableIntStateOf(-1) }
+    var activeCommentForViewer by remember { mutableStateOf<com.deliriousvoid.openvkmatcha.data.model.Comment?>(null) }
+
+    val noteTitle = state.note?.title ?: matchaStringResource(R.string.title_note)
+    val menuLabel = matchaStringResource(R.string.desc_menu)
 
     DisposableEffect(state.note, showMenu, currentUserId) {
         AppEvents.setTopBarState(TopBarState(
-            title = state.note?.title ?: "Заметка",
+            title = noteTitle,
             route = Routes.NOTE_DETAILS,
             actions = {
                 if (state.note?.ownerId == currentUserId) {
                     IconButton(onClick = { showMenu = true }) {
-                        Icon(Icons.Default.MoreVert, contentDescription = "Меню")
+                        Icon(Icons.Default.MoreVert, contentDescription = menuLabel)
                     }
                     DropdownMenu(
                         expanded = showMenu,
                         onDismissRequest = { showMenu = false }
                     ) {
                         DropdownMenuItem(
-                            text = { Text("Редактировать") },
+                            text = { Text(matchaStringResource(R.string.action_edit)) },
                             onClick = {
                                 showMenu = false
                                 state.note?.let { onEditNote(it) }
@@ -63,7 +73,7 @@ fun NoteDetailsScreen(
                             leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) }
                         )
                         DropdownMenuItem(
-                            text = { Text("Удалить") },
+                            text = { Text(matchaStringResource(R.string.action_delete)) },
                             onClick = {
                                 showMenu = false
                                 showDeleteDialog = true
@@ -82,19 +92,20 @@ fun NoteDetailsScreen(
     if (showDeleteDialog) {
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
-            title = { Text("Удалить заметку?") },
-            text = { Text("Это действие нельзя отменить.") },
+            containerColor = opaqueColorScheme.surface,
+            title = { Text(matchaStringResource(R.string.delete_note_q)) },
+            text = { Text(matchaStringResource(R.string.delete_action_message)) },
             confirmButton = {
                 TextButton(onClick = {
                     viewModel.deleteNote(onBack)
                     showDeleteDialog = false
                 }) {
-                    Text("Удалить", color = MaterialTheme.colorScheme.error)
+                    Text(matchaStringResource(R.string.action_delete), color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showDeleteDialog = false }) {
-                    Text("Отмена")
+                    Text(matchaStringResource(R.string.cancel))
                 }
             }
         )
@@ -114,7 +125,7 @@ fun NoteDetailsScreen(
                     TextField(
                         value = commentText,
                         onValueChange = { commentText = it },
-                        placeholder = { Text("Написать комментарий...") },
+                        placeholder = { Text(matchaStringResource(R.string.write_comment)) },
                         modifier = Modifier.weight(1f),
                         colors = TextFieldDefaults.colors(
                             focusedContainerColor = MaterialTheme.colorScheme.surface,
@@ -131,7 +142,7 @@ fun NoteDetailsScreen(
                         if (state.isSendingComment) {
                             CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
                         } else {
-                            Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Отправить")
+                            Icon(Icons.AutoMirrored.Filled.Send, contentDescription = matchaStringResource(R.string.action_send))
                         }
                     }
                 }
@@ -144,7 +155,7 @@ fun NoteDetailsScreen(
             } else if (state.error != null && state.note == null) {
                 Text(state.error!!, modifier = Modifier.align(Alignment.Center), color = MaterialTheme.colorScheme.error)
             } else if (!state.isLoading && state.note == null) {
-                Text("Заметка не найдена", modifier = Modifier.align(Alignment.Center))
+                Text(matchaStringResource(R.string.note_not_found), modifier = Modifier.align(Alignment.Center))
             } else {
                 LazyColumn(modifier = Modifier.fillMaxSize()) {
                     state.note?.let { note ->
@@ -157,7 +168,7 @@ fun NoteDetailsScreen(
                                         fontWeight = FontWeight.Bold
                                     )
                                     Text(
-                                        text = formatDate(note.date),
+                                        text = formatDate(note.date, matchaStringResource(R.string.date_format_full)),
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -171,7 +182,7 @@ fun NoteDetailsScreen(
                                     HorizontalDivider()
                                     Spacer(modifier = Modifier.height(8.dp))
                                     Text(
-                                        text = "Комментарии (${state.comments.size})",
+                                        text = matchaStringResource(R.string.comments_count_label, state.comments.size),
                                         style = MaterialTheme.typography.titleMedium,
                                         fontWeight = FontWeight.Bold
                                     )
@@ -203,7 +214,10 @@ fun NoteDetailsScreen(
                             getTrackState = { it },
                             onDocumentDownload = {},
                             onPollVote = {},
-                            onImageClick = {},
+                            onImageClick = {
+                                activeCommentForViewer = comment
+                                viewerInitialIndex = it
+                            },
                             showActions = false
                         )
                     }
@@ -211,10 +225,25 @@ fun NoteDetailsScreen(
             }
         }
     }
+
+    if (viewerInitialIndex != -1 && activeCommentForViewer != null) {
+        val comment = activeCommentForViewer!!
+        val gifDocs = comment.documents.filter { it.ext.lowercase() == "gif" || it.type == 3 }
+        val allImageUrls = comment.imageUrls + gifDocs.mapNotNull { it.url }
+
+        ImageViewer(
+            imageUrls = allImageUrls,
+            initialIndex = viewerInitialIndex,
+            onDismiss = {
+                viewerInitialIndex = -1
+                activeCommentForViewer = null
+            }
+        )
+    }
 }
 
-private fun formatDate(timestamp: Long): String {
+private fun formatDate(timestamp: Long, format: String): String {
     val date = Date(timestamp * 1000)
-    val sdf = SimpleDateFormat("d MMMM yyyy в HH:mm", Locale.getDefault())
+    val sdf = SimpleDateFormat(format, Locale.getDefault())
     return sdf.format(date)
 }

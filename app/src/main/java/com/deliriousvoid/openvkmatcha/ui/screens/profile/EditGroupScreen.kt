@@ -47,6 +47,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.deliriousvoid.openvkmatcha.R
+import com.deliriousvoid.openvkmatcha.ui.util.matchaStringResource
 import com.deliriousvoid.openvkmatcha.OpenVKMatchaApp
 import com.deliriousvoid.openvkmatcha.ui.navigation.Routes
 import com.deliriousvoid.openvkmatcha.ui.components.ErrorText
@@ -68,9 +70,12 @@ fun EditGroupScreen(
     val state by viewModel.uiState.collectAsState()
     val baseUrl = OpenVKMatchaApp.instance.api.baseUrl
 
+    val titleLabel = matchaStringResource(R.string.edit_group)
+    val backLabel = matchaStringResource(R.string.desc_back)
+
     DisposableEffect(state.currentTab) {
         AppEvents.setTopBarState(TopBarState(
-            title = "Редактирование группы",
+            title = titleLabel,
             route = Routes.EDIT_GROUP,
             navigationIcon = {
                 IconButton(onClick = {
@@ -82,7 +87,7 @@ fun EditGroupScreen(
                 }) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "Назад"
+                        contentDescription = backLabel
                     )
                 }
             }
@@ -131,7 +136,7 @@ private fun MainTabContent(
             OutlinedTextField(
                 value = state.settings.title,
                 onValueChange = { newValue -> viewModel.updateSettings { it.copy(title = newValue) } },
-                label = { Text("Название") },
+                label = { Text(matchaStringResource(R.string.group_name)) },
                 modifier = Modifier.fillMaxWidth()
             )
             Spacer(modifier = Modifier.height(12.dp))
@@ -139,7 +144,7 @@ private fun MainTabContent(
             OutlinedTextField(
                 value = state.settings.description,
                 onValueChange = { newValue -> viewModel.updateSettings { it.copy(description = newValue) } },
-                label = { Text("Описание") },
+                label = { Text(matchaStringResource(R.string.description_label)) },
                 modifier = Modifier.fillMaxWidth(),
                 minLines = 3
             )
@@ -148,7 +153,7 @@ private fun MainTabContent(
             OutlinedTextField(
                 value = state.settings.screenName,
                 onValueChange = { newValue -> viewModel.updateSettings { it.copy(screenName = newValue) } },
-                label = { Text("Короткое имя (shortcode)") },
+                label = { Text(matchaStringResource(R.string.short_name)) },
                 modifier = Modifier.fillMaxWidth()
             )
             Spacer(modifier = Modifier.height(12.dp))
@@ -156,7 +161,7 @@ private fun MainTabContent(
             OutlinedTextField(
                 value = state.settings.website,
                 onValueChange = { newValue -> viewModel.updateSettings { it.copy(website = newValue) } },
-                label = { Text("Сайт") },
+                label = { Text(matchaStringResource(R.string.website)) },
                 modifier = Modifier.fillMaxWidth()
             )
 
@@ -173,7 +178,7 @@ private fun MainTabContent(
                         color = MaterialTheme.colorScheme.onPrimary
                     )
                 } else {
-                    Text("Сохранить изменения")
+                    Text(matchaStringResource(R.string.save_changes))
                 }
             }
 
@@ -182,7 +187,7 @@ private fun MainTabContent(
                 onClick = { viewModel.setTab(EditGroupTab.ADVANCED) },
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("Расширенные настройки")
+                Text(matchaStringResource(R.string.advanced_settings))
             }
         }
     }

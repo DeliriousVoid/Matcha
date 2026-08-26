@@ -13,11 +13,15 @@ import com.deliriousvoid.openvkmatcha.data.api.OpenVKApi
 import com.deliriousvoid.openvkmatcha.data.repository.*
 import com.deliriousvoid.openvkmatcha.data.security.AccountManager
 import com.deliriousvoid.openvkmatcha.data.security.TokenManager
+import com.deliriousvoid.openvkmatcha.util.LanguageManager
+import com.deliriousvoid.openvkmatcha.util.ThemeManager
+import com.deliriousvoid.openvkmatcha.util.CrashHandler
 import com.deliriousvoid.openvkmatcha.playback.MusicPlayerManager
 import com.deliriousvoid.openvkmatcha.playback.PreloadManager
 import com.deliriousvoid.openvkmatcha.util.LongPollManager
 import com.deliriousvoid.openvkmatcha.util.OnlineManager
 import androidx.lifecycle.ProcessLifecycleOwner
+import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 import java.util.concurrent.TimeUnit
 
@@ -83,6 +87,12 @@ class OpenVKMatchaApp : Application(), ImageLoaderFactory {
     lateinit var notesRepository: NotesRepository
         private set
 
+    lateinit var languageManager: LanguageManager
+        private set
+
+    lateinit var themeManager: ThemeManager
+        private set
+
     lateinit var longPollManager: LongPollManager
         private set
 
@@ -119,13 +129,20 @@ class OpenVKMatchaApp : Application(), ImageLoaderFactory {
     override fun onCreate() {
         super.onCreate()
         instance = this
+
+        CrashHandler.init(this)
         
-        // Initialize osmdroid configuration
-        @Suppress("DEPRECATION")
-        org.osmdroid.config.Configuration.getInstance().load(this, android.preference.PreferenceManager.getDefaultSharedPreferences(this))
-        org.osmdroid.config.Configuration.getInstance().userAgentValue = packageName
+        val initScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO)
+        initScope.launch {
+            // Initialize osmdroid configuration
+            @Suppress("DEPRECATION")
+            org.osmdroid.config.Configuration.getInstance().load(this@OpenVKMatchaApp, android.preference.PreferenceManager.getDefaultSharedPreferences(this@OpenVKMatchaApp))
+            org.osmdroid.config.Configuration.getInstance().userAgentValue = packageName
+        }
 
         tokenManager = TokenManager(this)
+        languageManager = LanguageManager(this)
+        themeManager = ThemeManager(this)
         accountManager = AccountManager(this)
         api = OpenVKApi(tokenManager)
         authRepository = AuthRepository(api)
@@ -151,9 +168,11 @@ class OpenVKMatchaApp : Application(), ImageLoaderFactory {
         preloadManager = PreloadManager(this)
         playerManager = MusicPlayerManager(this, musicRepository, artworkRepository)
 
-        if (tokenManager.hasToken()) {
-            com.deliriousvoid.openvkmatcha.services.LongPollService.start(this)
-            onlineManager.start()
+        initScope.launch {
+            if (tokenManager.hasToken()) {
+                com.deliriousvoid.openvkmatcha.services.LongPollService.start(this@OpenVKMatchaApp)
+                onlineManager.start()
+            }
         }
     }
 

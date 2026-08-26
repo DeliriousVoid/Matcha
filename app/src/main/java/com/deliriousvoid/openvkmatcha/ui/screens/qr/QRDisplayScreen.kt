@@ -20,7 +20,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import com.deliriousvoid.openvkmatcha.R
 import com.deliriousvoid.openvkmatcha.ui.util.QRGenerator
+import com.deliriousvoid.openvkmatcha.ui.util.matchaStringResource
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -37,10 +39,10 @@ fun QRDisplayScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("QR код") },
+                title = { Text(matchaStringResource(R.string.qr_code_title)) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Назад")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = matchaStringResource(R.string.desc_back))
                     }
                 }
             )
@@ -77,7 +79,7 @@ fun QRDisplayScreen(
                         contentDescription = "QR Code",
                         modifier = Modifier.fillMaxSize()
                     )
-                } ?: Text("Ошибка генерации QR", color = Color.Black)
+                } ?: Text(matchaStringResource(R.string.error_qr_generation), color = Color.Black)
             }
 
             Spacer(modifier = Modifier.height(32.dp))

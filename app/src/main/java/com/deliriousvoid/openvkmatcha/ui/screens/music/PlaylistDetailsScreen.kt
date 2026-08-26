@@ -1,5 +1,7 @@
 package com.deliriousvoid.openvkmatcha.ui.screens.music
 
+import com.deliriousvoid.openvkmatcha.R
+import com.deliriousvoid.openvkmatcha.ui.util.matchaStringResource
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.background
@@ -29,12 +31,14 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
@@ -124,6 +128,13 @@ fun PlaylistDetailsScreen(
         }
     }
     
+    val menuLabel = matchaStringResource(R.string.desc_menu)
+    val shareLabel = matchaStringResource(R.string.action_share)
+    val openInBrowserLabel = matchaStringResource(R.string.open_in_browser)
+    val downloadLabel = matchaStringResource(R.string.action_download_playlist)
+    val editLabel = matchaStringResource(R.string.action_edit)
+    val deleteLabel = matchaStringResource(R.string.action_delete)
+
     LaunchedEffect(state.playlist, state.isBookmarked, state.isOwner, showMenu, toolbarAlpha) {
         AppEvents.setTopBarState(TopBarState(
             title = state.playlist?.title ?: title,
@@ -133,14 +144,14 @@ fun PlaylistDetailsScreen(
             actions = {
                 Box {
                     IconButton(onClick = { showMenu = true }) {
-                        Icon(Icons.Default.MoreVert, contentDescription = "Меню")
+                        Icon(Icons.Default.MoreVert, contentDescription = menuLabel)
                     }
                     DropdownMenu(
                         expanded = showMenu,
                         onDismissRequest = { showMenu = false }
                     ) {
                         DropdownMenuItem(
-                            text = { Text("Поделиться") },
+                            text = { Text(shareLabel) },
                             onClick = { 
                                 showMenu = false
                                 val baseUrl = com.deliriousvoid.openvkmatcha.OpenVKMatchaApp.instance.api.baseUrl
@@ -149,7 +160,7 @@ fun PlaylistDetailsScreen(
                             }
                         )
                         DropdownMenuItem(
-                            text = { Text("Открыть в браузере") },
+                            text = { Text(openInBrowserLabel) },
                             onClick = { 
                                 showMenu = false
                                 val baseUrl = com.deliriousvoid.openvkmatcha.OpenVKMatchaApp.instance.api.baseUrl
@@ -160,16 +171,37 @@ fun PlaylistDetailsScreen(
                                 } catch (_: Exception) {}
                             }
                         )
+
+                        DropdownMenuItem(
+                            text = {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(downloadLabel)
+                                    if (state.isDownloadingAll) {
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(16.dp),
+                                            strokeWidth = 2.dp,
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+                                }
+                            },
+                            onClick = { 
+                                showMenu = false
+                                viewModel.downloadAll()
+                            },
+                            leadingIcon = { Icon(Icons.Default.Download, null) }
+                        )
                         
                         if (state.isOwner) {
                             HorizontalDivider()
                             DropdownMenuItem(
-                                text = { Text("Редактировать") },
+                                text = { Text(editLabel) },
                                 onClick = { showMenu = false; showEditDialog = true },
                                 leadingIcon = { Icon(Icons.Default.Edit, null) }
                             )
                             DropdownMenuItem(
-                                text = { Text("Удалить", color = MaterialTheme.colorScheme.error) },
+                                text = { Text(deleteLabel, color = MaterialTheme.colorScheme.error) },
                                 onClick = { showMenu = false; showDeleteConfirm = true },
                                 leadingIcon = { Icon(Icons.Default.Delete, null, tint = MaterialTheme.colorScheme.error) }
                             )
@@ -246,7 +278,7 @@ fun PlaylistDetailsScreen(
                     if (state.tracks.isEmpty() && !state.isLoading) {
                         item {
                             Text(
-                                text = "В этом плейлисте пока нет треков",
+                                text = matchaStringResource(R.string.playlist_no_tracks),
                                 style = MaterialTheme.typography.bodyMedium,
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -316,7 +348,7 @@ fun PlaylistDetailsScreen(
 
     if (showDeleteConfirm) {
         DeleteConfirmationDialog(
-            title = "Удаление плейлиста",
+            title = matchaStringResource(R.string.playlist_delete_title),
             onDismiss = { showDeleteConfirm = false },
             onConfirm = {
                 viewModel.deletePlaylist()
@@ -352,7 +384,7 @@ private fun AddMoreButton(onClick: () -> Unit) {
     ) {
         Icon(Icons.Default.Add, contentDescription = null)
         Spacer(modifier = Modifier.width(8.dp))
-        Text("Добавить ещё")
+        Text(matchaStringResource(R.string.add_more))
     }
 }
 
@@ -438,7 +470,7 @@ private fun PlaylistHeader(
 
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = "$trackCount треков",
+                text = matchaStringResource(R.string.track_count, trackCount),
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.primary,
                 fontWeight = FontWeight.SemiBold
@@ -466,7 +498,7 @@ private fun PlaylistHeader(
                         modifier = Modifier.size(32.dp)
                     )
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text(if (isPlaying) "Пауза" else "Слушать")
+                    Text(if (isPlaying) matchaStringResource(R.string.pause) else matchaStringResource(R.string.listen))
                 }
             }
 
@@ -481,7 +513,7 @@ private fun PlaylistHeader(
             ) {
                 Icon(
                     imageVector = Icons.Default.Shuffle,
-                    contentDescription = "Вперемешку",
+                    contentDescription = matchaStringResource(R.string.shuffle),
                     tint = if (localShuffle) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
@@ -497,7 +529,7 @@ private fun PlaylistHeader(
             ) {
                 Icon(
                     imageVector = if (isBookmarked) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
-                    contentDescription = "Сохранить",
+                    contentDescription = matchaStringResource(R.string.action_save),
                     tint = if (isBookmarked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }

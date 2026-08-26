@@ -32,9 +32,13 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import androidx.compose.ui.graphics.Color
+import com.deliriousvoid.openvkmatcha.R
 import com.deliriousvoid.openvkmatcha.data.model.AttachmentType
 import com.deliriousvoid.openvkmatcha.data.model.Post
 import com.deliriousvoid.openvkmatcha.data.model.UserProfile
+import com.deliriousvoid.openvkmatcha.ui.theme.LocalOpaqueColorScheme
+import com.deliriousvoid.openvkmatcha.ui.util.matchaStringResource
 import com.deliriousvoid.openvkmatcha.ui.viewmodel.RepostViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -46,6 +50,7 @@ fun RepostBottomSheet(
 ) {
     val state by viewModel.uiState.collectAsState()
     val clipboardManager = LocalClipboardManager.current
+    val opaqueColorScheme = LocalOpaqueColorScheme.current
     var repostText by remember { mutableStateOf("") }
     var showGroupSelector by remember { mutableStateOf(false) }
     var showMusicPicker by remember { mutableStateOf(false) }
@@ -58,20 +63,21 @@ fun RepostBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
         dragHandle = { BottomSheetDefaults.DragHandle() },
-        containerColor = MaterialTheme.colorScheme.surface,
+        containerColor = Color.Transparent,
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding())
-        ) {
+        ThemedPopupBackground {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding())
+            ) {
             if (state.isReposting) {
                 LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
             }
 
             if (!showGroupSelector) {
                 Text(
-                    text = "Поделиться",
+                    text = matchaStringResource(R.string.action_share),
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
@@ -83,7 +89,7 @@ fun RepostBottomSheet(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp, vertical = 8.dp),
-                    placeholder = { Text("Ваш комментарий...") },
+                    placeholder = { Text(matchaStringResource(R.string.comment_placeholder)) },
                     keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
                     maxLines = 5,
                     enabled = !state.isReposting
@@ -110,15 +116,15 @@ fun RepostBottomSheet(
                     horizontalArrangement = Arrangement.Start
                 ) {
                     IconButton(onClick = { photoPicker.launch("image/*") }) {
-                        Icon(Icons.Default.PhotoCamera, "Фото", tint = MaterialTheme.colorScheme.primary)
+                        Icon(Icons.Default.PhotoCamera, matchaStringResource(R.string.attachment_photo), tint = MaterialTheme.colorScheme.primary)
                     }
                     IconButton(onClick = { showMusicPicker = true }) {
-                        Icon(Icons.Default.MusicNote, "Аудио", tint = MaterialTheme.colorScheme.primary)
+                        Icon(Icons.Default.MusicNote, matchaStringResource(R.string.attachment_audio), tint = MaterialTheme.colorScheme.primary)
                     }
                 }
 
                 ListItem(
-                    headlineContent = { Text("На свою стену") },
+                    headlineContent = { Text(matchaStringResource(R.string.repost_to_my_wall)) },
                     leadingContent = { Icon(Icons.Filled.Campaign, null) },
                     modifier = Modifier.clickable(enabled = !state.isReposting) {
                         viewModel.repost(post, repostText) {
@@ -128,7 +134,7 @@ fun RepostBottomSheet(
                 )
 
                 ListItem(
-                    headlineContent = { Text("В сообщество") },
+                    headlineContent = { Text(matchaStringResource(R.string.repost_to_group)) },
                     leadingContent = { Icon(Icons.Outlined.Group, null) },
                     modifier = Modifier.clickable(enabled = !state.isReposting) {
                         viewModel.loadAdminGroups()
@@ -137,7 +143,7 @@ fun RepostBottomSheet(
                 )
 
                 ListItem(
-                    headlineContent = { Text("Скопировать ссылку") },
+                    headlineContent = { Text(matchaStringResource(R.string.copy_link)) },
                     leadingContent = { Icon(Icons.Outlined.ContentCopy, null) },
                     modifier = Modifier.clickable(enabled = !state.isReposting) {
                         val link = "https://openvk.org/wall${post.ownerId}_${post.id}"
@@ -158,7 +164,7 @@ fun RepostBottomSheet(
                         Icon(Icons.Default.Close, null)
                     }
                     Text(
-                        text = "Выберите сообщество",
+                        text = matchaStringResource(R.string.repost_choose_group),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.padding(start = 8.dp)
@@ -201,6 +207,7 @@ fun RepostBottomSheet(
             }
         }
     }
+}
 
     if (showMusicPicker) {
         MusicPickerBottomSheet(

@@ -20,6 +20,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import com.deliriousvoid.openvkmatcha.ui.util.matchaStringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -90,7 +91,7 @@ fun HomeScreen(
                 viewModel.loadFeed(refresh = true, isManual = true)
             }
             state.posts.isEmpty() -> EmptyState(
-                message = "Ваша лента пока пуста",
+                message = matchaStringResource(R.string.feed_empty),
                 modifier = Modifier.fillMaxSize()
             )
             else -> {
@@ -195,7 +196,7 @@ fun HomeScreen(
 
     postToDelete?.let { post ->
         DeleteConfirmationDialog(
-            title = stringResource(R.string.post_delete_confirm),
+            title = matchaStringResource(R.string.post_delete_confirm),
             onDismiss = { postToDelete = null },
             onConfirm = { viewModel.deletePost(post) }
         )

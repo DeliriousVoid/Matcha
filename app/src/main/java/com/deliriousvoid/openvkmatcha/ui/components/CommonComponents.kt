@@ -25,7 +25,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.filled.Add
@@ -89,6 +88,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.res.stringResource
+import com.deliriousvoid.openvkmatcha.ui.util.matchaStringResource
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.rotate
@@ -120,6 +120,7 @@ import android.net.Uri
 import coil.compose.AsyncImage
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.material3.AlertDialogDefaults
 import com.deliriousvoid.openvkmatcha.Constants
 import com.deliriousvoid.openvkmatcha.R
 import com.deliriousvoid.openvkmatcha.data.model.AudioTrack
@@ -129,6 +130,7 @@ import com.deliriousvoid.openvkmatcha.data.model.Post
 import com.deliriousvoid.openvkmatcha.data.model.Geo
 import com.deliriousvoid.openvkmatcha.data.model.PendingAttachment
 import com.deliriousvoid.openvkmatcha.data.model.AttachmentType
+import com.deliriousvoid.openvkmatcha.ui.theme.LocalOpaqueColorScheme
 import com.deliriousvoid.openvkmatcha.ui.util.LinkHandler
 import androidx.compose.ui.res.painterResource
 import com.deliriousvoid.openvkmatcha.ui.util.formatDuration
@@ -325,6 +327,7 @@ fun ExpandableParsedText(
     }
 }
 
+@Composable
 private fun getPlatformInfo(platform: String?, sourceName: String?): Triple<Int, String?, Boolean> {
     val p = platform?.lowercase()?.trim() ?: ""
     val name = sourceName?.lowercase()?.trim() ?: ""
@@ -335,15 +338,15 @@ private fun getPlatformInfo(platform: String?, sourceName: String?): Triple<Int,
     }
 
     if (p == "profile_photo" || name == "profile_photo") {
-        return Triple(0, "обновил фото профиля", true)
+        return Triple(0, matchaStringResource(R.string.action_updated_photo), true)
     }
 
     return when (p) {
         "iphone", "2" -> Triple(R.drawable.ic_ios, "iPhone", false)
         "ipad", "3" -> Triple(R.drawable.ic_ios, "iPad", false)
         "wphone", "5" -> Triple(R.drawable.ic_window, "Windows Phone", false)
-        "mobile", "1" -> Triple(R.drawable.ic_mobile_3, "Мобильная версия", false)
-        "web", "7" -> Triple(0, "Полная версия", false)
+        "mobile", "1" -> Triple(R.drawable.ic_mobile_3, matchaStringResource(R.string.platform_mobile), false)
+        "web", "7" -> Triple(0, matchaStringResource(R.string.platform_web), false)
         "api" -> Triple(R.drawable.ic_settings, sourceName ?: "API", false)
         else -> Triple(0, sourceName, true)
     }
@@ -410,6 +413,7 @@ fun PostCard(
         onGeoClick = onGeoClick,
         doubleTapEnabled = doubleTapEnabled,
         doubleTapTimeout = doubleTapTimeout,
+        depth = 0
     )
 }
 
@@ -445,6 +449,7 @@ fun RepostContent(
     onGeoClick: (Geo) -> Unit = {},
     doubleTapEnabled: Boolean = false,
     doubleTapTimeout: Long = 100L,
+    depth: Int = 0
 ) {
     var showMenu by remember { mutableStateOf(false) }
     var isRevealed by remember { mutableStateOf(post.isNsfwRevealed) }
@@ -463,12 +468,14 @@ fun RepostContent(
 
     val triggerDoubleTap: (LayoutCoordinates, androidx.compose.ui.geometry.Offset) -> Unit = remember(doubleTapEnabled, onLikeClick) {
         { childCoords, localOffset ->
-            if (doubleTapEnabled) {
+            if (doubleTapEnabled && childCoords.isAttached) {
                 haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
                 onLikeClick()
                 parentCoords?.let { parent ->
-                    val postRelativeOffset = parent.localPositionOf(childCoords, localOffset)
-                    hearts = hearts + (System.currentTimeMillis() to postRelativeOffset)
+                    if (parent.isAttached) {
+                        val postRelativeOffset = parent.localPositionOf(childCoords, localOffset)
+                        hearts = hearts + (System.currentTimeMillis() to postRelativeOffset)
+                    }
                 }
             }
         }
@@ -478,7 +485,7 @@ fun RepostContent(
         LocalViewConfiguration provides if (doubleTapEnabled) customViewConfiguration else viewConfiguration
     ) {
         Card(
-            modifier = if (isRepost) modifier.fillMaxWidth() else modifier.fillMaxWidth(),
+            modifier = modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(
                 containerColor = if (isRepost) Color.Transparent else MaterialTheme.colorScheme.surface
             ),
@@ -602,7 +609,7 @@ fun RepostContent(
                         if (post.isPinned && !isRepost) {
                             Icon(
                                 imageVector = Icons.Default.PushPin,
-                                contentDescription = "Закреплено",
+                                contentDescription = matchaStringResource(R.string.desc_pinned),
                                 modifier = Modifier.size(20.dp).padding(end = 8.dp),
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -623,7 +630,7 @@ fun RepostContent(
                                 IconButton(onClick = { showMenu = true }) {
                                     Icon(
                                         imageVector = Icons.Default.MoreVert,
-                                        contentDescription = "Меню",
+                                        contentDescription = matchaStringResource(R.string.desc_menu),
                                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
@@ -632,7 +639,7 @@ fun RepostContent(
                                     onDismissRequest = { showMenu = false }
                                 ) {
                                     DropdownMenuItem(
-                                        text = { Text("Копировать текст") },
+                                        text = { Text(matchaStringResource(R.string.action_copy_text)) },
                                         leadingIcon = { Icon(Icons.Default.ContentCopy, null) },
                                         onClick = {
                                             showMenu = false
@@ -642,7 +649,7 @@ fun RepostContent(
                                     if (!isRepost) {
                                         if (canPin) {
                                             DropdownMenuItem(
-                                                text = { Text(if (post.isPinned) "Открепить" else "Закрепить") },
+                                                text = { Text(if (post.isPinned) matchaStringResource(R.string.action_unpin) else matchaStringResource(R.string.action_pin)) },
                                                 leadingIcon = {
                                                     Icon(
                                                         imageVector = if (post.isPinned) Icons.Outlined.PushPin else Icons.Default.PushPin,
@@ -657,7 +664,7 @@ fun RepostContent(
                                         }
                                         if (canEdit) {
                                             DropdownMenuItem(
-                                                text = { Text("Изменить") },
+                                                text = { Text(matchaStringResource(R.string.action_edit)) },
                                                 leadingIcon = { Icon(Icons.Default.Edit, null) },
                                                 onClick = {
                                                     showMenu = false
@@ -667,7 +674,7 @@ fun RepostContent(
                                         }
                                         if (canDelete) {
                                             DropdownMenuItem(
-                                                text = { Text("Удалить", color = MaterialTheme.colorScheme.error) },
+                                                text = { Text(matchaStringResource(R.string.action_delete), color = MaterialTheme.colorScheme.error) },
                                                 leadingIcon = { Icon(Icons.Default.Delete, null, tint = MaterialTheme.colorScheme.error) },
                                                 onClick = {
                                                     showMenu = false
@@ -677,7 +684,7 @@ fun RepostContent(
                                         }
                                         if (post.authorId != currentUserId && !canEdit && !canDelete) {
                                             DropdownMenuItem(
-                                                text = { Text("Пожаловаться") },
+                                                text = { Text(matchaStringResource(R.string.action_report)) },
                                                 leadingIcon = { Icon(Icons.Default.Campaign, null) },
                                                 onClick = {
                                                     showMenu = false
@@ -688,7 +695,7 @@ fun RepostContent(
                                     }
                                     if (showRepostMenu) {
                                         DropdownMenuItem(
-                                            text = { Text("Перейти к оригиналу") },
+                                            text = { Text(matchaStringResource(R.string.action_go_to_original)) },
                                             onClick = {
                                                 showMenu = false
                                                 onCommentClick(post.ownerId, post.id)
@@ -783,25 +790,36 @@ fun RepostContent(
                             }
 
                             post.copyHistory?.firstOrNull()?.let { originalPost ->
-                                Spacer(modifier = Modifier.height(12.dp))
-                                RepostContent(
-                                    post = originalPost,
-                                    onAuthorClick = onAuthorClick,
-                                    onCommentClick = onCommentClick,
-                                    onAudioClick = onAudioClick,
-                                    onAudioToggleAdded = onAudioToggleAdded,
-                                    onAudioDownload = onAudioDownload,
-                                    onAudioShare = onAudioShare,
-                                    onAudioAddToQueue = onAudioAddToQueue,
-                                    onAudioPlayNext = onAudioPlayNext,
-                                    currentTrack = currentTrack,
-                                    isDownloaded = isDownloaded,
-                                    getTrackState = getTrackState,
-                                    onDocumentDownload = onDocumentDownload,
-                                    onPollVote = onPollVote,
-                                    onGeoClick = onGeoClick,
-                                    isRepost = true
-                                )
+                                if (depth < 5) {
+                                    Spacer(modifier = Modifier.height(12.dp))
+                                    RepostContent(
+                                        post = originalPost,
+                                        onAuthorClick = onAuthorClick,
+                                        onCommentClick = onCommentClick,
+                                        onAudioClick = onAudioClick,
+                                        onAudioToggleAdded = onAudioToggleAdded,
+                                        onAudioDownload = onAudioDownload,
+                                        onAudioShare = onAudioShare,
+                                        onAudioAddToQueue = onAudioAddToQueue,
+                                        onAudioPlayNext = onAudioPlayNext,
+                                        currentTrack = currentTrack,
+                                        isDownloaded = isDownloaded,
+                                        getTrackState = getTrackState,
+                                        onDocumentDownload = onDocumentDownload,
+                                        onPollVote = onPollVote,
+                                        onGeoClick = onGeoClick,
+                                        isRepost = true,
+                                        depth = depth + 1
+                                    )
+                                } else {
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text(
+                                        text = "...",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.padding(start = 16.dp)
+                                    )
+                                }
                             }
 
                             if (post.poll != null) {
@@ -1124,7 +1142,7 @@ fun AudioTrackItem(
     onRemoveFromPlaylist: (() -> Unit)? = null
 ) {
     var showMenu by remember { mutableStateOf(false) }
-    val effectiveIsDownloaded = isDownloaded || track.url?.startsWith("/") == true
+    val effectiveIsDownloaded = isDownloaded || track.url?.startsWith("/") == true || track.url?.startsWith("content://") == true
 
     Row(
         modifier = modifier
@@ -1183,9 +1201,9 @@ fun AudioTrackItem(
                 modifier = Modifier.basicMarquee(),
             )
             Text(
-                text = track.artist,
+                text = if (track.isReady) track.artist else matchaStringResource(R.string.audio_converting),
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = if (track.isReady) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error,
                 maxLines = 1,
                 modifier = Modifier.basicMarquee(),
             )
@@ -1199,7 +1217,7 @@ fun AudioTrackItem(
             IconButton(onClick = onToggleAdded) {
                 Icon(
                     imageVector = if (track.isAdded) Icons.Default.Check else Icons.Default.Add,
-                    contentDescription = if (track.isAdded) "Убрать" else "Добавить",
+                    contentDescription = if (track.isAdded) matchaStringResource(R.string.action_remove) else matchaStringResource(R.string.action_add),
                     tint = if (track.isAdded) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
@@ -1209,7 +1227,7 @@ fun AudioTrackItem(
             IconButton(onClick = { showMenu = true }) {
                 Icon(
                     imageVector = Icons.Default.MoreVert,
-                    contentDescription = "Опции",
+                    contentDescription = matchaStringResource(R.string.desc_options),
                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
@@ -1219,23 +1237,23 @@ fun AudioTrackItem(
             ) {
                 if (!isOfflineMode) {
                     DropdownMenuItem(
-                        text = { Text("Скачать") },
+                        text = { Text(matchaStringResource(R.string.action_download)) },
                         onClick = { showMenu = false; onDownload() },
                         leadingIcon = { Icon(Icons.Default.GetApp, null) }
                     )
                     DropdownMenuItem(
-                        text = { Text("Поделиться") },
+                        text = { Text(matchaStringResource(R.string.action_share)) },
                         onClick = { showMenu = false; onShare() },
                         leadingIcon = { Icon(Icons.Default.Share, null) }
                     )
                 }
                 DropdownMenuItem(
-                    text = { Text("Добавить в очередь") },
+                    text = { Text(matchaStringResource(R.string.action_add_to_queue)) },
                     onClick = { showMenu = false; onAddToQueue() },
                     leadingIcon = { Icon(Icons.AutoMirrored.Filled.PlaylistAdd, null) }
                 )
                 DropdownMenuItem(
-                    text = { Text("Играть следующим") },
+                    text = { Text(matchaStringResource(R.string.action_play_next)) },
                     onClick = { showMenu = false; onPlayNext() },
                     leadingIcon = { Icon(Icons.Default.SkipNext, null) }
                 )
@@ -1243,7 +1261,7 @@ fun AudioTrackItem(
                 if (onRemoveFromPlaylist != null) {
                     HorizontalDivider()
                     DropdownMenuItem(
-                        text = { Text("Удалить из плейлиста", color = MaterialTheme.colorScheme.error) },
+                        text = { Text(matchaStringResource(R.string.action_remove_from_playlist), color = MaterialTheme.colorScheme.error) },
                         onClick = { showMenu = false; onRemoveFromPlaylist() },
                         leadingIcon = { Icon(Icons.Default.Delete, null, tint = MaterialTheme.colorScheme.error) }
                     )
@@ -1308,7 +1326,7 @@ fun PlaylistItem(
                 )
             }
             Text(
-                text = "${playlist.trackCount} треков",
+                text = matchaStringResource(R.string.track_count, playlist.trackCount),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.primary,
             )
@@ -1493,9 +1511,9 @@ fun ErrorText(
 
     StateView(
         icon = if (isNetworkError) Icons.Default.WifiOff else Icons.Default.SentimentVeryDissatisfied,
-        message = if (isNetworkError) "Проверьте соединение" else message,
+        message = if (isNetworkError) matchaStringResource(R.string.error_no_connection) else message,
         modifier = modifier,
-        actionText = if (isNetworkError || onRetry != null) "Повторить" else null,
+        actionText = if (isNetworkError || onRetry != null) matchaStringResource(R.string.action_retry) else null,
         onAction = onRetry ?: {}
     )
 }
@@ -1558,40 +1576,53 @@ fun ReportDialog(
     onDismiss: () -> Unit,
     onConfirm: (String) -> Unit
 ) {
+    val opaqueColorScheme = LocalOpaqueColorScheme.current
     var comment by remember { mutableStateOf("") }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Жалоба") },
+        containerColor = Color.Transparent,
+        title = { },
         text = {
-            Column {
-                Text(
-                    text = "Пожалуйста, опишите причину жалобы:",
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.padding(bottom = 8.dp)
-                )
-                OutlinedTextField(
-                    value = comment,
-                    onValueChange = { comment = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    placeholder = { Text("Комментарий (необязательно)") },
-                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
-                    maxLines = 3
-                )
+            ThemedPopupBackground(modifier = Modifier.fillMaxWidth().clip(AlertDialogDefaults.shape)) {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        text = matchaStringResource(R.string.title_report),
+                        style = MaterialTheme.typography.headlineSmall,
+                        modifier = Modifier.padding(16.dp)
+                    )
+                    Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+                        Text(
+                            text = matchaStringResource(R.string.report_reason_hint),
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.padding(bottom = 8.dp)
+                        )
+                        OutlinedTextField(
+                            value = comment,
+                            onValueChange = { comment = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            placeholder = { Text(matchaStringResource(R.string.comment_optional)) },
+                            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+                            maxLines = 3
+                        )
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(16.dp),
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        TextButton(onClick = onDismiss) {
+                            Text(matchaStringResource(R.string.cancel))
+                        }
+                        TextButton(
+                            onClick = { onConfirm(comment) }
+                        ) {
+                            Text(matchaStringResource(R.string.action_send))
+                        }
+                    }
+                }
             }
         },
-        confirmButton = {
-            TextButton(
-                onClick = { onConfirm(comment) }
-            ) {
-                Text("Отправить")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Отмена")
-            }
-        }
+        confirmButton = { }
     )
 }
 
@@ -1603,70 +1634,83 @@ fun EditPostDialog(
     onDismiss: () -> Unit,
     onConfirm: (String, Boolean, Boolean) -> Unit
 ) {
+    val opaqueColorScheme = LocalOpaqueColorScheme.current
     var text by remember(initialText) { mutableStateOf(initialText) }
     var fromGroup by remember(isGroup) { mutableStateOf(isGroup) }
     var isNsfw by remember(initialIsNsfw) { mutableStateOf(initialIsNsfw) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Редактирование записи") },
+        containerColor = Color.Transparent,
+        title = { },
         text = {
-            Column {
-                OutlinedTextField(
-                    value = text,
-                    onValueChange = { text = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    placeholder = { Text("Текст записи") },
-                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences)
-                )
-                
-                Spacer(modifier = Modifier.height(8.dp))
-                
-                if (isGroup) {
+            ThemedPopupBackground(modifier = Modifier.fillMaxWidth().clip(AlertDialogDefaults.shape)) {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        text = matchaStringResource(R.string.title_edit_post),
+                        style = MaterialTheme.typography.headlineSmall,
+                        modifier = Modifier.padding(16.dp)
+                    )
+                    Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+                        OutlinedTextField(
+                            value = text,
+                            onValueChange = { text = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            placeholder = { Text(matchaStringResource(R.string.post_text_placeholder)) },
+                            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences)
+                        )
+                        
+                        Spacer(modifier = Modifier.height(8.dp))
+                        
+                        if (isGroup) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().clickable { fromGroup = !fromGroup },
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Checkbox(
+                                    checked = fromGroup,
+                                    onCheckedChange = { fromGroup = it }
+                                )
+                                Text(
+                                    text = matchaStringResource(R.string.post_from_group),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    modifier = Modifier.padding(start = 8.dp)
+                                )
+                            }
+                        }
+                        
+                        Row(
+                            modifier = Modifier.fillMaxWidth().clickable { isNsfw = !isNsfw },
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Checkbox(
+                                checked = isNsfw,
+                                onCheckedChange = { isNsfw = it }
+                            )
+                            Text(
+                                text = matchaStringResource(R.string.post_is_nsfw),
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.padding(start = 8.dp)
+                            )
+                        }
+                    }
                     Row(
-                        modifier = Modifier.fillMaxWidth().clickable { fromGroup = !fromGroup },
-                        verticalAlignment = Alignment.CenterVertically
+                        modifier = Modifier.fillMaxWidth().padding(16.dp),
+                        horizontalArrangement = Arrangement.End
                     ) {
-                        Checkbox(
-                            checked = fromGroup,
-                            onCheckedChange = { fromGroup = it }
-                        )
-                        Text(
-                            text = "От имени сообщества",
-                            style = MaterialTheme.typography.bodyMedium,
-                            modifier = Modifier.padding(start = 8.dp)
-                        )
+                        TextButton(onClick = onDismiss) {
+                            Text(matchaStringResource(R.string.cancel))
+                        }
+                        TextButton(
+                            onClick = { onConfirm(text, fromGroup, isNsfw) }
+                        ) {
+                            Text(matchaStringResource(R.string.action_save))
+                        }
                     }
                 }
-                
-                Row(
-                    modifier = Modifier.fillMaxWidth().clickable { isNsfw = !isNsfw },
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Checkbox(
-                        checked = isNsfw,
-                        onCheckedChange = { isNsfw = it }
-                    )
-                    Text(
-                        text = "Содержит NSFW",
-                        style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier.padding(start = 8.dp)
-                    )
-                }
             }
         },
-        confirmButton = {
-            TextButton(
-                onClick = { onConfirm(text, fromGroup, isNsfw) }
-            ) {
-                Text("Сохранить")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Отмена")
-            }
-        }
+        confirmButton = { }
     )
 }
 
@@ -1677,48 +1721,61 @@ fun EditPlaylistDialog(
     onDismiss: () -> Unit,
     onConfirm: (String, String) -> Unit
 ) {
+    val opaqueColorScheme = LocalOpaqueColorScheme.current
     var title by remember { mutableStateOf(initialTitle) }
     var description by remember { mutableStateOf(initialDescription) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(if (initialTitle.isEmpty()) "Создание плейлиста" else "Редактирование плейлиста") },
+        containerColor = Color.Transparent,
+        title = { },
         text = {
-            Column {
-                OutlinedTextField(
-                    value = title,
-                    onValueChange = { title = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Название") },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences)
-                )
-                
-                Spacer(modifier = Modifier.height(16.dp))
-                
-                OutlinedTextField(
-                    value = description,
-                    onValueChange = { description = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Описание (необязательно)") },
-                    maxLines = 3,
-                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences)
-                )
+            ThemedPopupBackground(modifier = Modifier.fillMaxWidth().clip(AlertDialogDefaults.shape)) {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        text = if (initialTitle.isEmpty()) matchaStringResource(R.string.title_create_playlist) else matchaStringResource(R.string.title_edit_playlist),
+                        style = MaterialTheme.typography.headlineSmall,
+                        modifier = Modifier.padding(16.dp)
+                    )
+                    Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+                        OutlinedTextField(
+                            value = title,
+                            onValueChange = { title = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            label = { Text(matchaStringResource(R.string.playlist_name)) },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences)
+                        )
+                        
+                        Spacer(modifier = Modifier.height(16.dp))
+                        
+                        OutlinedTextField(
+                            value = description,
+                            onValueChange = { description = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            label = { Text(matchaStringResource(R.string.playlist_desc_optional)) },
+                            maxLines = 3,
+                            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences)
+                        )
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(16.dp),
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        TextButton(onClick = onDismiss) {
+                            Text(matchaStringResource(R.string.cancel))
+                        }
+                        TextButton(
+                            onClick = { onConfirm(title, description) },
+                            enabled = title.isNotBlank()
+                        ) {
+                            Text(matchaStringResource(R.string.action_save))
+                        }
+                    }
+                }
             }
         },
-        confirmButton = {
-            TextButton(
-                onClick = { onConfirm(title, description) },
-                enabled = title.isNotBlank()
-            ) {
-                Text("Сохранить")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Отмена")
-            }
-        }
+        confirmButton = { }
     )
 }
 
@@ -1728,28 +1785,47 @@ fun DeleteConfirmationDialog(
     onDismiss: () -> Unit,
     onConfirm: () -> Unit
 ) {
+    val opaqueColorScheme = LocalOpaqueColorScheme.current
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(title) },
-        text = { Text(stringResource(R.string.delete_action_message)) },
-        confirmButton = {
-            TextButton(
-                onClick = {
-                    onConfirm()
-                    onDismiss()
+        containerColor = Color.Transparent,
+        title = { },
+        text = {
+            ThemedPopupBackground(modifier = Modifier.fillMaxWidth().clip(AlertDialogDefaults.shape)) {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.headlineSmall,
+                        modifier = Modifier.padding(16.dp)
+                    )
+                    Text(
+                        text = matchaStringResource(R.string.delete_action_message),
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.padding(horizontal = 16.dp)
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(16.dp),
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        TextButton(onClick = onDismiss) {
+                            Text(matchaStringResource(R.string.cancel))
+                        }
+                        TextButton(
+                            onClick = {
+                                onConfirm()
+                                onDismiss()
+                            }
+                        ) {
+                            Text(
+                                text = matchaStringResource(R.string.delete),
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
+                    }
                 }
-            ) {
-                Text(
-                    text = stringResource(R.string.delete),
-                    color = MaterialTheme.colorScheme.error
-                )
             }
         },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.cancel))
-            }
-        }
+        confirmButton = { }
     )
 }
 
@@ -1824,7 +1900,7 @@ fun FriendshipStatusIcon(
             IconButton(onClick = { onToggle(user) }, modifier = modifier) {
                 Icon(
                     imageVector = Icons.Default.PersonAdd,
-                    contentDescription = "Добавить в друзья",
+                    contentDescription = matchaStringResource(R.string.action_add_friend),
                     tint = MaterialTheme.colorScheme.primary
                 )
             }
@@ -1833,7 +1909,7 @@ fun FriendshipStatusIcon(
             IconButton(onClick = { onToggle(user) }, modifier = modifier) {
                 Icon(
                     imageVector = Icons.Default.PersonRemove,
-                    contentDescription = "Отменить запрос",
+                    contentDescription = matchaStringResource(R.string.action_cancel_request),
                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
@@ -1842,7 +1918,7 @@ fun FriendshipStatusIcon(
             IconButton(onClick = { onToggle(user) }, modifier = modifier) {
                 Icon(
                     imageVector = Icons.Default.PersonAdd,
-                    contentDescription = "Принять запрос",
+                    contentDescription = matchaStringResource(R.string.action_accept_request),
                     tint = MaterialTheme.colorScheme.primary
                 )
             }
@@ -1850,7 +1926,7 @@ fun FriendshipStatusIcon(
         3 -> {
             Icon(
                 imageVector = Icons.Default.Check,
-                contentDescription = "В друзьях",
+                contentDescription = matchaStringResource(R.string.friend_status_friends),
                 tint = MaterialTheme.colorScheme.primary,
                 modifier = modifier.padding(12.dp).size(24.dp)
             )
@@ -1868,7 +1944,7 @@ fun GroupMembershipIcon(
         IconButton(onClick = { onToggle(group) }, modifier = modifier) {
             Icon(
                 imageVector = Icons.Default.GroupRemove,
-                contentDescription = "Выйти из группы",
+                contentDescription = matchaStringResource(R.string.action_leave_group),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
@@ -1876,7 +1952,7 @@ fun GroupMembershipIcon(
         IconButton(onClick = { onToggle(group) }, modifier = modifier) {
             Icon(
                 imageVector = Icons.Default.GroupAdd,
-                contentDescription = "Вступить в группу",
+                contentDescription = matchaStringResource(R.string.action_join_group),
                 tint = MaterialTheme.colorScheme.primary
             )
         }
@@ -1891,6 +1967,7 @@ fun MusicPickerBottomSheet(
     viewModel: MusicPickerViewModel = viewModel(factory = MusicPickerViewModel.factory())
 ) {
     val state by viewModel.uiState.collectAsState()
+    val opaqueColorScheme = LocalOpaqueColorScheme.current
     val listState = rememberLazyListState()
     val focusRequester = remember { FocusRequester() }
     
@@ -1913,52 +1990,57 @@ fun MusicPickerBottomSheet(
         focusRequester.requestFocus()
     }
 
-    ModalBottomSheet(
+    AlertDialog(
         onDismissRequest = onDismiss,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    ) {
-        Column(modifier = Modifier.fillMaxHeight(0.8f).padding(horizontal = 16.dp)) {
-            Text(
-                text = "Выбор музыки",
-                style = MaterialTheme.typography.titleLarge,
-                modifier = Modifier.padding(bottom = 16.dp)
-            )
-            
-            OutlinedTextField(
-                value = state.searchQuery,
-                onValueChange = { viewModel.updateSearchQuery(it) },
-                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp).focusRequester(focusRequester),
-                placeholder = { Text("Поиск...") },
-                leadingIcon = { Icon(Icons.Default.Search, null) },
-                singleLine = true
-            )
+        containerColor = Color.Transparent,
+        title = { Text(matchaStringResource(R.string.title_music_picker)) },
+        text = {
+            ThemedPopupBackground(modifier = Modifier.fillMaxWidth().clip(AlertDialogDefaults.shape)) {
+                Column(modifier = Modifier.fillMaxHeight(0.8f).padding(horizontal = 16.dp)) {
+                    Text(
+                        text = matchaStringResource(R.string.title_music_picker),
+                        style = MaterialTheme.typography.titleLarge,
+                        modifier = Modifier.padding(vertical = 16.dp)
+                    )
+                    
+                    OutlinedTextField(
+                        value = state.searchQuery,
+                        onValueChange = { viewModel.updateSearchQuery(it) },
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp).focusRequester(focusRequester),
+                        placeholder = { Text(matchaStringResource(R.string.search_placeholder)) },
+                        leadingIcon = { Icon(Icons.Default.Search, null) },
+                        singleLine = true
+                    )
 
-            Box(modifier = Modifier.weight(1f)) {
-                if (state.isLoading && state.tracks.isEmpty()) {
-                    LoadingBox(modifier = Modifier.fillMaxSize())
-                } else {
-                    LazyColumn(
-                        state = listState,
-                        modifier = Modifier.fillMaxSize()
-                    ) {
-                        items(state.tracks) { track ->
-                            AudioTrackItem(
-                                track = track,
-                                onClick = { onTrackSelect(track) },
-                                onToggleAdded = {},
-                                onDownload = {},
-                                onShare = {},
-                                onAddToQueue = {},
-                                onPlayNext = {}
-                            )
-                            HorizontalDivider(modifier = Modifier.padding(start = 56.dp))
-                        }
-                        if (state.isLoadingMore) {
-                            item { LoadingBox(modifier = Modifier.padding(16.dp)) }
+                    Box(modifier = Modifier.weight(1f)) {
+                        if (state.isLoading && state.tracks.isEmpty()) {
+                            LoadingBox(modifier = Modifier.fillMaxSize())
+                        } else {
+                            LazyColumn(
+                                state = listState,
+                                modifier = Modifier.fillMaxSize()
+                            ) {
+                                items(state.tracks) { track ->
+                                    AudioTrackItem(
+                                        track = track,
+                                        onClick = { onTrackSelect(track) },
+                                        onToggleAdded = {},
+                                        onDownload = {},
+                                        onShare = {},
+                                        onAddToQueue = {},
+                                        onPlayNext = {}
+                                    )
+                                    HorizontalDivider(modifier = Modifier.padding(start = 56.dp))
+                                }
+                                if (state.isLoadingMore) {
+                                    item { LoadingBox(modifier = Modifier.padding(16.dp)) }
+                                }
+                            }
                         }
                     }
                 }
             }
-        }
-    }
+        },
+        confirmButton = {}
+    )
 }

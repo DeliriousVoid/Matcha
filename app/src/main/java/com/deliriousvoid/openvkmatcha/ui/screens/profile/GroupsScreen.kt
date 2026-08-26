@@ -1,5 +1,7 @@
 package com.deliriousvoid.openvkmatcha.ui.screens.profile
 
+import com.deliriousvoid.openvkmatcha.R
+import com.deliriousvoid.openvkmatcha.ui.util.matchaStringResource
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -59,10 +61,13 @@ fun GroupsScreen(
     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
     val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
 
+    val allLabel = matchaStringResource(R.string.all)
+    val managedLabel = matchaStringResource(R.string.managed)
+
     val tabs = if (state.isMe) {
-        listOf("Все", "Управляемые")
+        listOf(allLabel, managedLabel)
     } else {
-        listOf("Все")
+        listOf(allLabel)
     }
 
     LaunchedEffect(selectedTab) {
@@ -143,9 +148,9 @@ fun GroupsScreen(
                 else -> {
                     if (listToDisplay.isEmpty()) {
                         EmptyState(
-                            message = if (state.searchQuery.isNotEmpty()) "Сообществ не найдено"
-                                     else if (selectedTab == 0) "Список групп пуст" 
-                                     else "У вас нет управляемых групп",
+                            message = if (state.searchQuery.isNotEmpty()) matchaStringResource(R.string.groups_not_found)
+                                     else if (selectedTab == 0) matchaStringResource(R.string.groups_empty) 
+                                     else matchaStringResource(R.string.no_managed_groups),
                             modifier = Modifier.fillMaxSize()
                         )
                     } else {

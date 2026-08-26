@@ -20,7 +20,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.deliriousvoid.openvkmatcha.R
 import com.deliriousvoid.openvkmatcha.data.model.Poll
+import com.deliriousvoid.openvkmatcha.ui.util.matchaStringResource
 import com.deliriousvoid.openvkmatcha.util.StringUtils
 
 @Composable
@@ -58,8 +60,8 @@ fun PollComponent(
         Spacer(modifier = Modifier.height(4.dp))
         
         val pollInfo = buildString {
-            if (poll.anonymous) append("Анонимный опрос") else append("Публичный опрос")
-            if (poll.multiple) append(" • Выбор нескольких вариантов")
+            if (poll.anonymous) append(matchaStringResource(R.string.anonymous_poll)) else append(matchaStringResource(R.string.public_poll))
+            if (poll.multiple) append(" • " + matchaStringResource(R.string.multiple_choice))
         }
         Text(
             text = pollInfo,
@@ -183,14 +185,14 @@ fun PollComponent(
                     modifier = Modifier.height(32.dp)
                 ) {
                     Text(
-                        text = "Отменить голос",
+                        text = matchaStringResource(R.string.action_cancel_vote),
                         style = MaterialTheme.typography.bodySmall,
                         fontWeight = FontWeight.Bold
                     )
                 }
             } else if (poll.closed) {
                 Text(
-                    text = "Опрос завершён",
+                    text = matchaStringResource(R.string.poll_finished),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

@@ -39,6 +39,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import java.util.concurrent.ConcurrentHashMap
 
 enum class FeedType { GLOBAL, SUBSCRIPTIONS }
 
@@ -68,6 +69,8 @@ class FeedViewModel(
 
     private val _scrollToTop = MutableSharedFlow<Unit>()
     val scrollToTop = _scrollToTop.asSharedFlow()
+    
+    private val likeJobs = ConcurrentHashMap<String, Job>()
 
     init {
         loadCurrentUserId()
@@ -193,7 +196,10 @@ class FeedViewModel(
     }
 
     fun toggleLike(post: Post) {
-        viewModelScope.launch {
+        val postId = "${post.ownerId}_${post.id}"
+        if (likeJobs.containsKey(postId)) return
+
+        val job = viewModelScope.launch {
             feedRepository.toggleLike(post)
                 .onSuccess {
                     _uiState.update { state ->
@@ -210,8 +216,17 @@ class FeedViewModel(
                             },
                         )
                     }
+                }.onFailure { error ->
+                    val message = if (error is com.deliriousvoid.openvkmatcha.data.api.ApiException && (error.errorCode == 6 || error.errorCode == 9)) {
+                        OpenVKMatchaApp.instance.languageManager.getStringOrDefault(com.deliriousvoid.openvkmatcha.R.string.error_limit_reached)
+                    } else {
+                        error.message ?: OpenVKMatchaApp.instance.languageManager.getStringOrDefault(com.deliriousvoid.openvkmatcha.R.string.error_like_failed)
+                    }
+                    AppEvents.showSnackbar(message)
                 }
+            likeJobs.remove(postId)
         }
+        likeJobs[postId] = job
     }
 
     fun deletePost(post: Post) {
@@ -283,19 +298,23 @@ class FeedViewModel(
         viewModelScope.launch {
             OpenVKMatchaApp.instance.reportsRepository.report(type, ownerId, itemId, comment)
                 .onSuccess {
-                    AppEvents.showSnackbar("Жалоба успешно отправлена")
+                    AppEvents.showSnackbar(OpenVKMatchaApp.instance.languageManager.getStringOrDefault(com.deliriousvoid.openvkmatcha.R.string.report_sent))
                 }
         }
     }
 
 
     companion object {
+        private var instance: FeedViewModel? = null
         fun factory(): ViewModelProvider.Factory = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T {
                 val app = OpenVKMatchaApp.instance
-                val settingsViewModel = SettingsViewModel(app)
-                return FeedViewModel(app.feedRepository, app.profileRepository, settingsViewModel) as T
+                return (instance ?: FeedViewModel(
+                    app.feedRepository, 
+                    app.profileRepository, 
+                    SettingsViewModel(app)
+                ).also { instance = it }) as T
             }
         }
     }
@@ -432,6 +451,7 @@ data class MusicUiState(
     val isRefreshing: Boolean = false,
     val isLoadingMore: Boolean = false,
     val canLoadMore: Boolean = true,
+    val isDownloadingAll: Boolean = false,
     val error: String? = null,
     val currentUserId: Int? = null,
 )
@@ -525,7 +545,7 @@ class MusicViewModel(
                     _uiState.update { state -> state.copy(currentUserId = it) }
                 }
                 if (currentId == null) {
-                    _uiState.update { it.copy(isLoading = false, isRefreshing = false, error = "Не удалось загрузить профиль") }
+                    _uiState.update { it.copy(isLoading = false, isRefreshing = false, error = OpenVKMatchaApp.instance.languageManager.getStringOrDefault(com.deliriousvoid.openvkmatcha.R.string.error_load_profile)) }
                     return@launch
                 }
                 if (initialUserId != null && _uiState.value.userProfile == null) {
@@ -770,6 +790,23 @@ class MusicViewModel(
         }
     }
 
+    fun downloadAll() {
+        if (_uiState.value.isDownloadingAll) return
+        val tracks = if (_uiState.value.mode == MusicMode.Tracks) _uiState.value.tracks else return
+        if (tracks.isEmpty()) return
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(isDownloadingAll = true) }
+            tracks.forEach { track ->
+                if (!downloadRepository.isDownloaded(track.id, track.ownerId)) {
+                    downloadRepository.downloadTrack(track)
+                }
+            }
+            _uiState.update { it.copy(isDownloadingAll = false) }
+            loadMusic()
+        }
+    }
+
     fun addToQueue(track: AudioTrack) {
         OpenVKMatchaApp.instance.playerManager.addToQueue(track)
     }
@@ -807,6 +844,7 @@ data class ProfileUiState(
     val isRefreshing: Boolean = false,
     val isLoadingMore: Boolean = false,
     val canLoadMore: Boolean = true,
+    val isDownloadingAll: Boolean = false,
     val error: String? = null,
     val currentUserId: Int? = null,
 )
@@ -823,6 +861,8 @@ class ProfileViewModel(
 
     private val _scrollToTop = MutableSharedFlow<Unit>()
     val scrollToTop = _scrollToTop.asSharedFlow()
+    
+    private val likeJobs = ConcurrentHashMap<String, Job>()
 
     init {
         loadCurrentUserId()
@@ -922,7 +962,10 @@ class ProfileViewModel(
     }
 
     fun toggleLike(post: Post) {
-        viewModelScope.launch {
+        val postId = "${post.ownerId}_${post.id}"
+        if (likeJobs.containsKey(postId)) return
+
+        val job = viewModelScope.launch {
             feedRepository.toggleLike(post)
                 .onSuccess {
                     _uiState.update { state ->
@@ -939,8 +982,17 @@ class ProfileViewModel(
                             },
                         )
                     }
+                }.onFailure { error ->
+                    val message = if (error is com.deliriousvoid.openvkmatcha.data.api.ApiException && (error.errorCode == 6 || error.errorCode == 9)) {
+                        OpenVKMatchaApp.instance.languageManager.getStringOrDefault(com.deliriousvoid.openvkmatcha.R.string.error_limit_reached)
+                    } else {
+                        error.message ?: OpenVKMatchaApp.instance.languageManager.getStringOrDefault(com.deliriousvoid.openvkmatcha.R.string.error_like_failed)
+                    }
+                    AppEvents.showSnackbar(message)
                 }
+            likeJobs.remove(postId)
         }
+        likeJobs[postId] = job
     }
 
     fun deletePost(post: Post) {
@@ -1054,7 +1106,7 @@ class ProfileViewModel(
                 if (error is com.deliriousvoid.openvkmatcha.data.api.ApiException && error.errorCode == 15) {
                     loadProfile(refresh = true)
                 } else {
-                    AppEvents.showSnackbar(error.message ?: "Ошибка при выполнении действия")
+                    AppEvents.showSnackbar(error.message ?: OpenVKMatchaApp.instance.languageManager.getStringOrDefault(com.deliriousvoid.openvkmatcha.R.string.error_action_failed))
                     loadProfile(refresh = true)
                 }
             }
@@ -1075,7 +1127,7 @@ class ProfileViewModel(
             result.onSuccess {
                 loadProfile(refresh = true)
             }.onFailure { error ->
-                AppEvents.showSnackbar(error.message ?: "Ошибка при выполнении действия")
+                AppEvents.showSnackbar(error.message ?: OpenVKMatchaApp.instance.languageManager.getStringOrDefault(com.deliriousvoid.openvkmatcha.R.string.error_action_failed))
                 loadProfile(refresh = true)
             }
         }
@@ -1085,7 +1137,7 @@ class ProfileViewModel(
         viewModelScope.launch {
             OpenVKMatchaApp.instance.reportsRepository.report(type, ownerId, itemId, comment)
                 .onSuccess {
-                    AppEvents.showSnackbar("Жалоба успешно отправлена")
+                    AppEvents.showSnackbar(OpenVKMatchaApp.instance.languageManager.getStringOrDefault(com.deliriousvoid.openvkmatcha.R.string.report_sent))
                 }
         }
     }
@@ -1148,6 +1200,7 @@ data class PlaylistDetailsUiState(
     val isLoading: Boolean = false,
     val isLoadingMore: Boolean = false,
     val canLoadMore: Boolean = true,
+    val isDownloadingAll: Boolean = false,
     val error: String? = null,
     val playlistDeleted: Boolean = false,
 )
@@ -1156,6 +1209,7 @@ class PlaylistDetailsViewModel(
     private val musicRepository: MusicRepository,
     private val profileRepository: ProfileRepository,
     private val artworkRepository: ArtworkRepository,
+    private val downloadRepository: com.deliriousvoid.openvkmatcha.data.repository.DownloadRepository,
     private val settingsViewModel: SettingsViewModel,
     private val ownerId: Int,
     private val playlistId: Int,
@@ -1282,6 +1336,22 @@ class PlaylistDetailsViewModel(
         }
     }
 
+    fun downloadAll() {
+        if (_uiState.value.isDownloadingAll) return
+        val tracks = _uiState.value.tracks
+        if (tracks.isEmpty()) return
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(isDownloadingAll = true) }
+            tracks.forEach { track ->
+                if (!downloadRepository.isDownloaded(track.id, track.ownerId)) {
+                    downloadRepository.downloadTrack(track)
+                }
+            }
+            _uiState.update { it.copy(isDownloadingAll = false) }
+        }
+    }
+
     fun loadMore() {
         val state = _uiState.value
         if (state.isLoading || state.isLoadingMore || !state.canLoadMore) return
@@ -1367,6 +1437,7 @@ class PlaylistDetailsViewModel(
                     app.musicRepository,
                     app.profileRepository,
                     app.artworkRepository,
+                    app.downloadRepository,
                     settingsViewModel,
                     ownerId,
                     playlistId
@@ -1604,6 +1675,8 @@ class CreatePostViewModel(
         isDeveloperMode = OpenVKMatchaApp.instance.getSharedPreferences("settings", Context.MODE_PRIVATE).getBoolean("experimental_features", false)
     ))
     val uiState = _uiState.asStateFlow()
+    
+    private val likeJobs = ConcurrentHashMap<String, Job>()
 
     init {
         if (ownerId < 0) {
@@ -1694,7 +1767,7 @@ class CreatePostViewModel(
                 attachmentsRepository.uploadAttachment(pending).fold(
                     onSuccess = { attachmentStrings.add(it) },
                     onFailure = { 
-                        uploadError = "Ошибка загрузки вложения: ${it.message}"
+                        uploadError = OpenVKMatchaApp.instance.languageManager.getStringOrDefault(com.deliriousvoid.openvkmatcha.R.string.error_upload_attachment, it.message ?: "")
                         return@fold
                     }
                 )
@@ -1717,8 +1790,8 @@ class CreatePostViewModel(
                 )
                 
                 if (pollResult.isFailure) {
-                    val pollError = pollResult.exceptionOrNull()?.message ?: "Неизвестная ошибка"
-                    _uiState.update { it.copy(isSending = false, error = "Ошибка создания опроса: $pollError") }
+                    val pollError = pollResult.exceptionOrNull()?.message ?: OpenVKMatchaApp.instance.languageManager.getStringOrDefault(com.deliriousvoid.openvkmatcha.R.string.error_unknown)
+                    _uiState.update { it.copy(isSending = false, error = OpenVKMatchaApp.instance.languageManager.getStringOrDefault(com.deliriousvoid.openvkmatcha.R.string.error_create_poll, pollError)) }
                     return@launch
                 }
                 
@@ -1847,7 +1920,7 @@ class RepostViewModel(
                 attachmentsRepository.uploadAttachment(pending).fold(
                     onSuccess = { attachmentStrings.add(it) },
                     onFailure = { 
-                        uploadError = "Ошибка загрузки вложения: ${it.message}"
+                        uploadError = OpenVKMatchaApp.instance.languageManager.getStringOrDefault(com.deliriousvoid.openvkmatcha.R.string.error_upload_attachment, it.message ?: "")
                         return@fold
                     }
                 )
@@ -1897,6 +1970,8 @@ class CommentsViewModel(
         isDeveloperMode = OpenVKMatchaApp.instance.getSharedPreferences("settings", Context.MODE_PRIVATE).getBoolean("experimental_features", false)
     ))
     val uiState = _uiState.asStateFlow()
+    
+    private val likeJobs = ConcurrentHashMap<String, Job>()
 
     init {
         loadCurrentUserId()
@@ -2191,7 +2266,7 @@ class CommentsViewModel(
                 }
                 val result = attachmentsRepository.uploadAttachment(pending)
                 if (result.isFailure) {
-                    uploadError = "Ошибка загрузки вложения: ${result.exceptionOrNull()?.message}"
+                    uploadError = OpenVKMatchaApp.instance.languageManager.getStringOrDefault(com.deliriousvoid.openvkmatcha.R.string.error_upload_attachment, result.exceptionOrNull()?.message ?: "")
                     break
                 }
                 attachmentStrings.add(result.getOrThrow())
@@ -2256,7 +2331,10 @@ class CommentsViewModel(
     }
 
     fun toggleLikePost(post: Post) {
-        viewModelScope.launch {
+        val postId = "${post.ownerId}_${post.id}"
+        if (likeJobs.containsKey(postId)) return
+
+        val job = viewModelScope.launch {
             feedRepository.toggleLike(post).onSuccess {
                 _uiState.update { state ->
                     if (state.post?.id == post.id && state.post?.ownerId == post.ownerId) {
@@ -2268,14 +2346,26 @@ class CommentsViewModel(
                         )
                     } else state
                 }
+            }.onFailure { error ->
+                val message = if (error is com.deliriousvoid.openvkmatcha.data.api.ApiException && (error.errorCode == 6 || error.errorCode == 9)) {
+                    OpenVKMatchaApp.instance.languageManager.getStringOrDefault(com.deliriousvoid.openvkmatcha.R.string.error_limit_reached)
+                } else {
+                    error.message ?: OpenVKMatchaApp.instance.languageManager.getStringOrDefault(com.deliriousvoid.openvkmatcha.R.string.error_like_failed)
+                }
+                AppEvents.showSnackbar(message)
             }
+            likeJobs.remove(postId)
         }
+        likeJobs[postId] = job
     }
 
     fun toggleLike(comment: Comment) {
-        viewModelScope.launch {
+        val commentKey = "comment_${comment.id}"
+        if (likeJobs.containsKey(commentKey)) return
+
+        val job = viewModelScope.launch {
             repository.toggleLike(comment).onSuccess {
-                _uiState.update { state ->
+                updateUiStateWithComments { state ->
                     state.copy(
                         comments = state.comments.map { item ->
                             if (item.id == comment.id) {
@@ -2287,15 +2377,24 @@ class CommentsViewModel(
                         }
                     )
                 }
+            }.onFailure { error ->
+                val message = if (error is com.deliriousvoid.openvkmatcha.data.api.ApiException && (error.errorCode == 6 || error.errorCode == 9)) {
+                    OpenVKMatchaApp.instance.languageManager.getStringOrDefault(com.deliriousvoid.openvkmatcha.R.string.error_limit_reached)
+                } else {
+                    error.message ?: OpenVKMatchaApp.instance.languageManager.getStringOrDefault(com.deliriousvoid.openvkmatcha.R.string.error_like_failed)
+                }
+                AppEvents.showSnackbar(message)
             }
+            likeJobs.remove(commentKey)
         }
+        likeJobs[commentKey] = job
     }
 
     fun report(type: String, ownerId: Int, itemId: Int? = null, comment: String? = null) {
         viewModelScope.launch {
             OpenVKMatchaApp.instance.reportsRepository.report(type, ownerId, itemId, comment)
                 .onSuccess {
-                    AppEvents.showSnackbar("Жалоба успешно отправлена")
+                    AppEvents.showSnackbar(OpenVKMatchaApp.instance.languageManager.getStringOrDefault(com.deliriousvoid.openvkmatcha.R.string.report_sent))
                 }
         }
     }
@@ -2346,7 +2445,7 @@ class MusicPickerViewModel(
         viewModelScope.launch {
             val currentUserId = userId ?: profileRepository.loadCurrentUser().getOrNull()?.id.also { userId = it }
             if (currentUserId == null) {
-                _uiState.update { it.copy(isLoading = false, error = "Ошибка профиля") }
+                _uiState.update { it.copy(isLoading = false, error = OpenVKMatchaApp.instance.languageManager.getStringOrDefault(com.deliriousvoid.openvkmatcha.R.string.error_load_profile)) }
                 return@launch
             }
 
@@ -2543,7 +2642,7 @@ class FriendsViewModel(
                     loadFriends()
                     loadRequests()
                 } else {
-                    AppEvents.showSnackbar(error.message ?: "Ошибка при принятии заявки")
+                    AppEvents.showSnackbar(error.message ?: OpenVKMatchaApp.instance.languageManager.getStringOrDefault(com.deliriousvoid.openvkmatcha.R.string.error_accept_request))
                 }
             }
         }
@@ -2567,7 +2666,7 @@ class FriendsViewModel(
                     loadFriends()
                     loadRequests()
                 } else {
-                    AppEvents.showSnackbar(error.message ?: "Ошибка при удалении")
+                    AppEvents.showSnackbar(error.message ?: OpenVKMatchaApp.instance.languageManager.getStringOrDefault(com.deliriousvoid.openvkmatcha.R.string.error_delete_friend_failed))
                 }
             }
         }
@@ -2608,7 +2707,7 @@ class FriendsViewModel(
                     loadFriends()
                     loadRequests()
                 } else {
-                    AppEvents.showSnackbar(error.message ?: "Ошибка при выполнении действия")
+                    AppEvents.showSnackbar(error.message ?: OpenVKMatchaApp.instance.languageManager.getStringOrDefault(com.deliriousvoid.openvkmatcha.R.string.error_action_failed))
                 }
             }
         }
@@ -3023,6 +3122,7 @@ data class FollowersUiState(
     val isLoading: Boolean = false,
     val isLoadingMore: Boolean = false,
     val canLoadMore: Boolean = true,
+    val isDownloadingAll: Boolean = false,
     val error: String? = null,
     val currentUserId: Int? = null,
 )

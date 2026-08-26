@@ -1,5 +1,7 @@
 package com.deliriousvoid.openvkmatcha.ui.screens.settings
 
+import com.deliriousvoid.openvkmatcha.R
+import com.deliriousvoid.openvkmatcha.ui.util.matchaStringResource
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -61,7 +63,7 @@ fun AboutInstanceScreen(
                 Text(error!!, textAlign = TextAlign.Center)
                 Spacer(modifier = Modifier.height(16.dp))
                 Button(onClick = { viewModel.loadData() }) {
-                    Text("Повторить")
+                    Text(matchaStringResource(R.string.action_retry))
                 }
             }
         } else {
@@ -78,7 +80,7 @@ fun AboutInstanceScreen(
                         item {
                             Spacer(modifier = Modifier.height(24.dp))
                             Text(
-                                "Статистика",
+                                matchaStringResource(R.string.statistics),
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold
                             )
@@ -106,7 +108,7 @@ fun AboutInstanceScreen(
                             item {
                                 Spacer(modifier = Modifier.height(24.dp))
                                 Text(
-                                    "Администраторы",
+                                    matchaStringResource(R.string.administrators),
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold
                                 )
@@ -123,7 +125,7 @@ fun AboutInstanceScreen(
                             item {
                                 Spacer(modifier = Modifier.height(24.dp))
                                 Text(
-                                    "Ссылки",
+                                    matchaStringResource(R.string.links),
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold
                                 )
@@ -158,7 +160,7 @@ private fun InstanceHeader(info: InstanceInfo) {
         )
         if (info.openvkVersion.isNotBlank()) {
             Text(
-                text = "Версия OpenVK: ${info.openvkVersion}",
+                text = matchaStringResource(R.string.openvk_version_format, info.openvkVersion),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -177,15 +179,15 @@ private fun InstanceHeader(info: InstanceInfo) {
 private fun StatisticsGrid(stats: com.deliriousvoid.openvkmatcha.data.model.InstanceStatistics) {
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(modifier = Modifier.fillMaxWidth()) {
-            StatItem("Пользователей", stats.usersCount.toString(), Modifier.weight(1f))
+            StatItem(matchaStringResource(R.string.users), stats.usersCount.toString(), Modifier.weight(1f))
             Spacer(modifier = Modifier.width(8.dp))
-            StatItem("Онлайн", stats.onlineUsersCount.toString(), Modifier.weight(1f))
+            StatItem(matchaStringResource(R.string.online), stats.onlineUsersCount.toString(), Modifier.weight(1f))
         }
         Spacer(modifier = Modifier.height(8.dp))
         Row(modifier = Modifier.fillMaxWidth()) {
-            StatItem("Активных", stats.activeUsersCount.toString(), Modifier.weight(1f))
+            StatItem(matchaStringResource(R.string.active), stats.activeUsersCount.toString(), Modifier.weight(1f))
             Spacer(modifier = Modifier.width(8.dp))
-            StatItem("Сообществ", stats.groupsCount.toString(), Modifier.weight(1f))
+            StatItem(matchaStringResource(R.string.title_groups), stats.groupsCount.toString(), Modifier.weight(1f))
         }
     }
 }

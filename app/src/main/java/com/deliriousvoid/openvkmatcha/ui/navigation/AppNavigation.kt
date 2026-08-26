@@ -524,6 +524,41 @@ fun AppNavigation(
             AppearanceSettingsScreen(
                 viewModel = settingsViewModel,
                 onNavigateToNavigationSettings = { navController.navigate(Routes.SETTINGS_NAVIGATION) },
+                onNavigateToAppIconSettings = { navController.navigate(Routes.SETTINGS_APP_ICON) },
+                onNavigateToLanguageSettings = { navController.navigate(Routes.SETTINGS_LANGUAGE) },
+                onNavigateToThemeEditor = { id -> navController.navigate(Routes.themeEditorRoute(id)) },
+                onNavigateToAccentEditor = { id -> navController.navigate(Routes.accentEditorRoute(id)) },
+                onBack = { navController.popBackStack() }
+            )
+        }
+
+        composable(
+            route = Routes.SETTINGS_THEME_EDITOR,
+            arguments = listOf(navArgument("id") { type = NavType.StringType; nullable = true; defaultValue = null })
+        ) { backStackEntry ->
+            val id = backStackEntry.arguments?.getString("id")
+            ThemeEditorScreen(
+                themeId = id,
+                viewModel = settingsViewModel,
+                onBack = { navController.popBackStack() }
+            )
+        }
+
+        composable(
+            route = Routes.SETTINGS_ACCENT_EDITOR,
+            arguments = listOf(navArgument("id") { type = NavType.StringType; nullable = true; defaultValue = null })
+        ) { backStackEntry ->
+            val id = backStackEntry.arguments?.getString("id")
+            AccentEditorScreen(
+                accentId = id,
+                viewModel = settingsViewModel,
+                onBack = { navController.popBackStack() }
+            )
+        }
+
+        composable(Routes.SETTINGS_LANGUAGE) {
+            LanguageSettingsScreen(
+                viewModel = settingsViewModel,
                 onBack = { navController.popBackStack() }
             )
         }
@@ -544,6 +579,13 @@ fun AppNavigation(
 
         composable(Routes.SETTINGS_NAVIGATION) {
             NavigationSettingsScreen(
+                viewModel = settingsViewModel,
+                onBack = { navController.popBackStack() }
+            )
+        }
+
+        composable(Routes.SETTINGS_APP_ICON) {
+            AppIconSettingsScreen(
                 viewModel = settingsViewModel,
                 onBack = { navController.popBackStack() }
             )

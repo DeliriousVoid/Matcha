@@ -69,11 +69,25 @@ data class UserProfile(
         val month = parts[1]
         if (day !in 1..31 || month !in 1..12) return null
 
-        val monthNames = listOf(
-            "января", "февраля", "марта", "апреля", "мая", "июня",
-            "июля", "августа", "сентября", "октября", "ноября", "декабря"
-        )
-        var result = "$day ${monthNames[month - 1]}"
+        val lm = com.deliriousvoid.openvkmatcha.OpenVKMatchaApp.instance.languageManager
+        val monthRes = when (month) {
+            1 -> com.deliriousvoid.openvkmatcha.R.string.month_1
+            2 -> com.deliriousvoid.openvkmatcha.R.string.month_2
+            3 -> com.deliriousvoid.openvkmatcha.R.string.month_3
+            4 -> com.deliriousvoid.openvkmatcha.R.string.month_4
+            5 -> com.deliriousvoid.openvkmatcha.R.string.month_5
+            6 -> com.deliriousvoid.openvkmatcha.R.string.month_6
+            7 -> com.deliriousvoid.openvkmatcha.R.string.month_7
+            8 -> com.deliriousvoid.openvkmatcha.R.string.month_8
+            9 -> com.deliriousvoid.openvkmatcha.R.string.month_9
+            10 -> com.deliriousvoid.openvkmatcha.R.string.month_10
+            11 -> com.deliriousvoid.openvkmatcha.R.string.month_11
+            12 -> com.deliriousvoid.openvkmatcha.R.string.month_12
+            else -> com.deliriousvoid.openvkmatcha.R.string.month_1
+        }
+        val monthName = lm.getStringOrDefault(monthRes)
+
+        var result = "$day $monthName"
         if (parts.size >= 3) {
             val year = parts[2]
             result += " $year"
@@ -109,13 +123,15 @@ data class UserProfile(
     }
 
     private fun getAgeWord(age: Int): String {
+        val lm = com.deliriousvoid.openvkmatcha.OpenVKMatchaApp.instance.languageManager
         val mod10 = age % 10
         val mod100 = age % 100
-        return when {
-            mod10 == 1 && mod100 != 11 -> "год"
-            mod10 in 2..4 && mod100 !in 12..14 -> "года"
-            else -> "лет"
+        val resId = when {
+            mod10 == 1 && mod100 != 11 -> com.deliriousvoid.openvkmatcha.R.string.age_word_1
+            mod10 in 2..4 && mod100 !in 12..14 -> com.deliriousvoid.openvkmatcha.R.string.age_word_24
+            else -> com.deliriousvoid.openvkmatcha.R.string.age_word_50
         }
+        return lm.getStringOrDefault(resId, age).replace(age.toString(), "").trim()
     }
 }
 
@@ -299,7 +315,8 @@ data class AudioTrack(
     val remoteUrl: String? = null,
     val artworkUrl: String? = null,
     val isAdded: Boolean = false,
-    val accessKey: String? = null
+    val accessKey: String? = null,
+    val isReady: Boolean = true
 ) {
     val stableId: String get() = "${ownerId}_$id"
 }

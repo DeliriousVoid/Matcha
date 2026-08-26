@@ -63,13 +63,17 @@ import com.deliriousvoid.openvkmatcha.ui.components.FullPlayer
 import com.deliriousvoid.openvkmatcha.ui.components.MiniPlayer
 import com.deliriousvoid.openvkmatcha.ui.components.PipPlayerView
 import com.deliriousvoid.openvkmatcha.ui.components.VideoPlayer
+import com.deliriousvoid.openvkmatcha.ui.components.CrashDialog
 import com.deliriousvoid.openvkmatcha.ui.navigation.AppNavigation
 import com.deliriousvoid.openvkmatcha.ui.navigation.MainTab
 import com.deliriousvoid.openvkmatcha.ui.navigation.Routes
 import com.deliriousvoid.openvkmatcha.ui.theme.OpenVKMatchaTheme
 import com.deliriousvoid.openvkmatcha.ui.util.LinkHandler
+import com.deliriousvoid.openvkmatcha.ui.util.LocalLanguageManager
+import com.deliriousvoid.openvkmatcha.ui.util.matchaStringResource
 import com.deliriousvoid.openvkmatcha.ui.viewmodel.*
 import com.deliriousvoid.openvkmatcha.util.AppEvents
+import com.deliriousvoid.openvkmatcha.util.CrashHandler
 import com.deliriousvoid.openvkmatcha.util.LocalFullScreenVideoHandler
 import com.deliriousvoid.openvkmatcha.util.SearchCategory
 import kotlinx.coroutines.launch
@@ -84,7 +88,9 @@ class MainActivity : ComponentActivity() {
     }
 
     private var openPlayerTrigger by mutableStateOf(value = false)
+    private var openVideoPlayerTrigger by mutableStateOf(value = false)
     private var deepLinkRoute by mutableStateOf<String?>(null)
+    private var pendingLanguageUri by mutableStateOf<Uri?>(null)
 
     private val pipReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -128,7 +134,7 @@ class MainActivity : ComponentActivity() {
             val playPauseAction = if (isPlaying) {
                 RemoteAction(
                     Icon.createWithResource(this, android.R.drawable.ic_media_pause),
-                    "Пауза", "Пауза",
+                    getString(R.string.pip_pause), getString(R.string.pip_pause),
                     PendingIntent.getBroadcast(
                         this,
                         1,
@@ -139,7 +145,7 @@ class MainActivity : ComponentActivity() {
             } else {
                 RemoteAction(
                     Icon.createWithResource(this, android.R.drawable.ic_media_play),
-                    "Воспроизвести", "Воспроизвести",
+                    getString(R.string.pip_play), getString(R.string.pip_play),
                     PendingIntent.getBroadcast(
                         this,
                         2,
@@ -186,10 +192,26 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         handleIntent(intent)
+        when (intent.action) {
+            ACTION_OPEN_PLAYER -> openPlayerTrigger = true
+            ACTION_OPEN_VIDEO_PLAYER -> openVideoPlayerTrigger = true
+        }
     }
 
     private fun handleIntent(intent: Intent) {
         val data: Uri? = intent.data
+        if (data != null) {
+            val path = data.path?.lowercase()
+            val isMlang = path?.endsWith(".mlang") == true || 
+                         intent.type == "application/octet-stream" ||
+                         intent.type == "application/xml"
+            
+            if (isMlang) {
+                pendingLanguageUri = data
+                deepLinkRoute = Routes.SETTINGS_LANGUAGE
+                return
+            }
+        }
         data?.toString()?.let { LinkHandler.getRouteForUrl(it) }?.let { route ->
             deepLinkRoute = route
         }
@@ -206,9 +228,15 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         handleIntent(intent)
         setContent {
+            val context = LocalContext.current
+            var showCrashDialog by remember { mutableStateOf(value = CrashHandler.hasCrashed(context)) }
+            val crashLogs = remember { if (showCrashDialog) CrashHandler.getCrashLog(context) else null }
+
             val settingsViewModel: SettingsViewModel = viewModel(factory = SettingsViewModel.factory())
             val theme by settingsViewModel.theme.collectAsState()
             val accent by settingsViewModel.accent.collectAsState()
+            val customTheme by settingsViewModel.currentCustomTheme.collectAsState()
+            val customAccent by settingsViewModel.currentCustomAccent.collectAsState()
             val autoHidePlayer by settingsViewModel.autoHidePlayer.collectAsState()
 
             val isInPipMode by AppEvents.isInPipMode.collectAsState()
@@ -241,8 +269,14 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            OpenVKMatchaTheme(theme = theme, accent = accent) {
+            OpenVKMatchaTheme(
+                theme = theme,
+                accent = accent,
+                customTheme = customTheme,
+                customAccent = customAccent
+            ) {
                 androidx.compose.runtime.CompositionLocalProvider(
+                    LocalLanguageManager provides OpenVKMatchaApp.instance.languageManager,
                     LocalFullScreenVideoHandler provides { video, open, player ->
                         val activePlayer = AppEvents.activeExoPlayer.value
                         val activeVid = AppEvents.activeVideo.value
@@ -251,6 +285,16 @@ class MainActivity : ComponentActivity() {
                         isFullScreenVideoOpen = open
                     },
                 ) {
+                    if (showCrashDialog) {
+                        CrashDialog(
+                            logs = crashLogs,
+                            onDismiss = {
+                                showCrashDialog = false
+                                CrashHandler.clearCrashState(context)
+                            }
+                        )
+                    }
+
                     Box(modifier = Modifier.fillMaxSize()) {
                         Box(
                             modifier = Modifier
@@ -258,6 +302,14 @@ class MainActivity : ComponentActivity() {
                                 .graphicsLayer { alpha = if (isInPipMode) 0f else 1f },
                         ) {
                             val navController = rememberNavController()
+
+                            LaunchedEffect(pendingLanguageUri) {
+                                pendingLanguageUri?.let { uri ->
+                                    settingsViewModel.importLanguage(uri)
+                                    pendingLanguageUri = null
+                                }
+                            }
+
                             val navBackStackEntry by navController.currentBackStackEntryAsState()
                             val currentRoute = navBackStackEntry?.destination?.route
 
@@ -344,13 +396,14 @@ class MainActivity : ComponentActivity() {
                                 }
                             }
 
-                            LaunchedEffect(intent.action, openPlayerTrigger) {
+                            LaunchedEffect(intent.action, openPlayerTrigger, openVideoPlayerTrigger) {
                                 if (((intent.action == ACTION_OPEN_PLAYER) || openPlayerTrigger)) {
                                     showFullPlayer = true
                                     openPlayerTrigger = false
                                     intent.action = null
-                                } else if (intent.action == ACTION_OPEN_VIDEO_PLAYER) {
+                                } else if (intent.action == ACTION_OPEN_VIDEO_PLAYER || openVideoPlayerTrigger) {
                                     isFullScreenVideoOpen = true
+                                    openVideoPlayerTrigger = false
                                     intent.action = null
                                 }
                             }
@@ -451,6 +504,8 @@ class MainActivity : ComponentActivity() {
                                     queue = queue,
                                     hidePlayedTracks = hidePlayedTracks,
                                     playerViewModel = playerViewModel,
+                                    appTheme = theme,
+                                    customTheme = customTheme,
                                     onPlayPause = { playerViewModel.playPause() },
                                     onNext = { playerViewModel.skipToNext() },
                                     onPrevious = { playerViewModel.seekToPreviousOrRestart() },
@@ -486,11 +541,11 @@ class MainActivity : ComponentActivity() {
                                                         topBarState?.customContent?.invoke()
                                                     } else if (topBarState?.isSearchActive == true || (isSearchActive && ((isMainScreen && selectedTab == MainTab.Music) || isFriends || isGroups)) || isSearch) {
                                                         val placeholderText = when {
-                                                            isSearch -> "Поиск ${globalSearchCategory.title.lowercase()}..."
-                                                            isMainScreen && selectedTab == MainTab.Music -> if (musicState.mode == MusicMode.Tracks) "Поиск музыки..." else "Поиск плейлистов..."
-                                                            isFriends -> "Поиск друзей..."
-                                                            isGroups -> "Поиск сообществ..."
-                                                            else -> "Поиск..."
+                                                            isSearch -> matchaStringResource(R.string.search_placeholder_category, globalSearchCategory.title.lowercase())
+                                                            isMainScreen && selectedTab == MainTab.Music -> if (musicState.mode == MusicMode.Tracks) matchaStringResource(R.string.search_music_placeholder) else matchaStringResource(R.string.search_playlists_placeholder)
+                                                            isFriends -> matchaStringResource(R.string.search_friends_placeholder)
+                                                            isGroups -> matchaStringResource(R.string.search_groups_placeholder)
+                                                            else -> matchaStringResource(R.string.search_placeholder)
                                                         }
                                                         
                                                         TextField(
@@ -515,7 +570,7 @@ class MainActivity : ComponentActivity() {
                                                             customTitle != null -> customTitle!!
                                                             isMainScreen -> {
                                                                 if (selectedTab == MainTab.Home) {
-                                                                    val currentTitle = if (feedState.feedType == FeedType.GLOBAL) "OpenVK" else "Подписки"
+                                                                    val currentTitle = if (feedState.feedType == FeedType.GLOBAL) matchaStringResource(R.string.app_name) else matchaStringResource(R.string.feed_subscriptions)
                                                                     Row(
                                                                         verticalAlignment = Alignment.CenterVertically,
                                                                         modifier = Modifier.clickable { showFeedMenu = true }
@@ -524,12 +579,12 @@ class MainActivity : ComponentActivity() {
                                                                         Icon(Icons.Default.ArrowDropDown, null)
                                                                         DropdownMenu(expanded = showFeedMenu, onDismissRequest = { showFeedMenu = false }) {
                                                                             DropdownMenuItem(
-                                                                                text = { Text("Глобальная") },
+                                                                                text = { Text(matchaStringResource(R.string.feed_global)) },
                                                                                 onClick = { feedViewModel.setFeedType(FeedType.GLOBAL); showFeedMenu = false },
                                                                                 trailingIcon = { if (feedState.feedType == FeedType.GLOBAL) Icon(Icons.Default.Check, null) }
                                                                             )
                                                                             DropdownMenuItem(
-                                                                                text = { Text("Подписки") },
+                                                                                text = { Text(matchaStringResource(R.string.feed_subscriptions)) },
                                                                                 onClick = { feedViewModel.setFeedType(FeedType.SUBSCRIPTIONS); showFeedMenu = false },
                                                                                 trailingIcon = { if (feedState.feedType == FeedType.SUBSCRIPTIONS) Icon(Icons.Default.Check, null) }
                                                                             )
@@ -538,56 +593,56 @@ class MainActivity : ComponentActivity() {
                                                                     ""
                                                                 } else selectedTab.title
                                                             }
-                                                            isPlaylistDetails -> navBackStackEntry?.arguments?.getString("title") ?: "Плейлист"
-                                                            isChat -> navBackStackEntry?.arguments?.getString("title") ?: "Чат"
-                                                            isNotifications && !isOfflineMode -> "Ответы"
-                                                            isComments -> "Комментарии"
-                                                            currentRoute == Routes.SETTINGS -> "Настройки"
-                                                            currentRoute == Routes.SETTINGS_GENERAL -> "Основные"
-                                                            currentRoute == Routes.SETTINGS_APPEARANCE -> "Внешний вид"
-                                                            currentRoute == Routes.SETTINGS_MUSIC -> "Музыка"
-                                                            currentRoute == Routes.SETTINGS_DEVELOPER -> "Для разработчика"
-                                                            currentRoute == Routes.SETTINGS_ABOUT_INSTANCE -> "Об инстанции"
-                                                            isUpload -> "Загрузка музыки"
-                                                            isProfile -> "Профиль"
+                                                            isPlaylistDetails -> navBackStackEntry?.arguments?.getString("title") ?: matchaStringResource(R.string.title_playlist)
+                                                            isChat -> navBackStackEntry?.arguments?.getString("title") ?: matchaStringResource(R.string.title_chat)
+                                                            isNotifications && !isOfflineMode -> matchaStringResource(R.string.title_notifications)
+                                                            isComments -> matchaStringResource(R.string.title_comments)
+                                                            currentRoute == Routes.SETTINGS -> matchaStringResource(R.string.title_settings)
+                                                            currentRoute == Routes.SETTINGS_GENERAL -> matchaStringResource(R.string.title_settings_general)
+                                                            currentRoute == Routes.SETTINGS_APPEARANCE -> matchaStringResource(R.string.title_settings_appearance)
+                                                            currentRoute == Routes.SETTINGS_MUSIC -> matchaStringResource(R.string.title_settings_music)
+                                                            currentRoute == Routes.SETTINGS_DEVELOPER -> matchaStringResource(R.string.title_settings_developer)
+                                                            currentRoute == Routes.SETTINGS_ABOUT_INSTANCE -> matchaStringResource(R.string.title_settings_about_instance)
+                                                            isUpload -> matchaStringResource(R.string.title_upload_audio)
+                                                            isProfile -> matchaStringResource(R.string.title_profile)
                                                             isFriends -> {
                                                                 val name = navBackStackEntry?.arguments?.getString("name") ?: ""
-                                                                if (name.isNotEmpty()) "Друзья $name" else "Друзья"
+                                                                if (name.isNotEmpty()) matchaStringResource(R.string.title_friends_user, name) else matchaStringResource(R.string.title_friends)
                                                             }
                                                             isGroups -> {
                                                                 val name = navBackStackEntry?.arguments?.getString("name") ?: ""
-                                                                if (name.isNotEmpty()) "Сообщества $name" else "Сообщества"
+                                                                if (name.isNotEmpty()) matchaStringResource(R.string.title_groups_user, name) else matchaStringResource(R.string.title_groups)
                                                             }
                                                             isGifts -> {
                                                                 val name = navBackStackEntry?.arguments?.getString("name") ?: ""
-                                                                if (name.isNotEmpty()) "Подарки $name" else "Подарки"
+                                                                if (name.isNotEmpty()) matchaStringResource(R.string.title_gifts_user, name) else matchaStringResource(R.string.title_gifts)
                                                             }
                                                             isUserMusic -> {
                                                                 val name = navBackStackEntry?.arguments?.getString("name") ?: ""
-                                                                "Музыка $name"
+                                                                matchaStringResource(R.string.title_music_user, name)
                                                             }
-                                                            currentRoute == Routes.SETTINGS_IGNORED -> "Игнорируемые"
+                                                            currentRoute == Routes.SETTINGS_IGNORED -> matchaStringResource(R.string.title_settings_ignored)
                                                             isFollowers -> {
                                                                 val name = navBackStackEntry?.arguments?.getString("name") ?: ""
                                                                 val isGroup = navBackStackEntry?.arguments?.getBoolean("isGroup") ?: false
-                                                                val label = if (isGroup) "Участники" else "Подписчики"
+                                                                val label = if (isGroup) matchaStringResource(R.string.title_members) else matchaStringResource(R.string.title_followers)
                                                                 if (name.isNotEmpty()) "$label $name" else label
                                                             }
-                                                            isTopics -> "Обсуждения"
-                                                            isTopicComments -> navBackStackEntry?.arguments?.getString("title") ?: "Обсуждение"
-                                                            currentRoute?.startsWith("create_post/") == true -> "Новая запись"
-                                                            isVideos -> "Видео"
-                                                            isDocuments -> "Документы"
-                                                            isNotes -> "Заметки"
-                                                            isNoteDetails -> "Заметка"
-                                                            isEvents -> "События"
+                                                            isTopics -> matchaStringResource(R.string.title_topics)
+                                                            isTopicComments -> navBackStackEntry?.arguments?.getString("title") ?: matchaStringResource(R.string.title_topic)
+                                                            currentRoute?.startsWith("create_post/") == true -> matchaStringResource(R.string.title_create_post)
+                                                            isVideos -> matchaStringResource(R.string.title_videos)
+                                                            isDocuments -> matchaStringResource(R.string.title_documents)
+                                                            isNotes -> matchaStringResource(R.string.title_notes)
+                                                            isNoteDetails -> matchaStringResource(R.string.title_note)
+                                                            isEvents -> matchaStringResource(R.string.title_events)
                                                             isWebView -> navBackStackEntry?.arguments?.getString("title") ?: ""
-                                                            isTransfer -> "Перевод"
+                                                            isTransfer -> matchaStringResource(R.string.title_transfer)
                                                             isPhotoAlbums -> {
                                                                 val name = navBackStackEntry?.arguments?.getString("name") ?: ""
-                                                                if (name.isNotEmpty()) "Альбомы $name" else "Альбомы"
+                                                                if (name.isNotEmpty()) matchaStringResource(R.string.title_albums_user, name) else matchaStringResource(R.string.title_albums)
                                                             }
-                                                            isPhotos -> navBackStackEntry?.arguments?.getString("title") ?: "Фото"
+                                                            isPhotos -> navBackStackEntry?.arguments?.getString("title") ?: matchaStringResource(R.string.title_photos)
                                                             else -> ""
                                                         }
                                                         if (titleStr.isNotEmpty()) Text(titleStr, maxLines = 1, modifier = Modifier.basicMarquee())
@@ -611,42 +666,42 @@ class MainActivity : ComponentActivity() {
                                                                         AppEvents.setSearchQuery("")
                                                                     },
                                                                 ) {
-                                                                    Icon(Icons.AutoMirrored.Filled.ArrowBack, "Закрыть поиск")
+                                                                    Icon(Icons.AutoMirrored.Filled.ArrowBack, matchaStringResource(R.string.desc_close_search))
                                                                 }
                                                             } else if (((isMainScreen && selectedTab == MainTab.Music) || isFriends || isGroups) && !isSearchActive && !isOfflineMode) {
                                                                 if (isFriends || isGroups) {
                                                                     IconButton(onClick = { navController.popBackStack() }) {
-                                                                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Назад")
+                                                                        Icon(Icons.AutoMirrored.Filled.ArrowBack, matchaStringResource(R.string.desc_back))
                                                                     }
                                                                 }
                                                                 IconButton(
                                                                     onClick = { isSearchActive = true }
-                                                                ) { Icon(Icons.Default.Search, "Поиск") }
+                                                                ) { Icon(Icons.Default.Search, matchaStringResource(R.string.search_placeholder)) }
                                                             } else if (isMainScreen && selectedTab == MainTab.Explore && !isOfflineMode) {
                                                                 IconButton(
                                                                     onClick = { navController.navigate(Routes.SEARCH) }
-                                                                ) { Icon(Icons.Default.Search, "Поиск") }
+                                                                ) { Icon(Icons.Default.Search, matchaStringResource(R.string.search_placeholder)) }
                                                                 IconButton(
                                                                     onClick = { navController.navigate(Routes.qrScannerRoute()) }
-                                                                ) { Icon(Icons.Default.QrCodeScanner, "Сканировать QR") }
+                                                                ) { Icon(Icons.Default.QrCodeScanner, matchaStringResource(R.string.desc_scan_qr)) }
                                                             } else if (isProfile || (isMainScreen && selectedTab == MainTab.Profile)) {
                                                                 if (isProfile) {
                                                                     IconButton(onClick = { navController.popBackStack() }) {
-                                                                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Назад")
+                                                                        Icon(Icons.AutoMirrored.Filled.ArrowBack, matchaStringResource(R.string.desc_back))
                                                                     }
                                                                 }
                                                                 IconButton(
                                                                     onClick = {
                                                                         qrData?.let { navController.navigate(Routes.qrDisplayRoute(it.url, it.title, it.avatarUrl)) }
                                                                     }
-                                                                ) { Icon(Icons.Default.QrCode, "Показать QR") }
+                                                                ) { Icon(Icons.Default.QrCode, matchaStringResource(R.string.desc_show_qr)) }
                                                             } else if (!isMainScreen) {
                                                                 IconButton(
                                                                     onClick = { 
                                                                         if (isUpload) musicViewModel.loadMusic()
                                                                         navController.popBackStack() 
                                                                     }
-                                                                ) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Назад") }
+                                                                ) { Icon(Icons.AutoMirrored.Filled.ArrowBack, matchaStringResource(R.string.desc_back)) }
                                                             }
                                                         }
                                                     }
@@ -657,7 +712,7 @@ class MainActivity : ComponentActivity() {
                                                     } else {
                                                         if (isSearch) {
                                                             Box {
-                                                                IconButton(onClick = { showCategoryMenu = true }) { Icon(Icons.Filled.Tune, "Категория поиска") }
+                                                                IconButton(onClick = { showCategoryMenu = true }) { Icon(Icons.Filled.Tune, matchaStringResource(R.string.desc_search_category)) }
                                                                 DropdownMenu(expanded = showCategoryMenu, onDismissRequest = { showCategoryMenu = false }) {
                                                                     for (cat in SearchCategory.entries) {
                                                                         DropdownMenuItem(
@@ -672,36 +727,50 @@ class MainActivity : ComponentActivity() {
                                                         if ((isSearch || (isSearchActive && ((isMainScreen && selectedTab == MainTab.Music) || isFriends || isGroups))) && globalSearchQuery.isNotEmpty()) {
                                                             IconButton(
                                                                 onClick = { AppEvents.setSearchQuery("") }
-                                                            ) { Icon(Icons.Default.Clear, "Очистить") }
+                                                            ) { Icon(Icons.Default.Clear, matchaStringResource(R.string.desc_clear)) }
                                                         }
                                                         if (isMainScreen || isProfile || isFriends || isGroups || isUserMusic || isGifts || isFollowers || isTopics || isTopicComments) {
                                                             if (!isOfflineMode) {
-                                                                val notificationsState by notificationsViewModel.uiState.collectAsState()
-                                                                val unreadCount = notificationsState.unreadCount
-                                                                IconButton(onClick = { 
-                                                                    notificationsViewModel.setArchive(unreadCount == 0)
-                                                                    navController.navigate(Routes.NOTIFICATIONS) 
-                                                                }) {
-                                                                    BadgedBox(badge = { if (unreadCount > 0) Badge(containerColor = Color.Red, contentColor = Color.White) { Text(if (unreadCount > 99) "99+" else unreadCount.toString()) } }) {
-                                                                        Icon(Icons.Default.Notifications, "Ответы")
+                                                                if (isMainScreen && selectedTab == MainTab.Music && musicState.mode == MusicMode.Tracks) {
+                                                                    IconButton(onClick = { musicViewModel.downloadAll() }) {
+                                                                        if (musicState.isDownloadingAll) {
+                                                                            CircularProgressIndicator(
+                                                                                modifier = Modifier.size(24.dp),
+                                                                                strokeWidth = 2.dp,
+                                                                                color = MaterialTheme.colorScheme.primary
+                                                                            )
+                                                                        } else {
+                                                                            Icon(Icons.Default.Download, matchaStringResource(R.string.action_download_all))
+                                                                        }
+                                                                    }
+                                                                } else {
+                                                                    val notificationsState by notificationsViewModel.uiState.collectAsState()
+                                                                    val unreadCount = notificationsState.unreadCount
+                                                                    IconButton(onClick = { 
+                                                                        notificationsViewModel.setArchive(unreadCount == 0)
+                                                                        navController.navigate(Routes.NOTIFICATIONS) 
+                                                                    }) {
+                                                                        BadgedBox(badge = { if (unreadCount > 0) Badge(containerColor = Color.Red, contentColor = Color.White) { Text(if (unreadCount > 99) "99+" else unreadCount.toString()) } }) {
+                                                                            Icon(Icons.Default.Notifications, matchaStringResource(R.string.title_notifications))
+                                                                        }
                                                                     }
                                                                 }
                                                             }
                                                             IconButton(onClick = {
                                                                 navController.navigate(Routes.SETTINGS)
-                                                            }) { Icon(Icons.Default.Settings, "Настройки") }
+                                                            }) { Icon(Icons.Default.Settings, matchaStringResource(R.string.title_settings)) }
                                                         }
                                                         var showMenu by remember { mutableStateOf(false) }
                                                         val context = LocalContext.current
                                                         val baseUrl = OpenVKMatchaApp.instance.api.baseUrl
                                                         if (isChat) {
                                                             Box {
-                                                                IconButton(onClick = { showMenu = true }) { Icon(Icons.Default.MoreVert, "Ещё") }
+                                                                IconButton(onClick = { showMenu = true }) { Icon(Icons.Default.MoreVert, matchaStringResource(R.string.desc_more)) }
                                                                 DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
                                                                     val peerId = navBackStackEntry?.arguments?.getInt("peerId") ?: 0
                                                                     val currentUrl = "$baseUrl/im?sel=$peerId"
-                                                                    DropdownMenuItem(text = { Text("Копировать ссылку") }, onClick = { showMenu = false; clipboardManager.setText(AnnotatedString(currentUrl)) })
-                                                                    DropdownMenuItem(text = { Text("Открыть в браузере") }, onClick = { showMenu = false; context.startActivity(Intent(Intent.ACTION_VIEW, currentUrl.toUri())) })
+                                                                    DropdownMenuItem(text = { Text(matchaStringResource(R.string.copy_link)) }, onClick = { showMenu = false; clipboardManager.setText(AnnotatedString(currentUrl)) })
+                                                                    DropdownMenuItem(text = { Text(matchaStringResource(R.string.open_in_browser)) }, onClick = { showMenu = false; context.startActivity(Intent(Intent.ACTION_VIEW, currentUrl.toUri())) })
                                                                 }
                                                             }
                                                         }
@@ -893,7 +962,7 @@ class MainActivity : ComponentActivity() {
                                                     Icon(imageVector = if (isPlayingFloating) Icons.Default.Pause else Icons.Default.PlayArrow, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
                                                 }
                                                 IconButton(onClick = { isFullScreenVideoOpen = true; AppEvents.setVideoFloating(false) }, modifier = Modifier.align(Alignment.BottomEnd).padding(4.dp).size(24.dp).background(Color.Black.copy(alpha = 0.5f), CircleShape)) {
-                                                    Icon(Icons.Default.Fullscreen, null, tint = Color.White, modifier = Modifier.size(14.dp))
+                                                    Icon(Icons.Default.Fullscreen, matchaStringResource(R.string.action_restore), tint = Color.White, modifier = Modifier.size(14.dp))
                                                 }
                                             }
                                         }

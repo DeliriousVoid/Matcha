@@ -20,6 +20,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.deliriousvoid.openvkmatcha.R
+import com.deliriousvoid.openvkmatcha.ui.util.matchaStringResource
 import com.deliriousvoid.openvkmatcha.OpenVKMatchaApp
 import com.deliriousvoid.openvkmatcha.data.model.Document
 import com.deliriousvoid.openvkmatcha.ui.navigation.Routes
@@ -38,8 +40,12 @@ fun DocumentsScreen(
 ) {
     val state by viewModel.uiState.collectAsState()
 
+    val title = matchaStringResource(R.string.title_documents)
+    val loadingLabel = matchaStringResource(R.string.loading_document)
+    val uploadLabel = matchaStringResource(R.string.action_upload)
+    
     DisposableEffect(Unit) {
-        AppEvents.setTopBarState(TopBarState(tag = "documents", title = "Документы", route = Routes.DOCUMENTS))
+        AppEvents.setTopBarState(TopBarState(tag = "documents", title = title, route = Routes.DOCUMENTS))
         onDispose {
             if (AppEvents.topBarState.value?.tag == "documents") {
                 AppEvents.setTopBarState(null)
@@ -63,7 +69,7 @@ fun DocumentsScreen(
         FloatingActionButton(
             onClick = {
                 val baseUrl = OpenVKMatchaApp.instance.api.baseUrl
-                onOpenWebView("$baseUrl/docs?act=add", "Загрузка документа")
+                onOpenWebView("$baseUrl/docs?act=add", loadingLabel)
             },
             modifier = Modifier
                 .align(Alignment.BottomEnd)
@@ -71,13 +77,14 @@ fun DocumentsScreen(
             containerColor = MaterialTheme.colorScheme.primaryContainer,
             contentColor = MaterialTheme.colorScheme.onPrimaryContainer
         ) {
-            Icon(Icons.Default.Upload, contentDescription = "Загрузить")
+            Icon(Icons.Default.Upload, contentDescription = uploadLabel)
         }
     }
 }
 
 @Composable
 fun DocumentItem(doc: Document) {
+    val downloadLabel = matchaStringResource(R.string.action_download)
     ListItem(
         headlineContent = {
             Text(doc.title, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Medium)
@@ -104,7 +111,7 @@ fun DocumentItem(doc: Document) {
             IconButton(onClick = {
                 OpenVKMatchaApp.instance.downloadRepository.downloadFile(doc.url, doc.title, doc.ext)
             }) {
-                Icon(Icons.Default.Download, contentDescription = "Скачать")
+                Icon(Icons.Default.Download, contentDescription = downloadLabel)
             }
         },
         modifier = Modifier.clickable {
@@ -113,12 +120,13 @@ fun DocumentItem(doc: Document) {
     )
 }
 
+@Composable
 private fun formatSize(size: Int): String {
     val kb = size / 1024.0
     val mb = kb / 1024.0
     return when {
-        mb >= 1.0 -> String.format("%.1f МБ", mb)
-        kb >= 1.0 -> String.format("%.1f КБ", kb)
-        else -> "$size Б"
+        mb >= 1.0 -> matchaStringResource(R.string.size_mb, mb)
+        kb >= 1.0 -> matchaStringResource(R.string.size_kb, kb)
+        else -> matchaStringResource(R.string.size_b, size)
     }
 }

@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.deliriousvoid.openvkmatcha.OpenVKMatchaApp
+import com.deliriousvoid.openvkmatcha.R
 import com.deliriousvoid.openvkmatcha.data.model.InstanceInfo
 import com.deliriousvoid.openvkmatcha.data.model.InstanceStatistics
 import com.deliriousvoid.openvkmatcha.data.model.InstanceAdmins
@@ -105,7 +106,7 @@ class AboutInstanceViewModel : ViewModel() {
                         )
                         _instanceInfo.value = info
                     }.onFailure {
-                        _error.value = it.message ?: "Ошибка при загрузке информации"
+                        _error.value = it.message ?: OpenVKMatchaApp.instance.languageManager.getStringOrDefault(R.string.error_load_info)
                     }
 
                     // Process developers
@@ -129,7 +130,7 @@ class AboutInstanceViewModel : ViewModel() {
                     _developers.value = devs
                 }
             } catch (e: Exception) {
-                _error.value = e.message ?: "Произошла непредвиденная ошибка"
+                _error.value = e.message ?: OpenVKMatchaApp.instance.languageManager.getStringOrDefault(R.string.error_unexpected)
             } finally {
                 _isLoading.value = false
             }

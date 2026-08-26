@@ -24,6 +24,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import com.deliriousvoid.openvkmatcha.R
+import com.deliriousvoid.openvkmatcha.ui.util.matchaStringResource
 import com.deliriousvoid.openvkmatcha.OpenVKMatchaApp
 import com.deliriousvoid.openvkmatcha.data.model.Video
 import com.deliriousvoid.openvkmatcha.ui.navigation.Routes
@@ -43,8 +45,12 @@ fun VideosScreen(
 ) {
     val state by viewModel.uiState.collectAsState()
 
+    val title = matchaStringResource(R.string.title_videos)
+    val loadingVideoLabel = matchaStringResource(R.string.loading_video)
+    val uploadLabel = matchaStringResource(R.string.action_upload)
+    
     DisposableEffect(Unit) {
-        AppEvents.setTopBarState(TopBarState(tag = "videos", title = "Видео", route = Routes.VIDEOS))
+        AppEvents.setTopBarState(TopBarState(tag = "videos", title = title, route = Routes.VIDEOS))
         onDispose {
             if (AppEvents.topBarState.value?.tag == "videos") {
                 AppEvents.setTopBarState(null)
@@ -74,7 +80,7 @@ fun VideosScreen(
         FloatingActionButton(
             onClick = {
                 val baseUrl = OpenVKMatchaApp.instance.api.baseUrl
-                onOpenWebView("$baseUrl/videos/upload", "Загрузка видео")
+                onOpenWebView("$baseUrl/videos/upload", loadingVideoLabel)
             },
             modifier = Modifier
                 .align(Alignment.BottomEnd)
@@ -82,7 +88,7 @@ fun VideosScreen(
             containerColor = MaterialTheme.colorScheme.primaryContainer,
             contentColor = MaterialTheme.colorScheme.onPrimaryContainer
         ) {
-            Icon(Icons.Default.Upload, contentDescription = "Загрузить")
+            Icon(Icons.Default.Upload, contentDescription = uploadLabel)
         }
     }
 }
@@ -147,7 +153,7 @@ fun VideoItem(video: Video, onClick: (Video) -> Unit) {
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "${video.views} просмотров",
+                        text = matchaStringResource(R.string.views_count_format, video.views),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -162,7 +168,7 @@ fun VideoItem(video: Video, onClick: (Video) -> Unit) {
                         },
                         modifier = Modifier.size(24.dp)
                     ) {
-                        Icon(Icons.Default.Download, contentDescription = "Скачать", modifier = Modifier.size(16.dp))
+                        Icon(Icons.Default.Download, contentDescription = matchaStringResource(R.string.action_download), modifier = Modifier.size(16.dp))
                     }
                 }
             }

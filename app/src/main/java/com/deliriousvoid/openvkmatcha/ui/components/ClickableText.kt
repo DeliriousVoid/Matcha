@@ -4,6 +4,7 @@ import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.LocalContentColor
@@ -23,7 +24,6 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
@@ -33,6 +33,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import com.deliriousvoid.openvkmatcha.R
 import com.deliriousvoid.openvkmatcha.ui.util.LinkHandler
+
+import com.deliriousvoid.openvkmatcha.ui.util.MarkdownParser
 
 @Composable
 fun ParsedText(
@@ -74,17 +76,19 @@ fun ParsedText(
 
     val handleAnnotation = { tag: String, item: String ->
         when (tag) {
-            "MENTION" -> currentOnMentionClick(item.toInt())
+            "MENTION" -> currentOnMentionClick(item.toIntOrNull() ?: 0)
             "PROFILE" -> currentOnProfileClick(item)
             "WALL" -> {
                 val parts = item.split("_")
-                currentOnWallClick(parts[0].toInt(), parts[1].toInt())
+                if (parts.size == 2) {
+                    currentOnWallClick(parts[0].toIntOrNull() ?: 0, parts[1].toIntOrNull() ?: 0)
+                }
             }
-            "MUSIC" -> currentOnMusicClick(item.toInt())
+            "MUSIC" -> currentOnMusicClick(item.toIntOrNull() ?: 0)
             "PLAYLIST" -> {
                 val parts = item.split("_")
                 if (parts.size == 2) {
-                    currentOnPlaylistClick(parts[0].toInt(), parts[1].toInt())
+                    currentOnPlaylistClick(parts[0].toIntOrNull() ?: 0, parts[1].toIntOrNull() ?: 0)
                 }
             }
             "URL" -> {
@@ -98,260 +102,117 @@ fun ParsedText(
         }
     }
 
-    val annotatedString = buildAnnotatedString {
-        val mentionRegex = Regex("\\[(id|club|public)(\\d+)\\|(.*?)\\]")
-        val shortnameMentionRegex = Regex("\\[([^|]+)\\|@([\\w\\d._-]+)\\]")
-        // Comprehensive URL regex that matches both http/https and domain-only links like google.com
-        val urlRegex = Regex("(?:https?://|www\\.)[\\w\\d.\\-]+[\\w\\d/\\-?%&=._~#+!]*|(?:[\\w\\d\\-]+\\.)+[a-z]{2,10}(?:/[\\w\\d/\\-?%&=._~#+!]*)?", RegexOption.IGNORE_CASE)
-        
-        var currentIndex = 0
-        
-        val allMatches = (mentionRegex.findAll(text).map { it to "ID" } + 
-                          shortnameMentionRegex.findAll(text).map { it to "SHORTNAME" } + 
-                          urlRegex.findAll(text).map { it to "URL" })
-            .sortedBy { it.first.range.first }
-            .toList()
-
-        allMatches.forEach { (match, matchType) ->
-            if (match.range.first < currentIndex) return@forEach
-            
-            append(text.substring(currentIndex, match.range.first))
-            
-            when (matchType) {
-                "ID" -> {
-                    // Mention [id123|Name]
-                    val type = match.groupValues[1]
-                    val id = match.groupValues[2].toInt()
-                    val name = match.groupValues[3]
-                    
-                    pushStringAnnotation(tag = "MENTION", annotation = if (type == "id") id.toString() else (-id).toString())
-                    withStyle(style = SpanStyle(color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)) {
-                        append(name)
-                    }
-                    pop()
-                }
-                "SHORTNAME" -> {
-                    // Shortname mention [Name|@shortname]
-                    val name = match.groupValues[1]
-                    val shortname = match.groupValues[2]
-                    
-                    pushStringAnnotation(tag = "PROFILE", annotation = shortname)
-                    withStyle(style = SpanStyle(color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)) {
-                        append(name)
-                    }
-                    pop()
-                }
-                "URL" -> {
-                    val matchText = match.value
-                    // URL or OpenVK link
-                    val url = if (!matchText.startsWith("http")) "https://$matchText" else matchText
-                    val uri = Uri.parse(url)
-                    val path = uri.path?.trim('/') ?: ""
-
-                    val ovkLinkType = when {
-                        path.startsWith("id") && path.substring(2).all { it.isDigit() } -> "profile"
-                        path == "id0" -> "profile"
-                        (path.startsWith("club") || path.startsWith("public")) && path.substring(4)
-                            .all { it.isDigit() } -> "group"
-                        path.startsWith("event") -> "event"
-                        path.startsWith("playlist") -> "playlist"
-                        path.startsWith("wall") -> "wall"
-                        path.startsWith("audios") && path.substring(6).all {
-                            it.isDigit() || (it == '-' && path.length > 7)
-                        } -> "music"
-                        uri.host?.contains("openvk.org") == true -> "screen_name"
-                        else -> "external"
-                    }
-
-                    when (ovkLinkType) {
-                        "profile" -> {
-                            val id = if (path == "id0") "0" else path.substring(2)
-                            pushStringAnnotation(tag = "PROFILE", annotation = id)
-                            withStyle(style = SpanStyle(color = MaterialTheme.colorScheme.primary)) {
-                                append(matchText)
-                            }
-                            pop()
-                        }
-                        "group" -> {
-                            val id =
-                                if (path.startsWith("club")) path.substring(4) else path.substring(6)
-                            pushStringAnnotation(tag = "PROFILE", annotation = "-$id")
-                            withStyle(style = SpanStyle(color = MaterialTheme.colorScheme.primary)) {
-                                append(matchText)
-                            }
-                            pop()
-                        }
-                        "event" -> {
-                            val idStr = path.removePrefix("event").trimStart('/')
-                            if (idStr.all { it.isDigit() } && idStr.isNotEmpty()) {
-                                pushStringAnnotation(tag = "PROFILE", annotation = "-$idStr")
-                                withStyle(style = SpanStyle(color = MaterialTheme.colorScheme.primary)) {
-                                    append(matchText)
-                                }
-                                pop()
-                            } else {
-                                append(matchText)
-                            }
-                        }
-                        "playlist" -> {
-                            val idStr = path.removePrefix("playlist").trimStart('/')
-                            val parts = idStr.split("_")
-                            if (parts.size == 2 && parts[0].toIntOrNull() != null && parts[1].toIntOrNull() != null) {
-                                pushStringAnnotation(
-                                    tag = "PLAYLIST",
-                                    annotation = "${parts[0]}_${parts[1]}"
-                                )
-                                withStyle(style = SpanStyle(color = MaterialTheme.colorScheme.primary)) {
-                                    append(matchText)
-                                }
-                                pop()
-                            } else {
-                                append(matchText)
-                            }
-                        }
-                        "wall" -> {
-                            val parts = path.substring(4).split("_")
-                            if (parts.size == 2) {
-                                pushStringAnnotation(
-                                    tag = "WALL",
-                                    annotation = "${parts[0]}_${parts[1]}"
-                                )
-                                withStyle(style = SpanStyle(color = MaterialTheme.colorScheme.primary)) {
-                                    append(matchText)
-                                }
-                                pop()
-                            } else {
-                                append(matchText)
-                            }
-                        }
-                        "music" -> {
-                            val id = path.substring(6)
-                            pushStringAnnotation(tag = "MUSIC", annotation = id)
-                            withStyle(style = SpanStyle(color = MaterialTheme.colorScheme.primary)) {
-                                append(matchText)
-                            }
-                            pop()
-                        }
-                        "screen_name" -> {
-                            if (path.isNotBlank() && !path.contains("/")) {
-                                pushStringAnnotation(tag = "PROFILE", annotation = path)
-                                withStyle(style = SpanStyle(color = MaterialTheme.colorScheme.primary)) {
-                                    append(matchText)
-                                }
-                                pop()
-                            } else {
-                                pushStringAnnotation(tag = "URL", annotation = url)
-                                withStyle(style = SpanStyle(color = MaterialTheme.colorScheme.primary)) {
-                                    append(matchText)
-                                }
-                                pop()
-                            }
-                        }
-                        else -> {
-                            pushStringAnnotation(tag = "URL", annotation = url)
-                            withStyle(style = SpanStyle(color = MaterialTheme.colorScheme.primary)) {
-                                append(matchText)
-                            }
-                            pop()
-                        }
-                    }
-                }
-            }
-            currentIndex = match.range.last + 1
-        }
-        
-        if (currentIndex < text.length) {
-            append(text.substring(currentIndex))
-        }
+    val primaryColor = MaterialTheme.colorScheme.primary
+    val annotatedString = remember(text, primaryColor) {
+        MarkdownParser.parse(text, primaryColor)
     }
 
     Box {
-        Text(
-            text = annotatedString,
-            modifier = modifier
-                .drawBehind {
-                    pressedRange?.let { range ->
-                        layoutResult?.let { lr ->
-                            val path = lr.getPathForRange(range.start, range.end)
-                            drawPath(
-                                path = path,
-                                color = color.copy(alpha = 0.2f)
-                            )
-                        }
-                    }
-                }
-                .pointerInput(annotatedString, onDoubleTap == null) {
-                    detectTapGestures(
-                        onPress = { offset ->
+        SelectionContainer {
+            Text(
+                text = annotatedString,
+                modifier = modifier
+                    .drawBehind {
+                        pressedRange?.let { range ->
                             layoutResult?.let { lr ->
-                                val pos = lr.getOffsetForPosition(offset)
-                                val annotation = tags.mapNotNull { tag ->
-                                    annotatedString.getStringAnnotations(tag, pos, pos).firstOrNull()
-                                }.firstOrNull()
-
-                                if (annotation != null) {
-                                    pressedRange = TextRange(annotation.start, annotation.end)
-                                }
-                            }
-                            try {
-                                awaitRelease()
-                            } finally {
-                                pressedRange = null
-                            }
-                        },
-                        onTap = { offset ->
-                        layoutResult?.let { lr ->
-                            val pos = lr.getOffsetForPosition(offset)
-                            val annotation = tags.mapNotNull { tag ->
-                                annotatedString.getStringAnnotations(tag, pos, pos).firstOrNull()?.let { tag to it.item }
-                            }.firstOrNull()
-
-                            if (annotation != null) {
-                                handleAnnotation(annotation.first, annotation.second)
-                            } else {
-                                currentOnDefaultClick()
-                            }
-                        }
-                    },
-                    onDoubleTap = if (onDoubleTap != null) { offset -> currentOnDoubleTap?.invoke(offset) } else null,
-                    onLongPress = { offset ->
-                        layoutResult?.let { lr ->
-                            val pos = lr.getOffsetForPosition(offset)
-                            val annotation = tags.mapNotNull { tag ->
-                                annotatedString.getStringAnnotations(tag, pos, pos).firstOrNull()?.let { tag to it.item }
-                            }.firstOrNull()
-
-                            if (annotation != null) {
-                                val url = when (annotation.first) {
-                                    "URL" -> annotation.second
-                                    "PROFILE" -> "https://openvk.org/${if (annotation.second.startsWith("-")) "club${annotation.second.substring(1)}" else if (annotation.second.all { it.isDigit() }) "id${annotation.second}" else annotation.second}"
-                                    "WALL" -> "https://openvk.org/wall${annotation.second}"
-                                    "MUSIC" -> "https://openvk.org/audios${annotation.second}"
-                                    "PLAYLIST" -> "https://openvk.org/playlist${annotation.second}"
-                                    "MENTION" -> {
-                                        val id = annotation.second.toIntOrNull() ?: 0
-                                        if (id > 0) "https://openvk.org/id$id" else "https://openvk.org/club${-id}"
-                                    }
-                                    else -> null
-                                }
-                                if (url != null) {
-                                    selectedUrl = url
-                                    selectedAnnotation = annotation
-                                    menuExpanded = true
-                                }
+                                val path = lr.getPathForRange(range.start, range.end)
+                                drawPath(
+                                    path = path,
+                                    color = color.copy(alpha = 0.2f)
+                                )
                             }
                         }
                     }
-                )
-            },
-            style = style.copy(color = color),
-            maxLines = maxLines,
-            overflow = overflow,
-            onTextLayout = { 
-                layoutResult = it
-                currentOnTextLayout(it)
-            }
-        )
+                    .pointerInput(annotatedString, onDoubleTap == null) {
+                        detectTapGestures(
+                            onPress = { offset ->
+                                layoutResult?.let { lr ->
+                                    val pos = lr.getOffsetForPosition(offset)
+                                    val annotation = tags
+                                        .mapNotNull { tag ->
+                                            annotatedString
+                                                .getStringAnnotations(tag, pos, pos)
+                                                .firstOrNull()
+                                        }
+                                        .firstOrNull()
+
+                                    if (annotation != null) {
+                                        pressedRange = TextRange(annotation.start, annotation.end)
+                                    }
+                                }
+                                try {
+                                    awaitRelease()
+                                } finally {
+                                    pressedRange = null
+                                }
+                            },
+                            onTap = { offset ->
+                                layoutResult?.let { lr ->
+                                    val pos = lr.getOffsetForPosition(offset)
+                                    val annotation = tags
+                                        .mapNotNull { tag ->
+                                            annotatedString
+                                                .getStringAnnotations(tag, pos, pos)
+                                                .firstOrNull()
+                                                ?.let { tag to it.item }
+                                        }
+                                        .firstOrNull()
+
+                                    if (annotation != null) {
+                                        handleAnnotation(annotation.first, annotation.second)
+                                    } else {
+                                        currentOnDefaultClick()
+                                    }
+                                }
+                            },
+                            onDoubleTap = if (onDoubleTap != null) { offset ->
+                                currentOnDoubleTap?.invoke(offset)
+                            } else null,
+                            onLongPress = { offset ->
+                                layoutResult?.let { lr ->
+                                    val pos = lr.getOffsetForPosition(offset)
+                                    val annotation = tags
+                                        .mapNotNull { tag ->
+                                            annotatedString
+                                                .getStringAnnotations(tag, pos, pos)
+                                                .firstOrNull()
+                                                ?.let { tag to it.item }
+                                        }
+                                        .firstOrNull()
+
+                                    if (annotation != null) {
+                                        val url = when (annotation.first) {
+                                            "URL" -> annotation.second
+                                            "PROFILE" -> "https://openvk.org/${if (annotation.second.startsWith("-")) "club${annotation.second.substring(1)}" else if (annotation.second.all { it.isDigit() }) "id${annotation.second}" else annotation.second}"
+                                            "WALL" -> "https://openvk.org/wall${annotation.second}"
+                                            "MUSIC" -> "https://openvk.org/audios${annotation.second}"
+                                            "PLAYLIST" -> "https://openvk.org/playlist${annotation.second}"
+                                            "MENTION" -> {
+                                                val id = annotation.second.toIntOrNull() ?: 0
+                                                if (id > 0) "https://openvk.org/id$id" else "https://openvk.org/club${-id}"
+                                            }
+
+                                            else -> null
+                                        }
+                                        if (url != null) {
+                                            selectedUrl = url
+                                            selectedAnnotation = annotation
+                                            menuExpanded = true
+                                        }
+                                    }
+                                }
+                            }
+                        )
+                    },
+                style = style.copy(color = color),
+                maxLines = maxLines,
+                overflow = overflow,
+                onTextLayout = {
+                    layoutResult = it
+                    currentOnTextLayout(it)
+                }
+            )
+        }
 
         DropdownMenu(
             expanded = menuExpanded,

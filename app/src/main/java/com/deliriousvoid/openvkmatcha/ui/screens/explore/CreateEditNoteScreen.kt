@@ -12,6 +12,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.deliriousvoid.openvkmatcha.R
+import com.deliriousvoid.openvkmatcha.ui.util.matchaStringResource
 import com.deliriousvoid.openvkmatcha.ui.navigation.Routes
 import com.deliriousvoid.openvkmatcha.ui.viewmodel.CreateEditNoteViewModel
 
@@ -28,9 +30,12 @@ fun CreateEditNoteScreen(
 ) {
     val state by viewModel.uiState.collectAsState()
 
+    val noteTitle = if (state.isLoading) matchaStringResource(R.string.title_note) else if (state.title.isEmpty()) matchaStringResource(R.string.new_note) else matchaStringResource(R.string.editing)
+    val saveLabel = matchaStringResource(R.string.action_save)
+
     DisposableEffect(state.isLoading, state.title, state.text, state.isSaving) {
         AppEvents.setTopBarState(TopBarState(
-            title = if (state.isLoading) "Заметка" else if (state.title.isEmpty()) "Новая заметка" else "Редактирование",
+            title = noteTitle,
             route = Routes.CREATE_EDIT_NOTE,
             actions = {
                 IconButton(
@@ -40,7 +45,7 @@ fun CreateEditNoteScreen(
                     if (state.isSaving) {
                         CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
                     } else {
-                        Icon(Icons.Default.Save, contentDescription = "Сохранить")
+                        Icon(Icons.Default.Save, contentDescription = saveLabel)
                     }
                 }
             }
@@ -72,7 +77,7 @@ fun CreateEditNoteScreen(
             OutlinedTextField(
                 value = state.title,
                 onValueChange = { viewModel.updateTitle(it) },
-                label = { Text("Заголовок") },
+                label = { Text(matchaStringResource(R.string.title_label)) },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true
             )
@@ -80,7 +85,7 @@ fun CreateEditNoteScreen(
             OutlinedTextField(
                 value = state.text,
                 onValueChange = { viewModel.updateText(it) },
-                label = { Text("Текст заметки") },
+                label = { Text(matchaStringResource(R.string.note_text)) },
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)

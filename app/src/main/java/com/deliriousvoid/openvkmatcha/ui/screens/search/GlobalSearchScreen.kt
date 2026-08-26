@@ -1,5 +1,7 @@
 package com.deliriousvoid.openvkmatcha.ui.screens.search
 
+import com.deliriousvoid.openvkmatcha.R
+import com.deliriousvoid.openvkmatcha.ui.util.matchaStringResource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -63,8 +65,8 @@ fun GlobalSearchScreen(
         when {
             state.isLoading && state.results.isEmpty() -> LoadingBox(modifier = Modifier.fillMaxSize())
             state.error != null && state.results.isEmpty() -> ErrorText(message = state.error!!, modifier = Modifier.fillMaxSize())
-            state.results.isEmpty() && state.searchQuery.isNotBlank() -> EmptyState(message = "Ничего не найдено", modifier = Modifier.fillMaxSize())
-            state.results.isEmpty() -> EmptyState(message = "Введите запрос для поиска", modifier = Modifier.fillMaxSize())
+            state.results.isEmpty() && state.searchQuery.isNotBlank() -> EmptyState(message = matchaStringResource(R.string.nothing_found), modifier = Modifier.fillMaxSize())
+            state.results.isEmpty() -> EmptyState(message = matchaStringResource(R.string.search_query_hint), modifier = Modifier.fillMaxSize())
             else -> {
                 LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
                     items(state.results) { item ->

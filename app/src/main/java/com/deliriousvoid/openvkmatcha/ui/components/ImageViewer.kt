@@ -41,6 +41,7 @@ fun ImageViewer(
 ) {
     val pagerState = rememberPagerState(initialPage = initialIndex, pageCount = { imageUrls.size })
     var showMenu by remember { mutableStateOf(false) }
+    var showUI by remember { mutableStateOf(true) }
     
     // Track if any page is currently zoomed to disable pager scrolling
     var isAnyPageZoomed by remember { mutableStateOf(false) }
@@ -88,7 +89,7 @@ fun ImageViewer(
                     }
                 },
             topBar = {
-                if (abs(offsetY.value) < 10f) {
+                if (showUI && abs(offsetY.value) < 10f) {
                     TopAppBar(
                         title = {
                             if (imageUrls.size > 1) {
@@ -118,7 +119,7 @@ fun ImageViewer(
                                         onClick = {
                                             showMenu = false
                                             val currentUrl = imageUrls[pagerState.currentPage]
-                                            val extension = if (currentUrl.contains(".gif", ignoreCase = true)) "gif" else "jpg"
+                                            val extension = "png"
                                             OpenVKMatchaApp.instance.downloadRepository.downloadFile(
                                                 currentUrl, 
                                                 "file_${System.currentTimeMillis()}.$extension"
@@ -138,7 +139,7 @@ fun ImageViewer(
                 }
             },
             bottomBar = {
-                if (post != null && abs(offsetY.value) < 10f && !isAnyPageZoomed) {
+                if (showUI && post != null && abs(offsetY.value) < 10f && !isAnyPageZoomed) {
                     Surface(
                         color = Color.Black.copy(alpha = 0.5f),
                         contentColor = Color.White
@@ -234,7 +235,8 @@ fun ImageViewer(
                         if (pageIndex == pagerState.currentPage) {
                             isAnyPageZoomed = zoomed
                         }
-                    }
+                    },
+                    onTap = { showUI = !showUI }
                 )
             }
         }
@@ -249,7 +251,8 @@ fun ImageViewer(
 @Composable
 private fun ZoomableImage(
     url: String,
-    onZoomChange: (Boolean) -> Unit
+    onZoomChange: (Boolean) -> Unit,
+    onTap: () -> Unit
 ) {
     val scale = remember { Animatable(1f) }
     val offsetX = remember { Animatable(0f) }
@@ -295,6 +298,8 @@ private fun ZoomableImage(
                                 onZoomChange(true)
                             }
                         }
+                    } else {
+                        onTap()
                     }
                     lastTapTime = currentTime
 

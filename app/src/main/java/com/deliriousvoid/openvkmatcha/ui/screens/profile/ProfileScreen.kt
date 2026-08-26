@@ -33,14 +33,11 @@ import androidx.compose.material.icons.filled.GroupRemove
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.PersonRemove
 import androidx.compose.material.icons.filled.Public
-import androidx.compose.material.icons.filled.PushPin
-import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Smartphone
+import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Wc
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
-import androidx.compose.material3.Button
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -66,13 +63,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
+import com.deliriousvoid.openvkmatcha.R
+import com.deliriousvoid.openvkmatcha.ui.util.matchaStringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.deliriousvoid.openvkmatcha.data.model.UserProfile
 import com.deliriousvoid.openvkmatcha.data.model.PlaylistSource
-import kotlin.math.absoluteValue
 import com.deliriousvoid.openvkmatcha.ui.components.DeleteConfirmationDialog
 import com.deliriousvoid.openvkmatcha.ui.components.EditPostDialog
 import com.deliriousvoid.openvkmatcha.ui.components.ReportDialog
@@ -273,7 +271,7 @@ fun ProfileScreen(
 
     postToDelete?.let { post ->
         DeleteConfirmationDialog(
-            title = androidx.compose.ui.res.stringResource(com.deliriousvoid.openvkmatcha.R.string.post_delete_confirm),
+            title = matchaStringResource(R.string.post_delete_confirm),
             onDismiss = { postToDelete = null },
             onConfirm = { viewModel.deletePost(post) }
         )
@@ -371,7 +369,7 @@ private fun ProfileContent(
                             Box {
                                 AsyncImage(
                                     model = profile.photo200,
-                                    contentDescription = "Аватар",
+                                    contentDescription = matchaStringResource(R.string.desc_avatar),
                                     modifier = Modifier
                                         .size(80.dp)
                                         .clickable { showAvatarViewer = true }
@@ -414,7 +412,7 @@ private fun ProfileContent(
                                 if (profile.online) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Text(
-                                            text = "онлайн",
+                                            text = matchaStringResource(R.string.profile_online),
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.primary
                                         )
@@ -435,7 +433,7 @@ private fun ProfileContent(
                                                     tint = MaterialTheme.colorScheme.primary
                                                 )
                                                 5, 6 -> Icon(
-                                                    painter = painterResource(com.deliriousvoid.openvkmatcha.R.drawable.ic_window),
+                                                    painter = painterResource(R.drawable.ic_window),
                                                     contentDescription = "Windows",
                                                     modifier = Modifier.size(12.dp),
                                                     tint = MaterialTheme.colorScheme.primary
@@ -463,8 +461,8 @@ private fun ProfileContent(
                     Box {
                         androidx.compose.material3.IconButton(onClick = { showProfileMenu = true }) {
                             Icon(
-                                imageVector = androidx.compose.material.icons.Icons.Default.MoreVert,
-                                contentDescription = "Меню профиля"
+                                imageVector = Icons.Default.MoreVert,
+                                contentDescription = matchaStringResource(R.string.desc_profile_menu)
                             )
                         }
                         androidx.compose.material3.DropdownMenu(
@@ -477,7 +475,7 @@ private fun ProfileContent(
                             if (isMe) {
                                 if (!profile.isGroup) {
                                     DropdownMenuItem(
-                                        text = { Text("Редактировать профиль") },
+                                        text = { Text(matchaStringResource(R.string.action_edit_profile)) },
                                         onClick = {
                                             showProfileMenu = false
                                             onOpenEditProfile()
@@ -488,7 +486,7 @@ private fun ProfileContent(
 
                             if (profile.isAdmin && profile.isGroup) {
                                 DropdownMenuItem(
-                                    text = { Text("Редактировать группу") },
+                                    text = { Text(matchaStringResource(R.string.action_edit_group)) },
                                     onClick = {
                                         showProfileMenu = false
                                         onOpenEditGroup(Math.abs(profile.id))
@@ -497,14 +495,14 @@ private fun ProfileContent(
                             }
 
                             DropdownMenuItem(
-                                text = { Text("Копировать ссылку") },
+                                text = { Text(matchaStringResource(R.string.copy_link)) },
                                 onClick = {
                                     showProfileMenu = false
                                     clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(profileUrl))
                                 }
                             )
                             DropdownMenuItem(
-                                text = { Text("Открыть в браузере") },
+                                text = { Text(matchaStringResource(R.string.open_in_browser)) },
                                 onClick = {
                                     showProfileMenu = false
                                     try {
@@ -516,7 +514,7 @@ private fun ProfileContent(
 
                             if (!isMe) {
                                 DropdownMenuItem(
-                                    text = { Text(if (profile.isIgnored) "Перестать игнорировать" else "Игнорировать") },
+                                    text = { Text(if (profile.isIgnored) matchaStringResource(R.string.action_stop_ignoring) else matchaStringResource(R.string.action_ignore)) },
                                     onClick = {
                                         showProfileMenu = false
                                         onIgnoreClick(profile)
@@ -524,7 +522,7 @@ private fun ProfileContent(
                                 )
                                 if (!profile.isGroup) {
                                     DropdownMenuItem(
-                                        text = { Text(if (profile.blacklistedByMe) "Убрать из чёрного списка" else "Добавить в чёрный список") },
+                                        text = { Text(if (profile.blacklistedByMe) matchaStringResource(R.string.action_remove_from_blacklist) else matchaStringResource(R.string.action_add_to_blacklist)) },
                                         onClick = {
                                             showProfileMenu = false
                                             onBlacklistClick(profile)
@@ -533,7 +531,7 @@ private fun ProfileContent(
                                 }
                                 if (!profile.isAdmin) {
                                     DropdownMenuItem(
-                                        text = { Text("Пожаловаться") },
+                                        text = { Text(matchaStringResource(R.string.action_report)) },
                                         onClick = {
                                             showProfileMenu = false
                                             onReportClick(profile)
@@ -551,7 +549,7 @@ private fun ProfileContent(
                     if (!profile.isGroup && profile.friendsCount > 0) {
                         CounterItem(
                             count = profile.friendsCount,
-                            label = "друзья",
+                            label = matchaStringResource(R.string.profile_counter_friends),
                             onClick = { onOpenFriends(profile.id, profile.fullName) },
                             modifier = Modifier.weight(1f)
                         )
@@ -559,7 +557,7 @@ private fun ProfileContent(
                     if (profile.followersCount > 0) {
                         CounterItem(
                             count = profile.followersCount,
-                            label = if (profile.isGroup) "участники" else "подписчики",
+                            label = if (profile.isGroup) matchaStringResource(R.string.profile_counter_members) else matchaStringResource(R.string.profile_counter_followers),
                             onClick = { onOpenFollowers(profile.id, profile.isGroup, profile.fullName) },
                             modifier = Modifier.weight(1f)
                         )
@@ -567,7 +565,7 @@ private fun ProfileContent(
                     if (profile.isGroup) {
                         CounterItem(
                             count = profile.topicsCount,
-                            label = "обсуждения",
+                            label = matchaStringResource(R.string.profile_counter_topics),
                             onClick = { onOpenTopics(profile.id, profile.fullName) },
                             modifier = Modifier.weight(1f)
                         )
@@ -575,7 +573,7 @@ private fun ProfileContent(
                     if (profile.isGroup || profile.photosCount > 0) {
                         CounterItem(
                             count = profile.photosCount,
-                            label = "фото",
+                            label = matchaStringResource(R.string.profile_counter_photos),
                             onClick = { onOpenPhotos(profile.id, profile.fullName) },
                             modifier = Modifier.weight(1f)
                         )
@@ -583,7 +581,7 @@ private fun ProfileContent(
                     if (profile.isGroup || profile.audiosCount > 0) {
                         CounterItem(
                             count = profile.audiosCount,
-                            label = "аудио",
+                            label = matchaStringResource(R.string.profile_counter_audio),
                             onClick = { onOpenMusic(profile.id, profile.fullName) },
                             modifier = Modifier.weight(1f)
                         )
@@ -599,7 +597,7 @@ private fun ProfileContent(
                         if (profile.groupsCount > 0) {
                             CounterItem(
                                 count = profile.groupsCount,
-                                label = "группы",
+                                label = matchaStringResource(R.string.profile_counter_groups),
                                 onClick = { onOpenGroups(profile.id, profile.fullName) },
                                 modifier = Modifier.weight(1f)
                             )
@@ -607,16 +605,12 @@ private fun ProfileContent(
                         if (profile.giftsCount > 0) {
                             CounterItem(
                                 count = profile.giftsCount,
-                                label = "подарки",
+                                label = matchaStringResource(R.string.profile_counter_gifts),
                                 onClick = { onOpenGifts(profile.id, profile.fullName) },
                                 modifier = Modifier.weight(1f)
                             )
                         }
                     }
-                    HorizontalDivider(
-                        modifier = Modifier.padding(vertical = 8.dp),
-                        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
-                    )
                 }
 
                 if (profile.about.isNotBlank()) {
@@ -648,7 +642,7 @@ private fun ProfileContent(
                         ) {
                             Icon(Icons.Default.Edit, contentDescription = null)
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("Что у вас нового?")
+                            Text(matchaStringResource(R.string.profile_post_placeholder))
                         }
                         Spacer(modifier = Modifier.width(8.dp))
                     }
@@ -681,7 +675,7 @@ private fun ProfileContent(
                             IconButton(onClick = { onOpenChat(profile.id, profile.fullName) }) {
                                 Icon(
                                     imageVector = Icons.Outlined.ChatBubbleOutline,
-                                    contentDescription = "Сообщение",
+                                    contentDescription = matchaStringResource(R.string.action_message),
                                     tint = MaterialTheme.colorScheme.primary
                                 )
                             }
@@ -691,7 +685,7 @@ private fun ProfileContent(
             }
             HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
             Text(
-                text = "Записи на стене",
+                text = matchaStringResource(R.string.profile_wall_title),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.padding(16.dp),
@@ -801,51 +795,51 @@ private fun ExtendedProfileInfo(
     // Main Info
     val mainInfo = mutableListOf<InfoItem>()
     val bdate = profile.birthdayDisplay ?: profile.bdate
-    bdate?.let { mainInfo.add(InfoItem(Icons.Default.Cake, "День рождения: $it")) }
-    profile.city?.let { mainInfo.add(InfoItem(Icons.Default.LocationOn, "Город: $it")) }
-    profile.homeTown?.let { mainInfo.add(InfoItem(Icons.Default.Home, "Родной город: $it")) }
-    profile.sex?.let { mainInfo.add(InfoItem(Icons.Default.Wc, "Пол: ${getSexString(it)}")) }
-    profile.relation?.let { mainInfo.add(InfoItem(Icons.Default.Favorite, "Положение: ${getRelationString(it, profile.sex ?: 0)}")) }
+    bdate?.let { mainInfo.add(InfoItem(Icons.Default.Cake, matchaStringResource(R.string.profile_info_bdate, it))) }
+    profile.city?.let { mainInfo.add(InfoItem(Icons.Default.LocationOn, matchaStringResource(R.string.profile_info_city, it))) }
+    profile.homeTown?.let { mainInfo.add(InfoItem(Icons.Default.Home, matchaStringResource(R.string.profile_info_hometown, it))) }
+    profile.sex?.let { mainInfo.add(InfoItem(Icons.Default.Wc, matchaStringResource(R.string.profile_info_sex, getSexString(it)))) }
+    profile.relation?.let { mainInfo.add(InfoItem(Icons.Default.Favorite, matchaStringResource(R.string.profile_info_relation, getRelationString(it, profile.sex ?: 0)))) }
 
     profile.telegram?.let { tg ->
         val username = tg.removePrefix("@")
         mainInfo.add(InfoItem(Icons.Default.Language, "Telegram: $tg", onClick = { openUrl("https://t.me/$username") }))
     }
 
-    if (mainInfo.isNotEmpty()) sections.add(InfoSection("Основная информация", mainInfo))
+    if (mainInfo.isNotEmpty()) sections.add(InfoSection(matchaStringResource(R.string.profile_section_main), mainInfo))
 
     // Contacts
     val contacts = mutableListOf<InfoItem>()
-    profile.mobilePhone?.let { contacts.add(InfoItem(Icons.Default.Phone, "Моб. телефон: $it")) }
-    profile.homePhone?.let { contacts.add(InfoItem(Icons.Default.Phone, "Доп. телефон: $it")) }
+    profile.mobilePhone?.let { contacts.add(InfoItem(Icons.Default.Phone, matchaStringResource(R.string.profile_info_mobile, it))) }
+    profile.homePhone?.let { contacts.add(InfoItem(Icons.Default.Phone, matchaStringResource(R.string.profile_info_home_phone, it))) }
     profile.site?.let { site ->
         val url = if (site.startsWith("http://") || site.startsWith("https://")) site else "http://$site"
-        contacts.add(InfoItem(Icons.Default.Public, "Сайт: $site", onClick = { openUrl(url) }))
+        contacts.add(InfoItem(Icons.Default.Public, matchaStringResource(R.string.profile_info_site, site), onClick = { openUrl(url) }))
     }
-    profile.skype?.let { contacts.add(InfoItem(Icons.Default.Language, "Skype: $it")) }
-    profile.facebook?.let { contacts.add(InfoItem(Icons.Default.Language, "Facebook: $it")) }
-    profile.twitter?.let { contacts.add(InfoItem(Icons.Default.Language, "Twitter: $it")) }
-    profile.instagram?.let { contacts.add(InfoItem(Icons.Default.Language, "Instagram: $it")) }
-    if (contacts.isNotEmpty()) sections.add(InfoSection("Контактная информация", contacts))
+    profile.skype?.let { contacts.add(InfoItem(Icons.Default.Language, matchaStringResource(R.string.profile_info_skype, it))) }
+    profile.facebook?.let { contacts.add(InfoItem(Icons.Default.Language, matchaStringResource(R.string.profile_info_facebook, it))) }
+    profile.twitter?.let { contacts.add(InfoItem(Icons.Default.Language, matchaStringResource(R.string.profile_info_twitter, it))) }
+    profile.instagram?.let { contacts.add(InfoItem(Icons.Default.Language, matchaStringResource(R.string.profile_info_instagram, it))) }
+    if (contacts.isNotEmpty()) sections.add(InfoSection(matchaStringResource(R.string.profile_section_contacts), contacts))
 
     // Education
     val education = mutableListOf<InfoItem>()
-    profile.universityName?.let { education.add(InfoItem(Icons.Default.School, "ВУЗ: $it")) }
-    profile.facultyName?.let { education.add(InfoItem(Icons.Default.School, "Факультет: $it")) }
-    profile.graduation?.let { education.add(InfoItem(Icons.Default.School, "Год выпуска: $it")) }
-    if (education.isNotEmpty()) sections.add(InfoSection("Образование", education))
+    profile.universityName?.let { education.add(InfoItem(Icons.Default.School, matchaStringResource(R.string.profile_info_university, it))) }
+    profile.facultyName?.let { education.add(InfoItem(Icons.Default.School, matchaStringResource(R.string.profile_info_faculty, it))) }
+    profile.graduation?.let { education.add(InfoItem(Icons.Default.School, matchaStringResource(R.string.profile_info_graduation, it))) }
+    if (education.isNotEmpty()) sections.add(InfoSection(matchaStringResource(R.string.profile_section_education), education))
 
     // Personal
     val personal = mutableListOf<InfoItem>()
-    profile.activities?.let { personal.add(InfoItem(Icons.Default.Info, "Деятельность: $it")) }
-    profile.interests?.let { personal.add(InfoItem(Icons.Default.Info, "Интересы: $it")) }
-    profile.music?.let { personal.add(InfoItem(Icons.Default.Info, "Любимая музыка: $it")) } 
-    profile.movies?.let { personal.add(InfoItem(Icons.Default.Info, "Любимые фильмы: $it")) }
-    profile.tv?.let { personal.add(InfoItem(Icons.Default.Info, "Любимые шоу: $it")) }
-    profile.books?.let { personal.add(InfoItem(Icons.Default.Info, "Любимые книги: $it")) }
-    profile.games?.let { personal.add(InfoItem(Icons.Default.Info, "Любимые игры: $it")) }
-    profile.quotes?.let { personal.add(InfoItem(Icons.Default.Info, "Любимые цитаты: $it")) }
-    if (personal.isNotEmpty()) sections.add(InfoSection("Личная информация", personal))
+    profile.activities?.let { personal.add(InfoItem(Icons.Default.Info, matchaStringResource(R.string.profile_info_activities, it))) }
+    profile.interests?.let { personal.add(InfoItem(Icons.Default.Info, matchaStringResource(R.string.profile_info_interests, it))) }
+    profile.music?.let { personal.add(InfoItem(Icons.Default.Info, matchaStringResource(R.string.profile_info_music, it))) } 
+    profile.movies?.let { personal.add(InfoItem(Icons.Default.Info, matchaStringResource(R.string.profile_info_movies, it))) }
+    profile.tv?.let { personal.add(InfoItem(Icons.Default.Info, matchaStringResource(R.string.profile_info_tv, it))) }
+    profile.books?.let { personal.add(InfoItem(Icons.Default.Info, matchaStringResource(R.string.profile_info_books, it))) }
+    profile.games?.let { personal.add(InfoItem(Icons.Default.Info, matchaStringResource(R.string.profile_info_games, it))) }
+    profile.quotes?.let { personal.add(InfoItem(Icons.Default.Info, matchaStringResource(R.string.profile_info_quotes, it))) }
+    if (personal.isNotEmpty()) sections.add(InfoSection(matchaStringResource(R.string.profile_section_personal), personal))
 
     if (sections.isEmpty()) return
 
@@ -855,7 +849,7 @@ private fun ExtendedProfileInfo(
                 onClick = { onExpandedChange(true) },
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("Показать подробную информацию")
+                Text(matchaStringResource(R.string.profile_info_show_more))
             }
         } else {
             sections.forEach { section ->
@@ -875,7 +869,7 @@ private fun ExtendedProfileInfo(
                 onClick = { onExpandedChange(false) },
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("Скрыть подробную информацию")
+                Text(matchaStringResource(R.string.profile_info_hide_more))
             }
         }
     }
@@ -910,22 +904,24 @@ private fun InfoRow(item: InfoItem) {
 private data class InfoSection(val title: String, val items: List<InfoItem>)
 private data class InfoItem(val icon: ImageVector, val text: String, val onClick: (() -> Unit)? = null)
 
+@Composable
 private fun getSexString(sex: Int): String = when (sex) {
-    1 -> "Женский"
-    2 -> "Мужской"
-    else -> "Не указан"
+    1 -> matchaStringResource(R.string.sex_female)
+    2 -> matchaStringResource(R.string.sex_male)
+    else -> matchaStringResource(R.string.sex_not_specified)
 }
 
+@Composable
 private fun getRelationString(relation: Int, sex: Int): String {
     val isFemale = sex == 1
     return when (relation) {
-        1 -> if (isFemale) "не замужем" else "не женат"
-        2 -> "есть друг/подруга"
-        3 -> if (isFemale) "помолвлена" else "помолвлен"
-        4 -> if (isFemale) "замужем" else "женат"
-        5 -> "всё сложно"
-        6 -> "в активном поиске"
-        7 -> "влюблён/влюблена"
-        else -> "не указано"
+        1 -> if (isFemale) matchaStringResource(R.string.rel_single_f) else matchaStringResource(R.string.rel_single_m)
+        2 -> matchaStringResource(R.string.rel_dating)
+        3 -> if (isFemale) matchaStringResource(R.string.rel_engaged_f) else matchaStringResource(R.string.rel_engaged_m)
+        4 -> if (isFemale) matchaStringResource(R.string.rel_married_f) else matchaStringResource(R.string.rel_married_m)
+        5 -> matchaStringResource(R.string.rel_complicated)
+        6 -> matchaStringResource(R.string.rel_searching)
+        7 -> matchaStringResource(R.string.rel_in_love)
+        else -> matchaStringResource(R.string.rel_not_specified)
     }
 }

@@ -27,6 +27,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.rememberAsyncImagePainter
+import com.deliriousvoid.openvkmatcha.R
+import com.deliriousvoid.openvkmatcha.ui.util.matchaStringResource
 import com.deliriousvoid.openvkmatcha.ui.components.ErrorText
 import com.deliriousvoid.openvkmatcha.ui.viewmodel.TwoFactorViewModel
 
@@ -51,10 +53,10 @@ fun TwoFactorScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Двухфакторная аутентификация") },
+                title = { Text(matchaStringResource(R.string.two_factor_auth)) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Назад")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = matchaStringResource(R.string.desc_back))
                     }
                 }
             )
@@ -89,7 +91,7 @@ fun TwoFactorScreen(
                 Spacer(modifier = Modifier.height(24.dp))
 
                 Text(
-                    text = "Подтверждение входа",
+                    text = matchaStringResource(R.string.login_confirmation),
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface,
@@ -99,7 +101,7 @@ fun TwoFactorScreen(
                 Spacer(modifier = Modifier.height(8.dp))
 
                 Text(
-                    text = "Введите код из приложения-аутентификатора",
+                    text = matchaStringResource(R.string.enter_code_auth),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center

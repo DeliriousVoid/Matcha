@@ -1,5 +1,7 @@
 package com.deliriousvoid.openvkmatcha.ui.screens.map
 
+import com.deliriousvoid.openvkmatcha.R
+import com.deliriousvoid.openvkmatcha.ui.util.matchaStringResource
 import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Context
@@ -14,10 +16,14 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import com.deliriousvoid.openvkmatcha.ui.navigation.Routes
+import com.deliriousvoid.openvkmatcha.util.AppEvents
+import com.deliriousvoid.openvkmatcha.util.TopBarState
 import com.google.android.gms.location.LocationServices
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -125,36 +131,53 @@ fun MapPickerScreen(
         mapView.overlays.add(MapEventsOverlay(eventsReceiver))
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { 
-                    Column {
-                        Text("Выберите место", style = MaterialTheme.typography.titleMedium)
-                        currentAddress?.let {
-                            Text(it, style = MaterialTheme.typography.bodySmall, maxLines = 1)
-                        }
-                    }
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.Default.Close, "Отмена")
-                    }
-                },
-                actions = {
-                    if (selectedLocation != null) {
-                        IconButton(onClick = {
-                            val loc = selectedLocation!!
-                            onConfirm(loc.latitude, loc.longitude, currentAddress)
-                        }) {
-                            Icon(Icons.Default.Check, "Подтвердить")
-                        }
+    val titleLabel = matchaStringResource(R.string.select_place)
+    val cancelLabel = matchaStringResource(R.string.cancel)
+    val okLabel = matchaStringResource(R.string.action_ok)
+
+    DisposableEffect(currentAddress, selectedLocation) {
+        AppEvents.setTopBarState(TopBarState(
+            route = Routes.MAP_PICKER,
+            customContent = {
+                Column {
+                    Text(titleLabel, style = MaterialTheme.typography.titleMedium)
+                    currentAddress?.let {
+                        Text(it, style = MaterialTheme.typography.bodySmall, maxLines = 1)
                     }
                 }
-            )
-        },
-        floatingActionButton = {
-            FloatingActionButton(onClick = {
+            },
+            navigationIcon = {
+                IconButton(onClick = onBack) {
+                    Icon(Icons.Default.Close, cancelLabel)
+                }
+            },
+            actions = {
+                if (selectedLocation != null) {
+                    IconButton(onClick = {
+                        val loc = selectedLocation!!
+                        onConfirm(loc.latitude, loc.longitude, currentAddress)
+                    }) {
+                        Icon(Icons.Default.Check, okLabel)
+                    }
+                }
+            }
+        ))
+        onDispose {
+            AppEvents.setTopBarState(null)
+        }
+    }
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        AndroidView(
+            factory = { mapView },
+            modifier = Modifier.fillMaxSize(),
+            onRelease = {
+                it.onDetach()
+            }
+        )
+
+        FloatingActionButton(
+            onClick = {
                 getCurrentLocation(context) { point ->
                     mapView.controller.animateTo(point)
                     selectedLocation = point
@@ -164,23 +187,14 @@ fun MapPickerScreen(
                     }
                     mapView.invalidate()
                 }
-            }) {
-                Icon(Icons.Default.MyLocation, "Моё местоположение")
-            }
-        }
-    ) { padding ->
-        AndroidView(
-            factory = { mapView },
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding),
-            update = { 
-                // Any updates to the view if needed
             },
-            onRelease = {
-                it.onDetach()
-            }
-        )
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(16.dp)
+                .padding(bottom = 32.dp) // Extra padding to not be covered by navbar if any, though FAB usually handles it
+        ) {
+            Icon(Icons.Default.MyLocation, matchaStringResource(R.string.my_location))
+        }
     }
 }
 

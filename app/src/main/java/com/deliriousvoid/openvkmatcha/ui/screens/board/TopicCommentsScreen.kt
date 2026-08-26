@@ -9,7 +9,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material3.*
@@ -24,6 +23,8 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
+import com.deliriousvoid.openvkmatcha.R
+import com.deliriousvoid.openvkmatcha.ui.util.matchaStringResource
 import com.deliriousvoid.openvkmatcha.data.model.TopicComment
 import com.deliriousvoid.openvkmatcha.ui.components.EmptyState
 import com.deliriousvoid.openvkmatcha.ui.components.ErrorText
@@ -143,7 +144,7 @@ fun TopicCommentsScreen(
                     onRetry = { viewModel.loadComments() }
                 )
                 state.comments.isEmpty() -> EmptyState(
-                    message = "В этой теме пока нет комментариев",
+                    message = matchaStringResource(R.string.topic_no_comments),
                     modifier = Modifier.fillMaxSize()
                 )
                 else -> {
@@ -386,14 +387,14 @@ private fun CommentItem(
                         onDismissRequest = { showMenu = false }
                     ) {
                         DropdownMenuItem(
-                            text = { Text("Копировать текст") },
+                            text = { Text(matchaStringResource(R.string.action_copy_text)) },
                             onClick = {
                                 showMenu = false
                                 clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(comment.text))
                             }
                         )
                         DropdownMenuItem(
-                            text = { Text("Пожаловаться") },
+                            text = { Text(matchaStringResource(R.string.action_report)) },
                             onClick = { showMenu = false; onReportClick() }
                         )
                     }
@@ -401,17 +402,15 @@ private fun CommentItem(
             }
             Spacer(modifier = Modifier.height(4.dp))
             
-            SelectionContainer {
-                ParsedText(
-                    text = comment.text,
-                    onMentionClick = onMentionClick,
-                    onProfileClick = onProfileClick,
-                    onWallClick = onWallClick,
-                    onMusicClick = onMusicClick,
-                    onPlaylistClick = onPlaylistClick,
-                    style = MaterialTheme.typography.bodyMedium
-                )
-            }
+            ParsedText(
+                text = comment.text,
+                onMentionClick = onMentionClick,
+                onProfileClick = onProfileClick,
+                onWallClick = onWallClick,
+                onMusicClick = onMusicClick,
+                onPlaylistClick = onPlaylistClick,
+                style = MaterialTheme.typography.bodyMedium
+            )
             
             CommentAttachmentsList(
                 imageUrls = comment.imageUrls,
@@ -459,7 +458,7 @@ private fun CommentItem(
                 }
 
                 Text(
-                    text = "Ответить",
+                    text = matchaStringResource(R.string.reply),
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.clickable { onReplyClick() }
@@ -527,7 +526,7 @@ private fun CommentInput(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        "От имени сообщества",
+                        matchaStringResource(R.string.post_from_group),
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.primary
                     )
@@ -544,7 +543,7 @@ private fun CommentInput(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text(
-                        text = "В ответ пользователю ${replyingTo.authorName}",
+                        text = matchaStringResource(R.string.reply_to_user, replyingTo.authorName),
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.secondary
                     )
@@ -578,29 +577,29 @@ private fun CommentInput(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconButton(onClick = { showAttachMenu = true }) {
-                    Icon(Icons.Default.Add, "Прикрепить", tint = MaterialTheme.colorScheme.primary)
+                    Icon(Icons.Default.Add, matchaStringResource(R.string.attach), tint = MaterialTheme.colorScheme.primary)
                     
                     DropdownMenu(
                         expanded = showAttachMenu,
                         onDismissRequest = { showAttachMenu = false }
                     ) {
                         DropdownMenuItem(
-                            text = { Text("Фото") },
+                            text = { Text(matchaStringResource(R.string.attachment_photo)) },
                             onClick = { showAttachMenu = false; onAddPhoto() }
                         )
                         if (isDeveloperMode) {
                             DropdownMenuItem(
-                                text = { Text("Видео") },
+                                text = { Text(matchaStringResource(R.string.attachment_video)) },
                                 onClick = { showAttachMenu = false; onAddVideo() }
                             )
                         }
                         DropdownMenuItem(
-                            text = { Text("Аудио") },
+                            text = { Text(matchaStringResource(R.string.attachment_audio)) },
                             onClick = { showAttachMenu = false; onAddAudio() }
                         )
                         if (isDeveloperMode) {
                             DropdownMenuItem(
-                                text = { Text("Документ") },
+                                text = { Text(matchaStringResource(R.string.attachment_document)) },
                                 onClick = { showAttachMenu = false; onAddDoc() }
                             )
                         }
@@ -616,7 +615,7 @@ private fun CommentInput(
                         }
                     },
                     modifier = Modifier.weight(1f),
-                    placeholder = { Text("Введите сообщение...") },
+                    placeholder = { Text(matchaStringResource(R.string.enter_message)) },
                     colors = TextFieldDefaults.colors(
                         focusedContainerColor = androidx.compose.ui.graphics.Color.Transparent,
                         unfocusedContainerColor = androidx.compose.ui.graphics.Color.Transparent,
@@ -637,7 +636,7 @@ private fun CommentInput(
                     ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.Send,
-                            contentDescription = "Отправить",
+                            contentDescription = matchaStringResource(R.string.action_send),
                             tint = if (text.isNotBlank() || pendingAttachments.isNotEmpty()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }

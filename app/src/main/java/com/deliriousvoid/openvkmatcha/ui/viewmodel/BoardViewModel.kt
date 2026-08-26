@@ -15,11 +15,14 @@ import com.deliriousvoid.openvkmatcha.data.repository.ProfileRepository
 import com.deliriousvoid.openvkmatcha.data.repository.ReportsRepository
 import com.deliriousvoid.openvkmatcha.data.repository.AttachmentsRepository
 import com.deliriousvoid.openvkmatcha.OpenVKMatchaApp
+import com.deliriousvoid.openvkmatcha.R
 import com.deliriousvoid.openvkmatcha.util.AppEvents
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Job
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.absoluteValue
 
 data class BoardUiState(
@@ -57,6 +60,8 @@ class BoardViewModel(
         isDeveloperMode = OpenVKMatchaApp.instance.getSharedPreferences("settings", Context.MODE_PRIVATE).getBoolean("experimental_features", false)
     ))
     val uiState: StateFlow<BoardUiState> = _uiState
+    
+    private val likeJobs = ConcurrentHashMap<Int, Job>()
 
     init {
         if (topicId != null) {
@@ -91,7 +96,7 @@ class BoardViewModel(
                     it.copy(
                         isResolvingVid = false, 
                         isLoading = false, 
-                        error = "Не удалось открыть тему (ограничение API OpenVK)."
+                        error = OpenVKMatchaApp.instance.languageManager.getStringOrDefault(R.string.error_open_topic_api_limit)
                     ) 
                 }
             }
@@ -159,9 +164,9 @@ class BoardViewModel(
     fun report(type: String, ownerId: Int, itemId: Int? = null, comment: String? = null) {
         viewModelScope.launch {
             reportsRepository.report(type, ownerId, itemId, comment).onSuccess {
-                AppEvents.showSnackbar("Жалоба отправлена")
+                AppEvents.showSnackbar(OpenVKMatchaApp.instance.languageManager.getStringOrDefault(R.string.report_sent))
             }.onFailure {
-                AppEvents.showSnackbar("Ошибка: ${it.message}")
+                AppEvents.showSnackbar(OpenVKMatchaApp.instance.languageManager.getStringOrDefault(R.string.error_network, it.message ?: ""))
             }
         }
     }
@@ -420,7 +425,7 @@ class BoardViewModel(
                 }
                 val result = attachmentsRepository.uploadAttachment(pending)
                 if (result.isFailure) {
-                    uploadError = "Ошибка загрузки вложения: ${result.exceptionOrNull()?.message}"
+                    uploadError = OpenVKMatchaApp.instance.languageManager.getStringOrDefault(R.string.error_upload_attachment, result.exceptionOrNull()?.message ?: "")
                     break
                 }
                 attachmentStrings.add(result.getOrThrow())
@@ -437,7 +442,7 @@ class BoardViewModel(
             val vid = _uiState.value.resolvedVirtualId
             if (vid == null) {
                 android.util.Log.e("Board", "Cannot post: resolvedVirtualId is null")
-                _uiState.update { it.copy(isSending = false, error = "ID темы не разрешен") }
+                _uiState.update { it.copy(isSending = false, error = OpenVKMatchaApp.instance.languageManager.getStringOrDefault(R.string.error_topic_id_not_resolved)) }
                 return@launch
             }
 
@@ -464,7 +469,9 @@ class BoardViewModel(
     }
 
     fun toggleLike(comment: TopicComment) {
-        viewModelScope.launch {
+        if (likeJobs.containsKey(comment.id)) return
+
+        val job = viewModelScope.launch {
             boardRepository.toggleLike(groupId, comment.id, comment.isLiked).onSuccess {
                 _uiState.update { state ->
                     state.copy(
@@ -478,8 +485,18 @@ class BoardViewModel(
                         }
                     )
                 }
+            }.onFailure { error ->
+                val lm = OpenVKMatchaApp.instance.languageManager
+                val message = if (error is com.deliriousvoid.openvkmatcha.data.api.ApiException && (error.errorCode == 6 || error.errorCode == 9)) {
+                    lm.getStringOrDefault(R.string.error_limit_reached)
+                } else {
+                    error.message ?: lm.getStringOrDefault(R.string.error_action_failed)
+                }
+                AppEvents.showSnackbar(message)
             }
+            likeJobs.remove(comment.id)
         }
+        likeJobs[comment.id] = job
     }
 
     companion object {

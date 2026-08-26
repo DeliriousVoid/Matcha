@@ -1,20 +1,41 @@
 package com.deliriousvoid.openvkmatcha.ui.viewmodel
 
+import android.content.ComponentName
 import android.content.Context
+import android.content.pm.PackageManager
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.deliriousvoid.openvkmatcha.OpenVKMatchaApp
+import com.deliriousvoid.openvkmatcha.R
 import com.deliriousvoid.openvkmatcha.ui.navigation.MainTab
 import com.deliriousvoid.openvkmatcha.ui.theme.AccentColor
 import com.deliriousvoid.openvkmatcha.ui.theme.AppTheme
+import com.deliriousvoid.openvkmatcha.ui.theme.CustomAccent
+import com.deliriousvoid.openvkmatcha.ui.theme.CustomTheme
+import com.deliriousvoid.openvkmatcha.util.LanguageInfo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.io.File
+
+enum class AppIconVariant(val title: String, val componentName: String, val iconRes: Int) {
+    DEFAULT("Matcha", "com.deliriousvoid.openvkmatcha.MainActivityDefault", R.mipmap.matcha),
+    OLD("Matcha Old", "com.deliriousvoid.openvkmatcha.MainActivityOld", R.mipmap.matcha_old),
+    VK_LEGACY("VK Legacy", "com.deliriousvoid.openvkmatcha.MainActivityVkLegacy", R.mipmap.ic_launcher_vk_legacy),
+    VK_CLASSIC("VK Classic", "com.deliriousvoid.openvkmatcha.MainActivityVkClassic", R.mipmap.ic_launcher_vk_classic),
+    MATCHA_CLASSIC("Matcha Classic", "com.deliriousvoid.openvkmatcha.MainActivityMatchaClassic", R.mipmap.ic_launcher_matcha_classic),
+    MATCHA_AGENT("Matcha @ Агент", "com.deliriousvoid.openvkmatcha.MainActivityMatchaAgent", R.mipmap.ic_launcher_matcha_agent),
+    MAXCHA("MAXcha", "com.deliriousvoid.openvkmatcha.MainActivityMaxcha", R.mipmap.ic_launcher_maxcha),
+    MATCHA_RETRO("Matcha Retro", "com.deliriousvoid.openvkmatcha.MainActivityMatchaRetro", R.mipmap.ic_launcher_matcha_retro),
+    MATCHA_LEGACY("Matcha Legacy", "com.deliriousvoid.openvkmatcha.MainActivityMatchaLegacy", R.mipmap.ic_launcher_matcha_legacy)
+}
 
 class SettingsViewModel(private val context: Context) : ViewModel() {
     private val prefs = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
@@ -24,6 +45,15 @@ class SettingsViewModel(private val context: Context) : ViewModel() {
 
     private val _autoHidePlayer = MutableStateFlow(prefs.getBoolean("auto_hide_player", false))
     val autoHidePlayer = _autoHidePlayer.asStateFlow()
+
+    private val _currentIcon = MutableStateFlow(
+        try {
+            AppIconVariant.valueOf(prefs.getString("app_icon_variant", AppIconVariant.DEFAULT.name) ?: AppIconVariant.DEFAULT.name)
+        } catch (e: Exception) {
+            AppIconVariant.DEFAULT
+        }
+    )
+    val currentIcon = _currentIcon.asStateFlow()
 
     private val _pauseVideoOnScroll = MutableStateFlow(prefs.getBoolean("pause_video_on_scroll", true))
     val pauseVideoOnScroll = _pauseVideoOnScroll.asStateFlow()
@@ -52,6 +82,16 @@ class SettingsViewModel(private val context: Context) : ViewModel() {
     )
     val theme = _theme.asStateFlow()
 
+    private val _customThemes = MutableStateFlow<List<CustomTheme>>(emptyList())
+    val customThemes = _customThemes.asStateFlow()
+
+    private val _selectedCustomThemeId = MutableStateFlow(prefs.getString("custom_theme_id", null))
+    val selectedCustomThemeId = _selectedCustomThemeId.asStateFlow()
+
+    val currentCustomTheme = combine(customThemes, selectedCustomThemeId) { themes, id ->
+        themes.find { it.id == id }
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
     private val _accent = MutableStateFlow(
         try {
             AccentColor.valueOf(prefs.getString("accent_color", AccentColor.GREEN.name) ?: AccentColor.GREEN.name)
@@ -60,6 +100,16 @@ class SettingsViewModel(private val context: Context) : ViewModel() {
         }
     )
     val accent = _accent.asStateFlow()
+
+    private val _customAccents = MutableStateFlow<List<CustomAccent>>(emptyList())
+    val customAccents = _customAccents.asStateFlow()
+
+    private val _selectedCustomAccentId = MutableStateFlow(prefs.getString("custom_accent_id", null))
+    val selectedCustomAccentId = _selectedCustomAccentId.asStateFlow()
+
+    val currentCustomAccent = combine(customAccents, selectedCustomAccentId) { accents, id ->
+        accents.find { it.id == id }
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     private val _feedType = MutableStateFlow(
         try {
@@ -76,7 +126,7 @@ class SettingsViewModel(private val context: Context) : ViewModel() {
     private val _cacheSize = MutableStateFlow("0 B")
     val cacheSize = _cacheSize.asStateFlow()
 
-    private val _clientName = MutableStateFlow(OpenVKMatchaApp.instance.tokenManager.getClientName())
+    private val _clientName = MutableStateFlow(com.deliriousvoid.openvkmatcha.Constants.CLIENT_NAME)
     val clientName = _clientName.asStateFlow()
 
     private val _invisibility = MutableStateFlow(prefs.getBoolean("invisibility", false))
@@ -104,7 +154,13 @@ class SettingsViewModel(private val context: Context) : ViewModel() {
     private val _hidePlayedTracks = MutableStateFlow(prefs.getBoolean("hide_played_tracks", true))
     val hidePlayedTracks = _hidePlayedTracks.asStateFlow()
 
-    private val _developerHint = kotlinx.coroutines.flow.MutableSharedFlow<String>()
+    private val _availableLanguages = MutableStateFlow<List<LanguageInfo>>(emptyList())
+    val availableLanguages = _availableLanguages.asStateFlow()
+
+    private val _currentLanguageId = MutableStateFlow(OpenVKMatchaApp.instance.languageManager.currentLanguageId)
+    val currentLanguageId = _currentLanguageId.asStateFlow()
+
+    private val _developerHint = MutableSharedFlow<String>()
     val developerHint = _developerHint.asSharedFlow()
 
     private val _navigateToAboutInstance = MutableSharedFlow<Unit>()
@@ -117,6 +173,126 @@ class SettingsViewModel(private val context: Context) : ViewModel() {
 
     init {
         updateCacheSize()
+        viewModelScope.launch(Dispatchers.IO) {
+            val name = OpenVKMatchaApp.instance.tokenManager.getClientName()
+            _clientName.value = name
+            loadLanguages()
+            loadThemes()
+            loadAccents()
+        }
+    }
+
+    fun loadLanguages() {
+        _availableLanguages.value = OpenVKMatchaApp.instance.languageManager.getAvailableLanguages()
+        _currentLanguageId.value = OpenVKMatchaApp.instance.languageManager.currentLanguageId
+    }
+
+    fun loadThemes() {
+        viewModelScope.launch(Dispatchers.IO) {
+            _customThemes.value = OpenVKMatchaApp.instance.themeManager.getThemes()
+        }
+    }
+
+    fun loadAccents() {
+        viewModelScope.launch(Dispatchers.IO) {
+            _customAccents.value = OpenVKMatchaApp.instance.themeManager.getAccents()
+        }
+    }
+
+    fun saveAccent(accent: CustomAccent, onComplete: () -> Unit = {}) {
+        viewModelScope.launch(Dispatchers.IO) {
+            OpenVKMatchaApp.instance.themeManager.saveAccent(accent)
+            loadAccents()
+            viewModelScope.launch(Dispatchers.Main) {
+                onComplete()
+            }
+        }
+    }
+
+    fun deleteAccent(id: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            OpenVKMatchaApp.instance.themeManager.deleteAccent(id)
+            loadAccents()
+        }
+    }
+
+    fun saveTheme(theme: CustomTheme, bitmap: android.graphics.Bitmap? = null, onComplete: () -> Unit = {}) {
+        viewModelScope.launch(Dispatchers.IO) {
+            OpenVKMatchaApp.instance.themeManager.saveTheme(theme, bitmap)
+            loadThemes()
+            viewModelScope.launch(Dispatchers.Main) {
+                onComplete()
+            }
+        }
+    }
+
+    fun deleteTheme(id: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            OpenVKMatchaApp.instance.themeManager.deleteTheme(id)
+            loadThemes()
+        }
+    }
+
+    fun importTheme(uri: android.net.Uri) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val result = OpenVKMatchaApp.instance.themeManager.importTheme(uri)
+            if (result.isSuccess) {
+                loadThemes()
+            }
+        }
+    }
+
+    fun importAccent(uri: android.net.Uri) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val result = OpenVKMatchaApp.instance.themeManager.importAccent(uri)
+            if (result.isSuccess) {
+                loadAccents()
+            }
+        }
+    }
+
+    fun exportTheme(id: String, onComplete: (File?) -> Unit) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val file = OpenVKMatchaApp.instance.themeManager.exportTheme(id)
+            viewModelScope.launch(Dispatchers.Main) {
+                onComplete(file)
+            }
+        }
+    }
+
+    fun exportAccent(id: String, onComplete: (File?) -> Unit) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val file = OpenVKMatchaApp.instance.themeManager.exportAccent(id)
+            viewModelScope.launch(Dispatchers.Main) {
+                onComplete(file)
+            }
+        }
+    }
+
+    fun setLanguage(id: String) {
+        OpenVKMatchaApp.instance.languageManager.loadLanguage(id)
+        _currentLanguageId.value = id
+    }
+
+    fun importLanguage(uri: android.net.Uri) {
+        viewModelScope.launch {
+            val result = OpenVKMatchaApp.instance.languageManager.importLanguage(uri)
+            if (result.isSuccess) {
+                loadLanguages()
+                _developerHint.emit(OpenVKMatchaApp.instance.languageManager.getStringOrDefault(R.string.language_import_success))
+            } else {
+                _developerHint.emit(OpenVKMatchaApp.instance.languageManager.getStringOrDefault(R.string.language_import_error, result.exceptionOrNull()?.message ?: ""))
+            }
+        }
+    }
+
+    fun deleteLanguage(id: String) {
+        OpenVKMatchaApp.instance.languageManager.deleteLanguage(id)
+        loadLanguages()
+    }
+
+    fun getLanguageFile(id: String): File? {
+        return OpenVKMatchaApp.instance.languageManager.getLanguageFile(id)
     }
 
     fun onVersionClick() {
@@ -129,18 +305,19 @@ class SettingsViewModel(private val context: Context) : ViewModel() {
 
         viewModelScope.launch {
             if (_developerModeActive.value) {
-                _developerHint.emit("Вы уже разработчик!")
+                _developerHint.emit(OpenVKMatchaApp.instance.languageManager.getStringOrDefault(R.string.settings_developer_active))
                 return@launch
             }
 
+            val lm = OpenVKMatchaApp.instance.languageManager
             when (versionClicks) {
-                2 -> _developerHint.emit("Осталось кликнуть 3 раза...")
-                3 -> _developerHint.emit("Осталось кликнуть 2 раза...")
-                4 -> _developerHint.emit("Осталось кликнуть 1 раз!")
+                2 -> _developerHint.emit(lm.getStringOrDefault(R.string.settings_developer_clicks_left, 3))
+                3 -> _developerHint.emit(lm.getStringOrDefault(R.string.settings_developer_clicks_left, 2))
+                4 -> _developerHint.emit(lm.getStringOrDefault(R.string.settings_developer_clicks_last))
                 5 -> {
                     _developerModeActive.value = true
                     prefs.edit().putBoolean("developer_mode", true).apply()
-                    _developerHint.emit("Вы стали разработчиком!")
+                    _developerHint.emit(lm.getStringOrDefault(R.string.settings_developer_success))
                 }
             }
         }
@@ -155,6 +332,10 @@ class SettingsViewModel(private val context: Context) : ViewModel() {
     fun setExperimentalFeatures(enabled: Boolean) {
         _experimentalFeatures.value = enabled
         prefs.edit().putBoolean("experimental_features", enabled).apply()
+    }
+
+    fun triggerCrash() {
+        throw RuntimeException("Debug crash triggered from developer settings")
     }
 
     fun setClientName(name: String) {
@@ -211,14 +392,43 @@ class SettingsViewModel(private val context: Context) : ViewModel() {
         prefs.edit().putString("lb_token", trimmed).apply()
     }
 
-    fun setTheme(theme: AppTheme) {
+    fun setTheme(theme: AppTheme, customThemeId: String? = null) {
         _theme.value = theme
-        prefs.edit().putString("theme_mode", theme.name).apply()
+        _selectedCustomThemeId.value = customThemeId
+        prefs.edit().putString("theme_mode", theme.name)
+            .putString("custom_theme_id", customThemeId)
+            .apply()
     }
 
-    fun setAccent(accent: AccentColor) {
+    fun setAccent(accent: AccentColor, customAccentId: String? = null) {
         _accent.value = accent
-        prefs.edit().putString("accent_color", accent.name).apply()
+        _selectedCustomAccentId.value = customAccentId
+        prefs.edit().putString("accent_color", accent.name)
+            .putString("custom_accent_id", customAccentId)
+            .apply()
+    }
+
+    fun setAppIcon(variant: AppIconVariant) {
+        if (_currentIcon.value == variant) return
+        
+        val pm = context.packageManager
+        
+        // Disable current
+        pm.setComponentEnabledSetting(
+            ComponentName(context, _currentIcon.value.componentName),
+            PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+            PackageManager.DONT_KILL_APP
+        )
+        
+        // Enable new
+        pm.setComponentEnabledSetting(
+            ComponentName(context, variant.componentName),
+            PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
+            PackageManager.DONT_KILL_APP
+        )
+        
+        _currentIcon.value = variant
+        prefs.edit().putString("app_icon_variant", variant.name).apply()
     }
 
     fun setFeedType(type: FeedType) {

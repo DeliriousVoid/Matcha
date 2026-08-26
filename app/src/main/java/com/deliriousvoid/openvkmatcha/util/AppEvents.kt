@@ -2,6 +2,8 @@ package com.deliriousvoid.openvkmatcha.util
 
 import androidx.compose.runtime.Composable
 import androidx.compose.foundation.layout.RowScope
+import com.deliriousvoid.openvkmatcha.R
+import com.deliriousvoid.openvkmatcha.OpenVKMatchaApp
 import com.deliriousvoid.openvkmatcha.data.model.Video
 import android.content.Context
 import android.app.PendingIntent
@@ -202,9 +204,11 @@ object AppEvents {
     }
 }
 
-enum class SearchCategory(val title: String) {
-    PEOPLE("Люди"),
-    GROUPS("Сообщества"),
-    MUSIC("Музыка"),
-    PLAYLISTS("Плейлисты")
+enum class SearchCategory(val titleRes: Int) {
+    PEOPLE(R.string.search_category_people),
+    GROUPS(R.string.search_category_groups),
+    MUSIC(R.string.search_category_music),
+    PLAYLISTS(R.string.search_category_playlists);
+
+    val title: String get() = OpenVKMatchaApp.instance.languageManager.getStringOrDefault(titleRes)
 }

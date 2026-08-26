@@ -13,7 +13,6 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Favorite
@@ -34,6 +33,8 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
+import com.deliriousvoid.openvkmatcha.R
+import com.deliriousvoid.openvkmatcha.ui.util.matchaStringResource
 import com.deliriousvoid.openvkmatcha.data.model.Comment
 import com.deliriousvoid.openvkmatcha.data.model.Post
 import com.deliriousvoid.openvkmatcha.ui.components.DeleteConfirmationDialog
@@ -44,6 +45,7 @@ import com.deliriousvoid.openvkmatcha.ui.components.PostCard
 import com.deliriousvoid.openvkmatcha.ui.components.ParsedText
 import com.deliriousvoid.openvkmatcha.ui.components.RepostBottomSheet
 import com.deliriousvoid.openvkmatcha.ui.components.CommentAttachmentsList
+import com.deliriousvoid.openvkmatcha.ui.components.ImageViewer
 import com.deliriousvoid.openvkmatcha.ui.components.VerifiedBadge
 import com.deliriousvoid.openvkmatcha.ui.components.MusicPickerBottomSheet
 import com.deliriousvoid.openvkmatcha.ui.components.VideoPickerBottomSheet
@@ -97,6 +99,8 @@ fun CommentsScreen(
     var showMusicPicker by remember { mutableStateOf(false) }
     var showVideoPicker by remember { mutableStateOf(false) }
     var showDocsPicker by remember { mutableStateOf(false) }
+    var viewerInitialIndex by remember { mutableIntStateOf(-1) }
+    var activeCommentForViewer by remember { mutableStateOf<Comment?>(null) }
 
     val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         uri?.let { viewModel.addAttachment(it, AttachmentType.PHOTO) }
@@ -219,7 +223,11 @@ fun CommentsScreen(
                             isDownloaded = { id, ownerId -> musicActionsViewModel.isDownloaded(id, ownerId) },
                             getTrackState = { musicActionsViewModel.getTrack(it) },
                             onDocumentDownload = { /* Handle doc download */ },
-                            onPollVote = { answers -> viewModel.votePoll(comment, answers) }
+                            onPollVote = { answers -> viewModel.votePoll(comment, answers) },
+                            onImageClick = {
+                                activeCommentForViewer = comment
+                                viewerInitialIndex = it
+                            }
                         )
                         if ((threadedItem.level == 0 && !threadedItem.hasNextInThread) || (threadedItem.level == 1 && threadedItem.isLastInThread)) {
                             HorizontalDivider(
@@ -358,6 +366,21 @@ fun CommentsScreen(
             }
         )
     }
+
+    if (viewerInitialIndex != -1 && activeCommentForViewer != null) {
+        val comment = activeCommentForViewer!!
+        val gifDocs = comment.documents.filter { it.ext.lowercase() == "gif" || it.type == 3 }
+        val allImageUrls = comment.imageUrls + gifDocs.mapNotNull { it.url }
+
+        ImageViewer(
+            imageUrls = allImageUrls,
+            initialIndex = viewerInitialIndex,
+            onDismiss = {
+                viewerInitialIndex = -1
+                activeCommentForViewer = null
+            }
+        )
+    }
 }
 
 @Composable
@@ -470,9 +493,9 @@ fun CommentItem(
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.clickable { onAuthorClick() }
                 )
-                if (comment.authorVerified) {
+                if (comment.authorVerified || com.deliriousvoid.openvkmatcha.Constants.CUSTOM_VERIFIED_IDS.contains(comment.fromId)) {
                     Spacer(modifier = Modifier.width(4.dp))
-                    VerifiedBadge(userId = comment.fromId, isVerified = true)
+                    VerifiedBadge(userId = comment.fromId, isVerified = comment.authorVerified)
                 }
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
@@ -495,7 +518,7 @@ fun CommentItem(
                             onDismissRequest = { showMenu = false }
                         ) {
                             DropdownMenuItem(
-                                text = { Text("Копировать текст") },
+                                text = { Text(matchaStringResource(R.string.action_copy_text)) },
                                 onClick = {
                                     showMenu = false
                                     clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(comment.text))
@@ -503,19 +526,19 @@ fun CommentItem(
                             )
                             if (isOwn) {
                                 DropdownMenuItem(
-                                    text = { Text("Изменить") },
+                                    text = { Text(matchaStringResource(R.string.action_edit)) },
                                     onClick = { showMenu = false; onEditClick() }
                                 )
                             }
                             if (isOwn || canDelete) {
                                 DropdownMenuItem(
-                                    text = { Text("Удалить", color = MaterialTheme.colorScheme.error) },
+                                    text = { Text(matchaStringResource(R.string.action_delete), color = MaterialTheme.colorScheme.error) },
                                     onClick = { showMenu = false; onDeleteClick() }
                                 )
                             }
                             if (!isOwn && !canDelete) {
                                 DropdownMenuItem(
-                                    text = { Text("Пожаловаться") },
+                                    text = { Text(matchaStringResource(R.string.action_report)) },
                                     onClick = { showMenu = false; onReportClick() }
                                 )
                             }
@@ -525,17 +548,15 @@ fun CommentItem(
             }
             Spacer(modifier = Modifier.height(2.dp))
 
-            SelectionContainer {
-                ParsedText(
-                    text = comment.text,
-                    onMentionClick = onMentionClick,
-                    onProfileClick = onProfileClick,
-                    onWallClick = onWallClick,
-                    onMusicClick = onMusicClick,
-                    onPlaylistClick = onPlaylistClick,
-                    style = MaterialTheme.typography.bodyMedium
-                )
-            }
+            ParsedText(
+                text = comment.text,
+                onMentionClick = onMentionClick,
+                onProfileClick = onProfileClick,
+                onWallClick = onWallClick,
+                onMusicClick = onMusicClick,
+                onPlaylistClick = onPlaylistClick,
+                style = MaterialTheme.typography.bodyMedium
+            )
 
             CommentAttachmentsList(
                 imageUrls = comment.imageUrls,
@@ -583,7 +604,7 @@ fun CommentItem(
                 }
 
                 Text(
-                    text = "Ответить",
+                    text = matchaStringResource(R.string.reply),
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.clickable { onReplyClick() }
@@ -652,7 +673,7 @@ fun CommentInput(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        "От имени сообщества",
+                        matchaStringResource(R.string.post_from_group),
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.primary
                     )
@@ -669,7 +690,7 @@ fun CommentInput(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text(
-                        text = "Редактирование комментария",
+                        text = matchaStringResource(R.string.edit_comment),
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.primary
                     )
@@ -687,7 +708,7 @@ fun CommentInput(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text(
-                        text = "В ответ пользователю ${replyingTo.authorName}",
+                        text = matchaStringResource(R.string.reply_to_user, replyingTo.authorName),
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.secondary
                     )
@@ -721,29 +742,29 @@ fun CommentInput(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconButton(onClick = { showAttachMenu = true }) {
-                    Icon(Icons.Default.Add, "Прикрепить", tint = MaterialTheme.colorScheme.primary)
+                    Icon(Icons.Default.Add, matchaStringResource(R.string.attach), tint = MaterialTheme.colorScheme.primary)
                     
                     DropdownMenu(
                         expanded = showAttachMenu,
                         onDismissRequest = { showAttachMenu = false }
                     ) {
                         DropdownMenuItem(
-                            text = { Text("Фото") },
+                            text = { Text(matchaStringResource(R.string.attachment_photo)) },
                             onClick = { showAttachMenu = false; onAddPhoto() }
                         )
                         if (isDeveloperMode) {
                             DropdownMenuItem(
-                                text = { Text("Видео") },
+                                text = { Text(matchaStringResource(R.string.attachment_video)) },
                                 onClick = { showAttachMenu = false; onAddVideo() }
                             )
                         }
                         DropdownMenuItem(
-                            text = { Text("Аудио") },
+                            text = { Text(matchaStringResource(R.string.attachment_audio)) },
                             onClick = { showAttachMenu = false; onAddAudio() }
                         )
                         if (isDeveloperMode) {
                             DropdownMenuItem(
-                                text = { Text("Документ") },
+                                text = { Text(matchaStringResource(R.string.attachment_document)) },
                                 onClick = { showAttachMenu = false; onAddDoc() }
                             )
                         }
@@ -759,7 +780,7 @@ fun CommentInput(
                         }
                     },
                     modifier = Modifier.weight(1f),
-                    placeholder = { Text("Ваш комментарий...") },
+                    placeholder = { Text(matchaStringResource(R.string.comment_placeholder)) },
                     keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
                     colors = TextFieldDefaults.colors(
                         focusedContainerColor = Color.Transparent,
@@ -781,7 +802,7 @@ fun CommentInput(
                     ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.Send,
-                            contentDescription = "Отправить",
+                            contentDescription = matchaStringResource(R.string.action_send),
                             tint = if (text.isNotBlank() || pendingAttachments.isNotEmpty()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }

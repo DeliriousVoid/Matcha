@@ -1,8 +1,13 @@
 package com.deliriousvoid.openvkmatcha.ui.screens.settings
 
+import android.content.Context
+import android.content.Intent
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,23 +25,34 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Brush
+import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.FileOpen
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.MusicNote
-import androidx.compose.material.icons.filled.SupervisorAccount
+import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Storage
+import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.MenuDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
@@ -54,16 +70,24 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.core.content.FileProvider
+import androidx.lifecycle.viewModelScope
 import com.deliriousvoid.openvkmatcha.BuildConfig
 import com.deliriousvoid.openvkmatcha.OpenVKMatchaApp
+import com.deliriousvoid.openvkmatcha.R
 import com.deliriousvoid.openvkmatcha.ui.theme.AccentColor
 import com.deliriousvoid.openvkmatcha.ui.theme.AppTheme
+import com.deliriousvoid.openvkmatcha.ui.theme.CustomAccent
+import com.deliriousvoid.openvkmatcha.ui.theme.CustomTheme
+import com.deliriousvoid.openvkmatcha.ui.theme.LocalOpaqueColorScheme
+import com.deliriousvoid.openvkmatcha.ui.util.matchaStringResource
 import com.deliriousvoid.openvkmatcha.ui.viewmodel.SettingsViewModel
+import kotlinx.coroutines.launch
+import java.io.File
 
 @Composable
 fun SettingsScreen(
@@ -85,8 +109,8 @@ fun SettingsScreen(
             .padding(16.dp),
     ) {
         SettingsCategoryButton(
-            title = "Основные",
-            subtitle = "Аккаунты, кеш, о приложении",
+            title = matchaStringResource(R.string.title_settings_general),
+            subtitle = matchaStringResource(R.string.settings_general_desc),
             icon = Icons.Default.Settings,
             onClick = onNavigateToGeneral
         )
@@ -94,8 +118,8 @@ fun SettingsScreen(
         Spacer(modifier = Modifier.height(12.dp))
 
         SettingsCategoryButton(
-            title = "Внешний вид",
-            subtitle = "Тема, акцентный цвет",
+            title = matchaStringResource(R.string.title_settings_appearance),
+            subtitle = matchaStringResource(R.string.settings_appearance_desc),
             icon = Icons.Default.Brush,
             onClick = onNavigateToAppearance
         )
@@ -103,8 +127,8 @@ fun SettingsScreen(
         Spacer(modifier = Modifier.height(12.dp))
 
         SettingsCategoryButton(
-            title = "Музыка",
-            subtitle = "Загрузки, ListenBrainz",
+            title = matchaStringResource(R.string.title_settings_music),
+            subtitle = matchaStringResource(R.string.settings_music_desc),
             icon = Icons.Default.MusicNote,
             onClick = onNavigateToMusic
         )
@@ -113,8 +137,8 @@ fun SettingsScreen(
             Spacer(modifier = Modifier.height(12.dp))
 
             SettingsCategoryButton(
-                title = "Для разработчика",
-                subtitle = "Идентификация клиента, API",
+                title = matchaStringResource(R.string.title_settings_developer),
+                subtitle = matchaStringResource(R.string.settings_developer_desc),
                 icon = Icons.Default.Code,
                 onClick = onNavigateToDeveloper
             )
@@ -135,7 +159,7 @@ fun SettingsScreen(
             ),
             shape = MaterialTheme.shapes.medium
         ) {
-            Text("Выйти из аккаунта")
+            Text(matchaStringResource(R.string.logout))
         }
     }
 }
@@ -174,17 +198,17 @@ fun GeneralSettingsScreen(
             .verticalScroll(rememberScrollState())
     ) {
         SettingsActionRow(
-            label = "Игнорируемые источники",
+            label = matchaStringResource(R.string.title_settings_ignored),
             icon = Icons.Default.Block,
             onClick = onNavigateToIgnored
         )
         SettingsActionRow(
-            label = "Управление аккаунтами",
-            icon = Icons.Default.SupervisorAccount,
+            label = matchaStringResource(R.string.account_management),
+            icon = Icons.Default.People,
             onClick = onNavigateToAccounts
         )
         SettingsActionRow(
-            label = "Очистить кеш",
+            label = matchaStringResource(R.string.clear_cache),
             value = cacheSize,
             icon = Icons.Default.Storage,
         ) { viewModel.clearCache() }
@@ -192,18 +216,18 @@ fun GeneralSettingsScreen(
         Spacer(modifier = Modifier.height(24.dp))
         
         Text(
-            text = "Видео",
+            text = matchaStringResource(R.string.video_category),
             style = MaterialTheme.typography.labelLarge,
             color = MaterialTheme.colorScheme.primary,
             modifier = Modifier.padding(bottom = 8.dp)
         )
         SettingsSwitchRow(
-            label = "Пауза при промотке",
+            label = matchaStringResource(R.string.pause_on_scroll),
             checked = pauseVideoOnScroll,
             onCheckedChange = { viewModel.setPauseVideoOnScroll(it) }
         )
         Text(
-            text = "Если выключено, видео при промотке будет открываться в мини-плеере. Изменения вступят в силу после перезапуска.",
+            text = matchaStringResource(R.string.pause_on_scroll_desc),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -211,18 +235,18 @@ fun GeneralSettingsScreen(
         Spacer(modifier = Modifier.height(24.dp))
 
         Text(
-            text = androidx.compose.ui.res.stringResource(com.deliriousvoid.openvkmatcha.R.string.settings_category_feed),
+            text = matchaStringResource(com.deliriousvoid.openvkmatcha.R.string.settings_category_feed),
             style = MaterialTheme.typography.labelLarge,
             color = MaterialTheme.colorScheme.primary,
             modifier = Modifier.padding(bottom = 8.dp)
         )
         SettingsSwitchRow(
-            label = androidx.compose.ui.res.stringResource(com.deliriousvoid.openvkmatcha.R.string.settings_double_tap_like),
+            label = matchaStringResource(com.deliriousvoid.openvkmatcha.R.string.settings_double_tap_like),
             checked = doubleTapToLike,
             onCheckedChange = { viewModel.setDoubleTapToLike(it) }
         )
         Text(
-            text = androidx.compose.ui.res.stringResource(com.deliriousvoid.openvkmatcha.R.string.settings_double_tap_like_desc),
+            text = matchaStringResource(com.deliriousvoid.openvkmatcha.R.string.settings_double_tap_like_desc),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -230,7 +254,7 @@ fun GeneralSettingsScreen(
         if (doubleTapToLike) {
             Spacer(modifier = Modifier.height(16.dp))
             Text(
-                text = androidx.compose.ui.res.stringResource(
+                text = matchaStringResource(
                     com.deliriousvoid.openvkmatcha.R.string.settings_double_tap_timeout,
                     doubleTapTimeout
                 ),
@@ -248,18 +272,18 @@ fun GeneralSettingsScreen(
         Spacer(modifier = Modifier.height(24.dp))
         
         Text(
-            text = "Информация",
+            text = matchaStringResource(R.string.info),
             style = MaterialTheme.typography.labelLarge,
             color = MaterialTheme.colorScheme.primary,
             modifier = Modifier.padding(bottom = 8.dp)
         )
         SettingsRow(
-            label = "Инстанс",
+            label = matchaStringResource(R.string.instance),
             value = app.api.baseUrl,
             onClick = { viewModel.onInstanceClick() }
         )
         SettingsRow(
-            label = "Версия",
+            label = matchaStringResource(R.string.version),
             value = BuildConfig.VERSION_NAME,
             onClick = { viewModel.onVersionClick() }
         )
@@ -270,12 +294,36 @@ fun GeneralSettingsScreen(
 fun AppearanceSettingsScreen(
     viewModel: SettingsViewModel,
     onNavigateToNavigationSettings: () -> Unit,
+    onNavigateToAppIconSettings: () -> Unit,
+    onNavigateToLanguageSettings: () -> Unit,
+    onNavigateToThemeEditor: (String?) -> Unit,
+    onNavigateToAccentEditor: (String?) -> Unit,
     onBack: () -> Unit
 ) {
     val currentTheme by viewModel.theme.collectAsState()
+    val customThemes by viewModel.customThemes.collectAsState()
+    val selectedCustomThemeId by viewModel.selectedCustomThemeId.collectAsState()
+    
     val currentAccent by viewModel.accent.collectAsState()
+    val customAccents by viewModel.customAccents.collectAsState()
+    val selectedCustomAccentId by viewModel.selectedCustomAccentId.collectAsState()
+    
     val navBarLabelsVisible by viewModel.navBarLabelsVisible.collectAsState()
     val autoHidePlayer by viewModel.autoHidePlayer.collectAsState()
+    
+    val context = LocalContext.current
+    
+    val themeImportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        uri?.let {
+            viewModel.importTheme(it)
+        }
+    }
+    
+    val accentImportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        uri?.let {
+            viewModel.importAccent(it)
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -283,69 +331,176 @@ fun AppearanceSettingsScreen(
             .padding(16.dp)
             .verticalScroll(rememberScrollState())
     ) {
-        Text(
-            text = "Тема",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(bottom = 12.dp)
-        )
-        Row(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = matchaStringResource(R.string.theme),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = matchaStringResource(R.string.beta),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier
+                        .background(
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+                            MaterialTheme.shapes.small
+                        )
+                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                )
+            }
+            IconButton(onClick = { themeImportLauncher.launch("*/*") }) {
+                Icon(Icons.Default.FileOpen, contentDescription = null)
+            }
+        }
+        
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
+                .padding(vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             ThemeButton(
-                label = "Amoled",
+                label = matchaStringResource(R.string.theme_amoled),
                 selected = currentTheme == AppTheme.AMOLED,
-                onClick = { viewModel.setTheme(AppTheme.AMOLED) },
-                modifier = Modifier.weight(1f)
+                onClick = { viewModel.setTheme(AppTheme.AMOLED) }
             )
             Spacer(modifier = Modifier.width(8.dp))
             ThemeButton(
-                label = "Light",
+                label = matchaStringResource(R.string.theme_light),
                 selected = currentTheme == AppTheme.LIGHT,
-                onClick = { viewModel.setTheme(AppTheme.LIGHT) },
-                modifier = Modifier.weight(1f)
+                onClick = { viewModel.setTheme(AppTheme.LIGHT) }
             )
+            
+            customThemes.forEach { theme ->
+                Spacer(modifier = Modifier.width(8.dp))
+                CustomThemeItem(
+                    theme = theme,
+                    selected = currentTheme == AppTheme.CUSTOM && selectedCustomThemeId == theme.id,
+                    onClick = { viewModel.setTheme(AppTheme.CUSTOM, theme.id) },
+                    onEdit = { onNavigateToThemeEditor(theme.id) },
+                    onDelete = {
+                        viewModel.deleteTheme(theme.id)
+                    },
+                    onShare = {
+                        viewModel.exportTheme(theme.id) { file ->
+                            file?.let { shareFile(context, it) }
+                        }
+                    }
+                )
+            }
+            
+            Spacer(modifier = Modifier.width(8.dp))
+            IconButton(
+                onClick = { onNavigateToThemeEditor(null) },
+                modifier = Modifier
+                    .size(48.dp)
+                    .background(MaterialTheme.colorScheme.surfaceVariant, CircleShape)
+            ) {
+                Icon(Icons.Default.Add, contentDescription = null)
+            }
         }
 
         Spacer(modifier = Modifier.height(32.dp))
 
-        Text(
-            text = "Акцент",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(bottom = 12.dp)
-        )
-        Row(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = matchaStringResource(R.string.accent),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+            )
+            IconButton(onClick = { accentImportLauncher.launch("*/*") }) {
+                Icon(Icons.Default.FileOpen, contentDescription = null)
+            }
+        }
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
+                .padding(vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             AccentButton(
-                label = "Синий",
+                label = matchaStringResource(R.string.blue),
                 color = Color(0xFF0077FF),
                 selected = currentAccent == AccentColor.BLUE,
-                onClick = { viewModel.setAccent(AccentColor.BLUE) },
-                modifier = Modifier.weight(1f)
+                onClick = { viewModel.setAccent(AccentColor.BLUE) }
             )
             Spacer(modifier = Modifier.width(8.dp))
             AccentButton(
-                label = "Зелёный",
+                label = matchaStringResource(R.string.green),
                 color = Color(0xFF4BB34B),
                 selected = currentAccent == AccentColor.GREEN,
-                onClick = { viewModel.setAccent(AccentColor.GREEN) },
-                modifier = Modifier.weight(1f)
+                onClick = { viewModel.setAccent(AccentColor.GREEN) }
             )
+            
+            customAccents.forEach { accent ->
+                Spacer(modifier = Modifier.width(8.dp))
+                CustomAccentItem(
+                    accent = accent,
+                    selected = currentAccent == AccentColor.CUSTOM && selectedCustomAccentId == accent.id,
+                    onClick = { viewModel.setAccent(AccentColor.CUSTOM, accent.id) },
+                    onEdit = { onNavigateToAccentEditor(accent.id) },
+                    onDelete = {
+                        viewModel.deleteAccent(accent.id)
+                    },
+                    onShare = {
+                        viewModel.exportAccent(accent.id) { file ->
+                            file?.let { shareFile(context, it) }
+                        }
+                    }
+                )
+            }
+            
+            Spacer(modifier = Modifier.width(8.dp))
+            IconButton(
+                onClick = { onNavigateToAccentEditor(null) },
+                modifier = Modifier
+                    .size(48.dp)
+                    .background(MaterialTheme.colorScheme.surfaceVariant, CircleShape)
+            ) {
+                Icon(Icons.Default.Add, contentDescription = null)
+            }
         }
 
         Spacer(modifier = Modifier.height(32.dp))
 
         Text(
-            text = "Навигация",
+            text = matchaStringResource(R.string.navigation),
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(bottom = 12.dp)
         )
         SettingsActionRow(
-            label = "Настройка кнопок навигации",
+            label = matchaStringResource(R.string.nav_buttons_setup),
             icon = Icons.Default.Settings,
             onClick = onNavigateToNavigationSettings
         )
+        SettingsActionRow(
+            label = matchaStringResource(R.string.app_icon),
+            icon = Icons.Default.Brush,
+            onClick = onNavigateToAppIconSettings
+        )
+        SettingsActionRow(
+            label = matchaStringResource(R.string.language),
+            icon = Icons.Default.Translate,
+            onClick = onNavigateToLanguageSettings
+        )
         SettingsSwitchRow(
-            label = "Показывать подписи кнопок",
+            label = matchaStringResource(R.string.show_nav_labels),
             checked = navBarLabelsVisible,
             onCheckedChange = { viewModel.setNavBarLabelsVisible(it) }
         )
@@ -353,22 +508,178 @@ fun AppearanceSettingsScreen(
         Spacer(modifier = Modifier.height(32.dp))
 
         Text(
-            text = "Плеер",
+            text = matchaStringResource(R.string.player),
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(bottom = 12.dp)
         )
         SettingsSwitchRow(
-            label = androidx.compose.ui.res.stringResource(com.deliriousvoid.openvkmatcha.R.string.settings_auto_hide_player),
+            label = matchaStringResource(com.deliriousvoid.openvkmatcha.R.string.settings_auto_hide_player),
             checked = autoHidePlayer,
             onCheckedChange = { viewModel.setAutoHidePlayer(it) }
         )
         Text(
-            text = androidx.compose.ui.res.stringResource(com.deliriousvoid.openvkmatcha.R.string.settings_auto_hide_player_desc),
+            text = matchaStringResource(com.deliriousvoid.openvkmatcha.R.string.settings_auto_hide_player_desc),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
+}
+
+@Composable
+private fun CustomThemeItem(
+    theme: CustomTheme,
+    selected: Boolean,
+    onClick: () -> Unit,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit,
+    onShare: () -> Unit
+) {
+    var showMenu by remember { mutableStateOf(false) }
+    val isCompact = theme.author.isBlank()
+    
+    Box {
+        Surface(
+            onClick = onClick,
+            shape = MaterialTheme.shapes.medium,
+            color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+            contentColor = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+        ) {
+            Row(
+                modifier = Modifier.padding(
+                    start = 16.dp,
+                    end = 8.dp,
+                    top = if (isCompact) 8.dp else 4.dp,
+                    bottom = if (isCompact) 8.dp else 4.dp
+                ),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(
+                        text = theme.name,
+                        style = if (isCompact) MaterialTheme.typography.labelLarge else MaterialTheme.typography.bodyLarge
+                    )
+                    if (!isCompact) {
+                        Text(text = theme.author, style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+                Spacer(modifier = Modifier.width(4.dp))
+                IconButton(onClick = { showMenu = true }, modifier = Modifier.size(24.dp)) {
+                    Icon(
+                        Icons.Default.MoreVert,
+                        contentDescription = null,
+                        tint = (if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant).copy(alpha = 0.6f)
+                    )
+                }
+            }
+        }
+        
+        DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+            DropdownMenuItem(
+                text = { Text(matchaStringResource(R.string.action_edit)) },
+                onClick = { showMenu = false; onEdit() },
+                leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) }
+            )
+            DropdownMenuItem(
+                text = { Text(matchaStringResource(R.string.action_share)) },
+                onClick = { showMenu = false; onShare() },
+                leadingIcon = { Icon(Icons.Default.Share, contentDescription = null) }
+            )
+            DropdownMenuItem(
+                text = { Text(matchaStringResource(R.string.action_delete)) },
+                onClick = { showMenu = false; onDelete() },
+                leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null) },
+                colors = MenuDefaults.itemColors(
+                    textColor = MaterialTheme.colorScheme.error,
+                    leadingIconColor = MaterialTheme.colorScheme.error
+                )
+            )
+        }
+    }
+}
+
+@Composable
+private fun CustomAccentItem(
+    accent: CustomAccent,
+    selected: Boolean,
+    onClick: () -> Unit,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit,
+    onShare: () -> Unit
+) {
+    var showMenu by remember { mutableStateOf(false) }
+    val isCompact = accent.author.isBlank()
+    
+    Box {
+        Surface(
+            onClick = onClick,
+            shape = MaterialTheme.shapes.medium,
+            color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+            contentColor = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+        ) {
+            Row(
+                modifier = Modifier.padding(
+                    start = 16.dp,
+                    end = 8.dp,
+                    top = if (isCompact) 8.dp else 4.dp,
+                    bottom = if (isCompact) 8.dp else 4.dp
+                ),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(modifier = Modifier.size(12.dp).background(Color(accent.primary), CircleShape))
+                Spacer(modifier = Modifier.width(8.dp))
+                Column {
+                    Text(
+                        text = accent.name,
+                        style = if (isCompact) MaterialTheme.typography.labelLarge else MaterialTheme.typography.bodyLarge
+                    )
+                    if (!isCompact) {
+                        Text(text = accent.author, style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+                Spacer(modifier = Modifier.width(4.dp))
+                IconButton(onClick = { showMenu = true }, modifier = Modifier.size(24.dp)) {
+                    Icon(
+                        Icons.Default.MoreVert,
+                        contentDescription = null,
+                        tint = (if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant).copy(alpha = 0.6f)
+                    )
+                }
+            }
+        }
+        
+        DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+            DropdownMenuItem(
+                text = { Text(matchaStringResource(R.string.action_edit)) },
+                onClick = { showMenu = false; onEdit() },
+                leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) }
+            )
+            DropdownMenuItem(
+                text = { Text(matchaStringResource(R.string.action_share)) },
+                onClick = { showMenu = false; onShare() },
+                leadingIcon = { Icon(Icons.Default.Share, contentDescription = null) }
+            )
+            DropdownMenuItem(
+                text = { Text(matchaStringResource(R.string.action_delete)) },
+                onClick = { showMenu = false; onDelete() },
+                leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null) },
+                colors = MenuDefaults.itemColors(
+                    textColor = MaterialTheme.colorScheme.error,
+                    leadingIconColor = MaterialTheme.colorScheme.error
+                )
+            )
+        }
+    }
+}
+
+private fun shareFile(context: Context, file: File) {
+    val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+    val intent = Intent(Intent.ACTION_SEND).apply {
+        type = "*/*"
+        putExtra(Intent.EXTRA_STREAM, uri)
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    }
+    context.startActivity(Intent.createChooser(intent, "Share theme"))
 }
 
 @Composable
@@ -390,18 +701,18 @@ fun MusicSettingsScreen(
             .verticalScroll(rememberScrollState())
     ) {
         Text(
-            text = "Режим",
+            text = matchaStringResource(R.string.mode),
             style = MaterialTheme.typography.labelLarge,
             color = MaterialTheme.colorScheme.primary,
             modifier = Modifier.padding(bottom = 8.dp)
         )
         SettingsSwitchRow(
-            label = "Оффлайн режим",
+            label = matchaStringResource(R.string.offline_mode),
             checked = offlineMode,
             onCheckedChange = { viewModel.setOfflineMode(it) }
         )
         Text(
-            text = "Скрывает все онлайн-разделы и отключает сетевые запросы.",
+            text = matchaStringResource(R.string.offline_mode_desc),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -409,18 +720,18 @@ fun MusicSettingsScreen(
         Spacer(modifier = Modifier.height(16.dp))
 
         Text(
-            text = "Очередь",
+            text = matchaStringResource(R.string.queue),
             style = MaterialTheme.typography.labelLarge,
             color = MaterialTheme.colorScheme.primary,
             modifier = Modifier.padding(bottom = 8.dp)
         )
         SettingsSwitchRow(
-            label = "Скрывать проигранные треки",
+            label = matchaStringResource(R.string.hide_played_tracks),
             checked = hidePlayedTracks,
             onCheckedChange = { viewModel.setHidePlayedTracks(it) }
         )
         Text(
-            text = "В очереди воспроизведения будут видны только текущий и последующие треки.",
+            text = matchaStringResource(R.string.hide_played_tracks_desc),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -428,13 +739,13 @@ fun MusicSettingsScreen(
         Spacer(modifier = Modifier.height(16.dp))
 
         Text(
-            text = "Загрузка",
+            text = matchaStringResource(R.string.download_category),
             style = MaterialTheme.typography.labelLarge,
             color = MaterialTheme.colorScheme.primary,
             modifier = Modifier.padding(bottom = 8.dp)
         )
         SettingsSwitchRow(
-            label = "Автоматически скачивать треки",
+            label = matchaStringResource(R.string.auto_download),
             checked = autoDownload,
             onCheckedChange = { viewModel.setAutoDownload(it) }
         )
@@ -442,7 +753,7 @@ fun MusicSettingsScreen(
         Spacer(modifier = Modifier.height(16.dp))
         
         Text(
-            text = "Количество треков на странице: $tracksPerPage",
+            text = matchaStringResource(R.string.tracks_per_page_format, tracksPerPage),
             style = MaterialTheme.typography.bodyLarge
         )
         Slider(
@@ -453,7 +764,7 @@ fun MusicSettingsScreen(
             modifier = Modifier.fillMaxWidth()
         )
         Text(
-            text = "Влияет на то, сколько треков подгружается за один раз в списках и плейлистах.",
+            text = matchaStringResource(R.string.tracks_per_page_desc),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -470,7 +781,7 @@ fun MusicSettingsScreen(
             modifier = Modifier.padding(bottom = 8.dp)
         )
         SettingsSwitchRow(
-            label = "Скробблинг ListenBrainz",
+            label = matchaStringResource(R.string.listenbrainz_scrobbling),
             checked = lbEnabled,
             onCheckedChange = { viewModel.setListenBrainzEnabled(it) }
         )
@@ -486,7 +797,7 @@ fun MusicSettingsScreen(
                 shape = MaterialTheme.shapes.medium
             )
             Text(
-                text = "Токен можно найти в настройках профиля на listenbrainz.org",
+                text = matchaStringResource(R.string.listenbrainz_token_desc),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 4.dp, start = 4.dp)
@@ -503,6 +814,7 @@ fun DeveloperSettingsScreen(
     val currentClientName by viewModel.clientName.collectAsState()
     val invisibility by viewModel.invisibility.collectAsState()
     val experimentalFeatures by viewModel.experimentalFeatures.collectAsState()
+    val opaqueColorScheme = LocalOpaqueColorScheme.current
     val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
     var showDialog by remember { mutableStateOf(value = false) }
     var customName by remember { mutableStateOf("") }
@@ -530,30 +842,30 @@ fun DeveloperSettingsScreen(
             .padding(16.dp)
     ) {
         Text(
-            text = "Режим онлайн",
+            text = matchaStringResource(R.string.online_mode),
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(bottom = 8.dp)
         )
         SettingsSwitchRow(
-            label = "Невидимка",
+            label = matchaStringResource(R.string.invisibility),
             checked = invisibility,
             onCheckedChange = { viewModel.setInvisibility(it) }
         )
         Text(
-            text = "Отключает автоматическое обновление статуса «онлайн». Статус всё равно может обновиться при совершении действий (отправка сообщений и т.д.).",
+            text = matchaStringResource(R.string.invisibility_desc),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(bottom = 16.dp)
         )
 
         SettingsSwitchRow(
-            label = "Экспериментальные функции",
+            label = matchaStringResource(R.string.experimental_features),
             checked = experimentalFeatures,
             onCheckedChange = { viewModel.setExperimentalFeatures(it) }
         )
         Text(
-            text = "Включает доступ к экспериментальным и не полностью готовым функциям (документы, источники, расширенные настройки).",
+            text = matchaStringResource(R.string.experimental_features_desc),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(bottom = 16.dp)
@@ -563,13 +875,13 @@ fun DeveloperSettingsScreen(
         Spacer(modifier = Modifier.height(16.dp))
 
         Text(
-            text = "Имя клиента (client_name)",
+            text = matchaStringResource(R.string.client_name_label),
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(bottom = 8.dp)
         )
         Text(
-            text = "Влияет на отображаемое имя и иконку около ваших постов",
+            text = matchaStringResource(R.string.client_name_desc),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(bottom = 16.dp)
@@ -606,7 +918,7 @@ fun DeveloperSettingsScreen(
             )
             Spacer(modifier = Modifier.width(8.dp))
             Column {
-                Text(text = "Собственное имя", style = MaterialTheme.typography.bodyLarge)
+                Text(text = matchaStringResource(R.string.custom_name), style = MaterialTheme.typography.bodyLarge)
                 if (isCustom) {
                     Text(
                         text = currentClientName,
@@ -622,7 +934,36 @@ fun DeveloperSettingsScreen(
         Spacer(modifier = Modifier.height(16.dp))
 
         Text(
-            text = "Никому не передавайте ваш access_token! Это может привести к потере доступа к аккаунту, вы действуете на свой страх и риск",
+            text = matchaStringResource(R.string.settings_trigger_crash),
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(bottom = 8.dp)
+        )
+        Text(
+            text = matchaStringResource(R.string.settings_trigger_crash_desc),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(bottom = 16.dp)
+        )
+        Button(
+            onClick = { viewModel.triggerCrash() },
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.errorContainer,
+                contentColor = MaterialTheme.colorScheme.onErrorContainer
+            )
+        ) {
+            Icon(Icons.Default.BugReport, contentDescription = null)
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(matchaStringResource(R.string.settings_trigger_crash))
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Text(
+            text = matchaStringResource(R.string.token_warning),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.error,
             modifier = Modifier.padding(bottom = 8.dp)
@@ -642,19 +983,20 @@ fun DeveloperSettingsScreen(
         ) {
             Icon(Icons.Default.ContentCopy, contentDescription = null)
             Spacer(modifier = Modifier.width(8.dp))
-            Text("Скопировать access_token")
+            Text(matchaStringResource(R.string.copy_access_token))
         }
     }
 
     if (showDialog) {
         AlertDialog(
             onDismissRequest = { showDialog = false },
-            title = { Text("Собственное имя клиента") },
+            containerColor = opaqueColorScheme.surface,
+            title = { Text(matchaStringResource(R.string.custom_client_name)) },
             text = {
                 OutlinedTextField(
                     value = customName,
                     onValueChange = { customName = it },
-                    label = { Text("Имя") },
+                    label = { Text(matchaStringResource(R.string.first_name)) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -666,12 +1008,12 @@ fun DeveloperSettingsScreen(
                         showDialog = false
                     }
                 }) {
-                    Text("Сохранить")
+                    Text(matchaStringResource(R.string.action_save))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showDialog = false }) {
-                    Text("Отмена")
+                    Text(matchaStringResource(R.string.cancel))
                 }
             }
         )
@@ -680,11 +1022,12 @@ fun DeveloperSettingsScreen(
     if (showLoginHint) {
         AlertDialog(
             onDismissRequest = { showLoginHint = false },
-            title = { Text("Внимание") },
-            text = { Text("Чтобы смена прошла успешно — перезайдите в аккаунт.") },
+            containerColor = opaqueColorScheme.surface,
+            title = { Text(matchaStringResource(R.string.dialog_attention)) },
+            text = { Text(matchaStringResource(R.string.login_hint_text)) },
             confirmButton = {
                 TextButton(onClick = { showLoginHint = false }) {
-                    Text("ОК")
+                    Text(matchaStringResource(R.string.action_ok))
                 }
             }
         )

@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.deliriousvoid.openvkmatcha.OpenVKMatchaApp
+import com.deliriousvoid.openvkmatcha.R
 import com.deliriousvoid.openvkmatcha.data.model.EditableProfileInfo
 import com.deliriousvoid.openvkmatcha.data.repository.ProfileRepository
 import com.deliriousvoid.openvkmatcha.util.AppEvents
@@ -72,7 +73,7 @@ class EditProfileViewModel(
             } else {
                 val error = profileInfoResult.exceptionOrNull()?.message 
                     ?: userResult.exceptionOrNull()?.message 
-                    ?: "Не удалось загрузить данные профиля"
+                    ?: OpenVKMatchaApp.instance.languageManager.getStringOrDefault(R.string.error_load_profile)
                 _uiState.update { it.copy(isLoading = false, error = error) }
             }
         }
@@ -91,7 +92,7 @@ class EditProfileViewModel(
             _uiState.update { it.copy(isAvatarUploading = true, avatarUploadError = null, newAvatarUri = uri) }
             try {
                 val bytes = contentResolver.openInputStream(uri)?.use { it.readBytes() }
-                    ?: throw Exception("Не удалось прочитать файл")
+                    ?: throw Exception(OpenVKMatchaApp.instance.languageManager.getStringOrDefault(R.string.error_read_file))
                 
                 profileRepository.getOwnerPhotoUploadServer()
                     .onSuccess { serverJson ->

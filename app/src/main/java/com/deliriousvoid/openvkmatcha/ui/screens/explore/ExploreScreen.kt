@@ -19,6 +19,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -31,6 +32,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import com.deliriousvoid.openvkmatcha.R
+import com.deliriousvoid.openvkmatcha.ui.util.matchaStringResource
 import com.deliriousvoid.openvkmatcha.ui.viewmodel.ExploreViewModel
 
 data class ExploreFeature(
@@ -90,20 +93,32 @@ fun ExploreScreen(
             }
         }
 
+        val musicTitle = matchaStringResource(R.string.explore_music)
+        val videosTitle = matchaStringResource(R.string.title_videos)
+        val docsTitle = matchaStringResource(R.string.title_documents)
+        val friendsTitle = matchaStringResource(R.string.title_friends)
+        val groupsTitle = matchaStringResource(R.string.title_groups)
+        val eventsTitle = matchaStringResource(R.string.title_events)
+        val notesTitle = matchaStringResource(R.string.title_notes)
+        val chatsTitle = matchaStringResource(R.string.explore_chats)
+        val gamesTitle = matchaStringResource(R.string.explore_games)
+
         // Features Grid
-        val features = listOf(
-            ExploreFeature("Музыка", Icons.Default.MusicNote, { onOpenFeature("music") }),
-            ExploreFeature("Видео", Icons.Default.Movie, { onOpenFeature("video") }),
-            ExploreFeature("Документы", Icons.Default.Description, { onOpenFeature("docs") }),
-            ExploreFeature("Друзья", Icons.Default.People, { onOpenFeature("friends") }),
-            ExploreFeature("Сообщества", Icons.Default.Groups, { onOpenFeature("groups") }),
-            ExploreFeature("События", Icons.Default.Event, { onOpenFeature("events") }),
-            ExploreFeature("Заметки", Icons.AutoMirrored.Filled.StickyNote2, { onOpenFeature("notes") }),
-            ExploreFeature("Сообщения", Icons.AutoMirrored.Filled.Chat, { onOpenFeature("messages") }),
-            ExploreFeature("Игры", Icons.Default.VideogameAsset, { 
-                onOpenWebView("$baseUrl/search?q=&section=apps", "Игры") 
-            })
-        )
+        val features = remember(musicTitle, videosTitle, docsTitle, friendsTitle, groupsTitle, eventsTitle, notesTitle, chatsTitle, gamesTitle) {
+            listOf(
+                ExploreFeature(musicTitle, Icons.Default.MusicNote, { onOpenFeature("music") }),
+                ExploreFeature(videosTitle, Icons.Default.Movie, { onOpenFeature("video") }),
+                ExploreFeature(docsTitle, Icons.Default.Description, { onOpenFeature("docs") }),
+                ExploreFeature(friendsTitle, Icons.Default.People, { onOpenFeature("friends") }),
+                ExploreFeature(groupsTitle, Icons.Default.Groups, { onOpenFeature("groups") }),
+                ExploreFeature(eventsTitle, Icons.Default.Event, { onOpenFeature("events") }),
+                ExploreFeature(notesTitle, Icons.AutoMirrored.Filled.StickyNote2, { onOpenFeature("notes") }),
+                ExploreFeature(chatsTitle, Icons.AutoMirrored.Filled.Chat, { onOpenFeature("messages") }),
+                ExploreFeature(gamesTitle, Icons.Default.VideogameAsset, { 
+                    onOpenWebView("$baseUrl/search?q=&section=apps", gamesTitle) 
+                })
+            )
+        }
 
         Column(
             modifier = Modifier.fillMaxWidth(),
@@ -131,11 +146,14 @@ fun ExploreScreen(
 
         Spacer(modifier = Modifier.height(32.dp))
 
+        val topUpTitle = matchaStringResource(R.string.explore_wallet_top_up_title)
+        val voucherTitle = matchaStringResource(R.string.explore_voucher)
+
         // Wallet Section
         WalletSection(
             balance = state.balance,
-            onTopUp = { onOpenWebView("$baseUrl/settings?act=finance", "Пополнение баланса") },
-            onVoucher = { onOpenWebView("$baseUrl/settings?act=finance", "Ваучер") },
+            onTopUp = { onOpenWebView("$baseUrl/settings?act=finance", topUpTitle) },
+            onVoucher = { onOpenWebView("$baseUrl/settings?act=finance", voucherTitle) },
             onTransfer = { onOpenFeature("transfer") }
         )
         
@@ -204,14 +222,14 @@ fun WalletSection(
                     )
                     Spacer(modifier = Modifier.width(12.dp))
                     Text(
-                        text = "Кошелёк",
+                        text = matchaStringResource(R.string.explore_wallet),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )
                 }
                 
                 Text(
-                    text = "$balance голосов",
+                    text = matchaStringResource(R.string.explore_balance_format, balance),
                     style = MaterialTheme.typography.titleLarge,
                     color = MaterialTheme.colorScheme.primary,
                     fontWeight = FontWeight.ExtraBold
@@ -225,19 +243,19 @@ fun WalletSection(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 WalletButton(
-                    label = "Пополнить",
+                    label = matchaStringResource(R.string.explore_top_up),
                     icon = Icons.Default.Add,
                     onClick = onTopUp,
                     modifier = Modifier.weight(1f)
                 )
                 WalletButton(
-                    label = "Ваучер",
+                    label = matchaStringResource(R.string.explore_voucher),
                     icon = Icons.Default.ConfirmationNumber,
                     onClick = onVoucher,
                     modifier = Modifier.weight(1f)
                 )
                 WalletButton(
-                    label = "Перевести",
+                    label = matchaStringResource(R.string.explore_transfer),
                     icon = Icons.AutoMirrored.Filled.Send,
                     onClick = onTransfer,
                     modifier = Modifier.weight(1f)

@@ -6,15 +6,13 @@ import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import com.deliriousvoid.openvkmatcha.Constants
 
-class TokenManager(context: Context) {
-    private val prefs: SharedPreferences
-
-    init {
+class TokenManager(private val context: Context) {
+    private val prefs: SharedPreferences by lazy {
         val masterKey = MasterKey.Builder(context)
             .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
             .build()
 
-        prefs = EncryptedSharedPreferences.create(
+        EncryptedSharedPreferences.create(
             context,
             PREF_NAME,
             masterKey,

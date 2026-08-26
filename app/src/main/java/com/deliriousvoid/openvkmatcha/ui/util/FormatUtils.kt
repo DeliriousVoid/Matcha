@@ -4,6 +4,8 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+import com.deliriousvoid.openvkmatcha.OpenVKMatchaApp
+import com.deliriousvoid.openvkmatcha.R
 
 fun formatTimeAgo(timestamp: Long): String {
     if (timestamp <= 0) return ""
@@ -11,30 +13,35 @@ fun formatTimeAgo(timestamp: Long): String {
     val now = Calendar.getInstance()
     val target = Calendar.getInstance().apply { time = date }
 
-    val timeFormat = SimpleDateFormat("HH:mm", Locale("ru"))
-    val dayFormat = SimpleDateFormat("d MMM", Locale("ru"))
-    val yearFormat = SimpleDateFormat("d MMM yyyy", Locale("ru"))
+    val lm = OpenVKMatchaApp.instance.languageManager
+    val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
+    val day = target.get(Calendar.DAY_OF_MONTH)
+    val month = target.get(Calendar.MONTH) + 1
+    val year = target.get(Calendar.YEAR)
+    
+    val timeStr = timeFormat.format(date)
+    val monthStr = lm.getStringOrDefault(getMonthRes(month))
 
     return when {
         // Today
         now.get(Calendar.YEAR) == target.get(Calendar.YEAR) &&
         now.get(Calendar.DAY_OF_YEAR) == target.get(Calendar.DAY_OF_YEAR) -> {
-            "сегодня в ${timeFormat.format(date)}"
+            lm.getStringOrDefault(R.string.date_today_at, timeStr)
         }
 
         // Yesterday
         isYesterday(now, target) -> {
-            "вчера в ${timeFormat.format(date)}"
+            lm.getStringOrDefault(R.string.date_yesterday_at, timeStr)
         }
 
         // This year
         now.get(Calendar.YEAR) == target.get(Calendar.YEAR) -> {
-            "${dayFormat.format(date)} в ${timeFormat.format(date)}"
+            "$day $monthStr ${lm.getStringOrDefault(R.string.date_at)} $timeStr"
         }
 
         // Different year
         else -> {
-            "${yearFormat.format(date)} в ${timeFormat.format(date)}"
+            "$day $monthStr $year ${lm.getStringOrDefault(R.string.date_at)} $timeStr"
         }
     }
 }
@@ -45,6 +52,24 @@ private fun isYesterday(now: Calendar, target: Calendar): Boolean {
     }
     return yesterday.get(Calendar.YEAR) == target.get(Calendar.YEAR) &&
            yesterday.get(Calendar.DAY_OF_YEAR) == target.get(Calendar.DAY_OF_YEAR)
+}
+
+fun getMonthRes(month: Int): Int {
+    return when (month) {
+        1 -> R.string.month_1
+        2 -> R.string.month_2
+        3 -> R.string.month_3
+        4 -> R.string.month_4
+        5 -> R.string.month_5
+        6 -> R.string.month_6
+        7 -> R.string.month_7
+        8 -> R.string.month_8
+        9 -> R.string.month_9
+        10 -> R.string.month_10
+        11 -> R.string.month_11
+        12 -> R.string.month_12
+        else -> R.string.month_1 // Fallback
+    }
 }
 
 fun formatDuration(seconds: Int): String {
@@ -62,16 +87,24 @@ fun formatFileSize(bytes: Int): String {
 
 fun formatLastSeen(lastSeen: com.deliriousvoid.openvkmatcha.data.model.LastSeen, sex: Int): String {
     val timeStr = formatTimeAgo(lastSeen.time)
-    val action = if (sex == 1) "заходила" else "заходил"
+    val lm = OpenVKMatchaApp.instance.languageManager
+    
     val platform = when (lastSeen.platform) {
-        1 -> "через моб. версию"
-        2 -> "через iPhone"
-        3 -> "через iPad"
-        4 -> "через Android"
-        5 -> "через Windows Phone"
-        6 -> "через Windows"
-        7 -> "через сайт"
+        1 -> lm.getStringOrDefault(R.string.platform_mobile_short)
+        2 -> lm.getStringOrDefault(R.string.platform_iphone)
+        3 -> lm.getStringOrDefault(R.string.platform_ipad)
+        4 -> lm.getStringOrDefault(R.string.platform_android)
+        5 -> lm.getStringOrDefault(R.string.platform_wphone)
+        6 -> lm.getStringOrDefault(R.string.platform_windows)
+        7 -> lm.getStringOrDefault(R.string.platform_site)
         else -> ""
     }
-    return "$action $timeStr $platform".trim()
+    
+    return if (platform.isNotEmpty()) {
+        if (sex == 1) lm.getStringOrDefault(R.string.last_seen_f_platform, timeStr, platform)
+        else lm.getStringOrDefault(R.string.last_seen_m_platform, timeStr, platform)
+    } else {
+        if (sex == 1) lm.getStringOrDefault(R.string.last_seen_f, timeStr)
+        else lm.getStringOrDefault(R.string.last_seen_m, timeStr)
+    }
 }

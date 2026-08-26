@@ -24,6 +24,8 @@ mlkit-barcode = "17.3.0"
 newpipeextractor = "0.26.4"
 desugar = "2.1.5"
 rhino = "1.7.15"
+commonmark = "0.30.0"
+robolectric = "4.16.1"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -66,6 +68,8 @@ mlkit-barcode-scanning = { group = "com.google.mlkit", name = "barcode-scanning"
 newpipeextractor = { group = "com.github.TeamNewPipe", name = "NewPipeExtractor", version.ref = "newpipeextractor" }
 desugar-jdk-libs = { group = "com.android.tools", name = "desugar_jdk_libs", version.ref = "desugar" }
 rhino = { group = "org.mozilla", name = "rhino", version.ref = "rhino" }
+commonmark = { group = "org.commonmark", name = "commonmark", version.ref = "commonmark" }
+robolectric = { group = "org.robolectric", name = "robolectric", version.ref = "robolectric" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

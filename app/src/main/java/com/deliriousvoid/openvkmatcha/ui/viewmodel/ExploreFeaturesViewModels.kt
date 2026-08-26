@@ -302,7 +302,7 @@ class CreateEditNoteViewModel(
                 if (note != null) {
                     _uiState.update { it.copy(title = note.title, text = note.text, isLoading = false) }
                 } else {
-                    _uiState.update { it.copy(isLoading = false, error = "Заметка не найдена") }
+                    _uiState.update { it.copy(isLoading = false, error = OpenVKMatchaApp.instance.languageManager.getStringOrDefault(com.deliriousvoid.openvkmatcha.R.string.note_not_found)) }
                 }
             }.onFailure { e ->
                 _uiState.update { it.copy(isLoading = false, error = e.message) }
