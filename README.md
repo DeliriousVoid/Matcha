@@ -1,2 +1,31 @@
-# Matcha
-OpenVK client written in Kotlin for Android 7+
+# 🌱 Matcha
+Matcha - это открытый клиент для OpenVK, который закрывает все основные потребности пользователя, избавляя от необходимости лишний раз открывать веб-версию.
+
+Приложение задумывалось не просто как очередной клиент, а как совершенно новый способ взаимодействия с OpenVK: лёгкий, интуитивный и современный.
+
+<img src="https://cdn.openvk.org/d8/d8e8cb2a565e776c1c53de729ad3cf6798f2f7b2b5e9675f1b9a546254a9e68c30b10ff0338d007556d44237e75afd66ebc45013ae044b85a0384194d6d7e72d_cropped/larger.jpeg" alt="Matcha Preview" width="50%" />
+
+</div>
+
+Ключевые особенности Matcha:
+
+✨ Современный интерфейс - пользоваться приложением приятно и удобно.
+
+🌐 Универсальность - полная совместимость с разными инстансами OpenVK.
+
+🚀 Максимум функций - реализовано огромное количество возможностей, несмотря на ограничения API.
+
+🎵 Продвинутый медиаплеер - слушайте музыку и смотрите видео с комфортом прямо в приложении.
+
+🔧 Кастомизация - создавайте пользовательские темы, переводы, акценты и делитесь ими с другими пользователями.
+
+<p align="center">
+  <img src="https://cdn.openvk.org/2f/2f778b0b48c40b68db7c80af55016e454c5e56662bb1591470086e69834d56d6d53fb973a410276cddcd3a7065bba4ab3a078752f0f5d2f2c4493ab82bbb45ae.jpeg?text=Screen+1" width="32%" />
+  <img src="https://cdn.openvk.org/38/38e5b99603fc10f354705d0505e9d26a2c16e1324a65f9c8dec65144aa1763a8b4523b8d16bfe93c33f7f14f1dd2c298ab24b9931a98414d112ce0d7a2b4f9ec.jpeg?text=Screen+2" width="32%" />
+  <img src="https://cdn.openvk.org/c7/c7e3f40789a3b45e1506e285a2ce6f6ebbd741a0f7dafec3ae4ef03cf7a224e19f2954e06de7447780d9ba961a188e07aa7c810a1fabde5ad8ac751c3a654a30.jpeg?text=Screen+3" width="32%" />
+</p>
+
+# 📦 Установка
+
+Вы можете скачать последнюю версию с GitHub релизов:
+🔗 https://github.com/DeliriousVoid/Matcha/releases/latest
