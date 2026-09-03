@@ -1,6 +1,7 @@
 package com.deliriousvoid.openvkmatcha.data.repository
 
 import android.util.Log
+import android.content.Context
 import com.deliriousvoid.openvkmatcha.data.api.OpenVKApi
 import com.deliriousvoid.openvkmatcha.data.parser.JsonParsers
 import com.deliriousvoid.openvkmatcha.services.LongPollService
@@ -17,7 +18,10 @@ class AuthRepository(private val api: OpenVKApi) {
     suspend fun login(username: String, password: String, code: String? = null) =
         api.login(username, password, code).onSuccess { token ->
             val app = OpenVKMatchaApp.instance
-            LongPollService.start(app)
+            val prefs = app.getSharedPreferences("settings", Context.MODE_PRIVATE)
+            if (prefs.getBoolean("background_notifications", false)) {
+                LongPollService.start(app)
+            }
             app.onlineManager.start()
             
             // Save to account manager
@@ -26,7 +30,10 @@ class AuthRepository(private val api: OpenVKApi) {
 
     suspend fun loginWithToken(token: String) = api.loginWithToken(token).onSuccess {
         val app = OpenVKMatchaApp.instance
-        app.longPollManager.start()
+        val prefs = app.getSharedPreferences("settings", Context.MODE_PRIVATE)
+        if (prefs.getBoolean("background_notifications", false)) {
+            LongPollService.start(app)
+        }
         app.onlineManager.start()
 
         // Save to account manager
@@ -60,7 +67,11 @@ class AuthRepository(private val api: OpenVKApi) {
         
         LongPollService.stop(app)
         app.onlineManager.stop()
-        LongPollService.start(app)
+        
+        val prefs = app.getSharedPreferences("settings", Context.MODE_PRIVATE)
+        if (prefs.getBoolean("background_notifications", false)) {
+            LongPollService.start(app)
+        }
         app.onlineManager.start()
         
         return true

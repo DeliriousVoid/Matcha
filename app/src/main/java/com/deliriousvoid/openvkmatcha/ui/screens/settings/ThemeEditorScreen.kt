@@ -28,6 +28,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -97,6 +98,7 @@ fun ThemeEditorScreen(
     var onSurfaceVariant by remember { mutableStateOf(existingTheme?.colors?.onSurfaceVariant?.let { Color(it) } ?: onSurface.copy(alpha = 0.6f)) }
     var isSecondaryAutomatic by remember { mutableStateOf(existingTheme == null) }
     
+    var currentImagePath by remember { mutableStateOf(existingTheme?.backgroundImagePath) }
     var imageUri by remember { mutableStateOf<Uri?>(null) }
     var imageBitmap by remember { mutableStateOf<Bitmap?>(null) }
     
@@ -162,25 +164,40 @@ fun ThemeEditorScreen(
             Spacer(modifier = Modifier.height(24.dp))
             Text("Colors", style = MaterialTheme.typography.titleMedium)
             
-            ColorSelectionRow("Primary", primary) { pickingColorFor = "primary" }
-            ColorSelectionRow("Background", background) { pickingColorFor = "background" }
-            ColorSelectionRow("Surface", surface) { pickingColorFor = "surface" }
-            ColorSelectionRow("Text", onSurface) { pickingColorFor = "onSurface" }
-            ColorSelectionRow("Secondary Text", onSurfaceVariant) { pickingColorFor = "onSurfaceVariant" }
+            ColorSelectionRow("Primary", primary, { pickingColorFor = "primary" }, { primary = defaultPrimary })
+            ColorSelectionRow("Background", background, { pickingColorFor = "background" }, { background = defaultBackground })
+            ColorSelectionRow("Surface", surface, { pickingColorFor = "surface" }, { surface = defaultSurface })
+            ColorSelectionRow("Text", onSurface, { pickingColorFor = "onSurface" }, { onSurface = defaultOnSurface })
+            ColorSelectionRow("Secondary Text", onSurfaceVariant, { pickingColorFor = "onSurfaceVariant" }, { onSurfaceVariant = onSurface.copy(alpha = 0.6f) })
             
             Spacer(modifier = Modifier.height(24.dp))
-            Text("Wallpaper", style = MaterialTheme.typography.titleMedium)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Wallpaper", style = MaterialTheme.typography.titleMedium)
+                if (imageUri != null || currentImagePath != null) {
+                    IconButton(onClick = {
+                        imageUri = null
+                        imageBitmap = null
+                        currentImagePath = null
+                    }) {
+                        Icon(Icons.Default.Close, contentDescription = "Remove Wallpaper")
+                    }
+                }
+            }
             Button(onClick = { launcher.launch("image/*") }) {
                 Icon(Icons.Default.Image, contentDescription = null)
                 Spacer(modifier = Modifier.width(8.dp))
                 Text("Choose Image")
             }
 
-            if (imageUri != null || existingTheme?.backgroundImagePath != null) {
+            if (imageUri != null || currentImagePath != null) {
                 Spacer(modifier = Modifier.height(16.dp))
                 WallpaperPreview(
                     imageUri = imageUri,
-                    imagePath = existingTheme?.backgroundImagePath,
+                    imagePath = currentImagePath,
                     blur = blur,
                     dim = dim
                 )
@@ -241,7 +258,7 @@ fun ThemeEditorScreen(
                         name = name,
                         author = author,
                         colors = colors,
-                        backgroundImagePath = existingTheme?.backgroundImagePath, // Will be updated if bitmap is provided
+                        backgroundImagePath = currentImagePath, // Updated to use local state
                         backgroundBlur = blur,
                         backgroundDim = dim,
                         backgroundAlpha = alpha,
@@ -328,7 +345,12 @@ fun WallpaperPreview(
 }
 
 @Composable
-private fun ColorSelectionRow(label: String, color: Color, onClick: () -> Unit) {
+private fun ColorSelectionRow(
+    label: String,
+    color: Color,
+    onClick: () -> Unit,
+    onDelete: (() -> Unit)? = null
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -338,17 +360,32 @@ private fun ColorSelectionRow(label: String, color: Color, onClick: () -> Unit) 
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Text(label)
-        Box(
-            modifier = Modifier
-                .size(32.dp)
-                .clip(CircleShape)
-                .background(Color.LightGray)
-        ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
             Box(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .background(color)
-            )
+                    .size(32.dp)
+                    .clip(CircleShape)
+                    .background(Color.LightGray)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(color)
+                )
+            }
+            if (onDelete != null) {
+                Spacer(modifier = Modifier.width(8.dp))
+                IconButton(
+                    onClick = { onDelete() },
+                    modifier = Modifier.size(24.dp)
+                ) {
+                    Icon(
+                        Icons.Default.Close,
+                        contentDescription = "Reset Color",
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+            }
         }
     }
 }

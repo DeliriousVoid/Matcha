@@ -130,11 +130,13 @@ class ThemeManager(private val context: Context) {
         File(dir, "theme.json").writeText(json.toString())
         _cachedThemes = null
         
-        bitmap?.let {
-            val wallpaperFile = File(dir, "wallpaper.jpg")
+        val wallpaperFile = File(dir, "wallpaper.jpg")
+        if (bitmap != null) {
             FileOutputStream(wallpaperFile).use { out ->
-                it.compress(Bitmap.CompressFormat.JPEG, 90, out)
+                bitmap.compress(Bitmap.CompressFormat.JPEG, 90, out)
             }
+        } else if (theme.backgroundImagePath == null) {
+            if (wallpaperFile.exists()) wallpaperFile.delete()
         }
     }
 

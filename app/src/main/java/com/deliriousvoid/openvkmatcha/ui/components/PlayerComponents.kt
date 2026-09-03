@@ -112,6 +112,105 @@ import com.deliriousvoid.openvkmatcha.ui.util.matchaStringResource
 import com.deliriousvoid.openvkmatcha.ui.viewmodel.PlayerViewModel
 import kotlinx.coroutines.launch
 
+@Composable
+private fun MiniPlayerStaticContent(
+    track: AudioTrack,
+    artworkCache: Map<String, String>,
+    modifier: Modifier,
+    isPlaying: Boolean,
+    isBuffering: Boolean,
+    onPlayPause: () -> Unit,
+    onToggleAdded: () -> Unit,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit,
+) {
+    val artworkUrl = artworkCache[track.stableId] ?: track.artworkUrl
+    Surface(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(64.dp)
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick
+            ),
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 0.dp,
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(MaterialTheme.colorScheme.primaryContainer),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (artworkUrl != null) {
+                        AsyncImage(
+                            model = artworkUrl,
+                            contentDescription = null,
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop,
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Default.MusicNote,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                }
+
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(horizontal = 12.dp)
+                ) {
+                    Text(
+                        text = track.title,
+                        style = MaterialTheme.typography.titleSmall,
+                        maxLines = 1,
+                        modifier = Modifier.basicMarquee(),
+                    )
+                    Text(
+                        text = if (track.isReady) track.artist else matchaStringResource(R.string.audio_converting),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (track.isReady) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error,
+                        maxLines = 1,
+                        modifier = Modifier.basicMarquee(),
+                    )
+                }
+            }
+
+            IconButton(onClick = onToggleAdded) {
+                Icon(
+                    imageVector = if (track.isAdded) Icons.Default.Check else Icons.Default.Add,
+                    contentDescription = if (track.isAdded) matchaStringResource(R.string.action_remove) else matchaStringResource(R.string.action_add),
+                    tint = if (track.isAdded) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
+            IconButton(onClick = onPlayPause) {
+                if (isBuffering) {
+                    androidx.compose.material3.CircularProgressIndicator(
+                        modifier = Modifier.size(24.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                } else {
+                    Icon(
+                        imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                        contentDescription = if (isPlaying) matchaStringResource(R.string.desc_pause) else matchaStringResource(R.string.desc_play),
+                    )
+                }
+            }
+        }
+    }
+}
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun MiniPlayer(
@@ -131,15 +230,32 @@ fun MiniPlayer(
     if (currentTrack == null) return
 
     val currentIndex = remember(currentTrack.stableId, queue) {
-        queue.indexOfFirst { it.stableId == currentTrack.stableId }.coerceAtLeast(0)
+        queue.indexOfFirst { it.stableId == currentTrack.stableId }
     }
-    val isRepeating = repeatMode != Player.REPEAT_MODE_OFF
-    val pageCount = if (isRepeating && queue.size > 1) 10000 else queue.size
+    val basePage = 5000
+    val pageCount = if (queue.size > 1) 10000 else queue.size
+    
+    if (currentIndex < 0 || queue.isEmpty()) {
+        MiniPlayerStaticContent(
+            track = currentTrack,
+            artworkCache = artworkCache,
+            modifier = modifier,
+            isPlaying = isPlaying,
+            isBuffering = isBuffering,
+            onPlayPause = onPlayPause,
+            onToggleAdded = onToggleAdded,
+            onClick = onClick,
+            onLongClick = onLongClick
+        )
+        return
+    }
+
     val pagerState = rememberPagerState(
-        initialPage = if (pageCount > queue.size) 5000 - (5000 % queue.size) + currentIndex else currentIndex
+        initialPage = if (pageCount > queue.size) basePage - (basePage % queue.size) + currentIndex 
+                      else currentIndex
     ) { pageCount }
 
-    LaunchedEffect(currentIndex) {
+    LaunchedEffect(currentIndex, queue.size) {
         val targetPage = if (pageCount > queue.size) {
             val currentBase = pagerState.currentPage - (pagerState.currentPage % queue.size)
             currentBase + currentIndex
@@ -147,14 +263,18 @@ fun MiniPlayer(
             currentIndex
         }
         if (pagerState.currentPage != targetPage) {
-            pagerState.animateScrollToPage(targetPage)
+            if (kotlin.math.abs(pagerState.currentPage - targetPage) > 1) {
+                pagerState.scrollToPage(targetPage)
+            } else {
+                pagerState.animateScrollToPage(targetPage)
+            }
         }
     }
 
     LaunchedEffect(pagerState.currentPage, pagerState.isScrollInProgress) {
         if (!pagerState.isScrollInProgress) {
             val trackIndex = if (pageCount > queue.size) pagerState.currentPage % queue.size else pagerState.currentPage
-            if (trackIndex != currentIndex) {
+            if (trackIndex >= 0 && trackIndex < queue.size && queue[trackIndex].stableId != currentTrack.stableId) {
                 onSkipToQueueItem(trackIndex)
             }
         }
@@ -179,6 +299,12 @@ fun MiniPlayer(
                 state = pagerState,
                 modifier = Modifier.weight(1f),
                 userScrollEnabled = queue.size > 1,
+                reverseLayout = false,
+                beyondViewportPageCount = 1,
+                key = { page ->
+                    val trackIndex = if (pageCount > queue.size) page % queue.size else page
+                    queue.getOrNull(trackIndex)?.stableId ?: page
+                },
                 verticalAlignment = Alignment.CenterVertically,
             ) { page ->
                 val trackIndex = if (pageCount > queue.size) page % queue.size else page
@@ -320,15 +446,33 @@ fun FullPlayer(
     val lyricsLoading by playerViewModel.lyricsLoading.collectAsState()
 
     val currentIndex = remember(currentTrack.stableId, queue) {
-        queue.indexOfFirst { it.stableId == currentTrack.stableId }.coerceAtLeast(0)
+        queue.indexOfFirst { it.stableId == currentTrack.stableId }
     }
-    val isRepeating = repeatMode != Player.REPEAT_MODE_OFF
-    val pageCount = if (isRepeating && queue.size > 1) 10000 else queue.size
+    val basePage = 5000
+    val pageCount = if (queue.size > 1) 10000 else queue.size
+    
+    if (currentIndex < 0 || queue.isEmpty()) {
+        // Just show the current track details without pager if not in queue
+        MiniPlayerStaticContent(
+            track = currentTrack,
+            artworkCache = artworkCache,
+            modifier = Modifier, // FullPlayer doesn't need external modifier here
+            isPlaying = isPlaying,
+            isBuffering = isBuffering,
+            onPlayPause = onPlayPause,
+            onToggleAdded = onToggleAdded,
+            onClick = {}, // No-op for static content in full player
+            onLongClick = {}
+        )
+        return
+    }
+
     val pagerState = rememberPagerState(
-        initialPage = if (pageCount > queue.size) 5000 - (5000 % queue.size) + currentIndex else currentIndex
+        initialPage = if (pageCount > queue.size) basePage - (basePage % queue.size) + currentIndex 
+                      else currentIndex
     ) { pageCount }
 
-    LaunchedEffect(currentIndex) {
+    LaunchedEffect(currentIndex, queue.size) {
         val targetPage = if (pageCount > queue.size) {
             val currentBase = pagerState.currentPage - (pagerState.currentPage % queue.size)
             currentBase + currentIndex
@@ -336,14 +480,18 @@ fun FullPlayer(
             currentIndex
         }
         if (pagerState.currentPage != targetPage) {
-            pagerState.animateScrollToPage(targetPage)
+            if (kotlin.math.abs(pagerState.currentPage - targetPage) > 1) {
+                pagerState.scrollToPage(targetPage)
+            } else {
+                pagerState.animateScrollToPage(targetPage)
+            }
         }
     }
 
     LaunchedEffect(pagerState.currentPage, pagerState.isScrollInProgress) {
         if (!pagerState.isScrollInProgress) {
             val trackIndex = if (pageCount > queue.size) pagerState.currentPage % queue.size else pagerState.currentPage
-            if (trackIndex != currentIndex) {
+            if (trackIndex >= 0 && trackIndex < queue.size && queue[trackIndex].stableId != currentTrack.stableId) {
                 onSkipToQueueItem(trackIndex)
             }
         }
@@ -406,6 +554,11 @@ fun FullPlayer(
                     contentPadding = PaddingValues(horizontal = 32.dp),
                     pageSpacing = with(LocalDensity.current) { 92.toDp() },
                     userScrollEnabled = queue.size > 1,
+                    beyondViewportPageCount = 1,
+                    key = { page ->
+                        val pageTrackIndex = if (pageCount > queue.size) page % queue.size else page
+                        queue.getOrNull(pageTrackIndex)?.stableId ?: page
+                    },
                     verticalAlignment = Alignment.CenterVertically,
                 ) { page ->
                     val pageTrackIndex = if (pageCount > queue.size) page % queue.size else page

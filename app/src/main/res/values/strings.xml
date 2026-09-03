@@ -281,6 +281,9 @@
     <string name="explore_games">Игры</string>
 
     <!-- Music -->
+    <string name="music_main">Главная</string>
+    <string name="music_my_music">Моя музыка</string>
+    <string name="music_recommendations">Рекомендации</string>
     <string name="music_tracks">Треки</string>
     <string name="music_playlists">Плейлисты</string>
     <string name="music_downloaded">Скачанное</string>
@@ -412,7 +415,7 @@
     <string name="add_more">Добавить ещё</string>
     <string name="pause">Пауза</string>
     <string name="listen">Слушать</string>
-    <string name="shuffle">Вперемешку</string>
+    <string name="shuffle">Перемешать</string>
     <string name="notifications_new">Новые</string>
     <string name="notifications_archive">Архив</string>
     <string name="archive_empty">Архив пуст</string>
@@ -435,11 +438,13 @@
     <string name="color_purple">Фиолетовый</string>
     <string name="color_gray">Серый</string>
     <string name="action_select">Выбрать</string>
+    <string name="action_refresh">Обновить</string>
 
     <string name="qr_code_title">QR код</string>
     <string name="qr_scanner_title">Сканирование QR</string>
     <string name="error_qr_generation">Ошибка генерации QR</string>
     <string name="error_camera_permission">Разрешение на камеру не получено</string>
+    <string name="error_notifications_permission">Разрешение на уведомления не получено. Без него сервис не будет отображаться.</string>
 
     <string name="error_like_failed">Ошибка при установке лайка</string>
     <string name="error_create_poll">Ошибка создания опроса: %1$s</string>
@@ -587,6 +592,8 @@
     <string name="queue">Очередь</string>
     <string name="hide_played_tracks">Скрывать проигранные треки</string>
     <string name="hide_played_tracks_desc">В очереди воспроизведения будут видны только текущий и последующие треки.</string>
+    <string name="settings_open_player_on_start">Открывать плеер при старте приложения</string>
+    <string name="settings_open_player_on_start_desc">Восстанавливать очередь воспроизведения при запуске</string>
     <string name="download_category">Загрузка</string>
     <string name="auto_download">Автоматически скачивать треки</string>
     <string name="tracks_per_page_format">Количество треков на странице: %1$d</string>
@@ -622,6 +629,8 @@
     <string name="settings_appearance_desc">Тема, акцентный цвет</string>
     <string name="settings_music_desc">Загрузки, ListenBrainz</string>
     <string name="settings_developer_desc">Идентификация клиента, API</string>
+    <string name="settings_background_notifications">Уведомления в фоне</string>
+    <string name="settings_background_notifications_desc">Позволяет получать сообщения, когда приложение закрыто. Показывает постоянное уведомление для стабильной работы.</string>
     <string name="date_format_full">d MMMM yyyy в HH:mm</string>
     <string name="theme_amoled">Amoled</string>
     <string name="theme_light">Light</string>
@@ -637,6 +646,9 @@
     <string name="action_cancel_vote">Отменить голос</string>
     <string name="poll_finished">Опрос завершён</string>
     <string name="location_label">Местоположение</string>
+
+    <string name="recommendation_warning_title">Возможно не та песня</string>
+    <string name="recommendation_warning_desc">Данные песни могут быть неверными, возможно оригинальная песня отсутствует на инстансе, алгоритм рекомендаций выдал: %1$s — %2$s (%3$s)</string>
 
     <!-- Crash Notification -->
     <string name="crash_title">произошёл вылет</string>

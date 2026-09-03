@@ -106,6 +106,12 @@ fun TopicCommentsScreen(
         }
     }
 
+    LaunchedEffect(Unit) {
+        viewModel.scrollToBottom.collect {
+            listState.animateScrollToItem(state.comments.size)
+        }
+    }
+
     Scaffold(
         bottomBar = {
             CommentInput(

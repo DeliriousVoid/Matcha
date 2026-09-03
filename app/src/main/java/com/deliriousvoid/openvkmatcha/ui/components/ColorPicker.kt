@@ -18,9 +18,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -46,6 +48,18 @@ fun ColorPicker(
         mutableStateOf(hsv)
     }
     var alpha by remember { mutableStateOf(initialColor.alpha) }
+
+    var hexText by remember { 
+        mutableStateOf(String.format("%08X", initialColor.toArgb().toLong() and 0xFFFFFFFFL)) 
+    }
+
+    LaunchedEffect(hsv, alpha) {
+        val currentColor = Color.hsv(hsv[0], hsv[1], hsv[2], alpha)
+        val currentHex = String.format("%08X", currentColor.toArgb().toLong() and 0xFFFFFFFFL)
+        if (hexText.uppercase() != currentHex) {
+            hexText = currentHex
+        }
+    }
 
     Column(modifier = Modifier.padding(16.dp)) {
         Box(
@@ -135,10 +149,36 @@ fun ColorPicker(
                 )
             }
             Spacer(modifier = Modifier.width(16.dp))
-            val currentColor = Color.hsv(hsv[0], hsv[1], hsv[2], alpha)
-            Text(
-                text = String.format("#%08X", currentColor.toArgb().toLong() and 0xFFFFFFFFL),
-                style = MaterialTheme.typography.bodyLarge
+            OutlinedTextField(
+                value = hexText,
+                onValueChange = { newHex ->
+                    hexText = newHex
+                    val cleanHex = newHex.removePrefix("#")
+                    try {
+                        val parsedColor = if (cleanHex.isEmpty()) {
+                            Color.White
+                        } else {
+                            val colorInt = cleanHex.toLong(16).toInt()
+                            // If user entered 6 chars, assume full alpha
+                            if (cleanHex.length == 6) {
+                                Color(colorInt or (0xFF shl 24))
+                            } else {
+                                Color(colorInt)
+                            }
+                        }
+                        
+                        val newHsv = FloatArray(3)
+                        android.graphics.Color.colorToHSV(parsedColor.toArgb(), newHsv)
+                        hsv = newHsv
+                        alpha = parsedColor.alpha
+                        onColorChanged(parsedColor)
+                    } catch (e: Exception) {
+                        // Ignore invalid hex
+                    }
+                },
+                label = { Text("HEX") },
+                modifier = Modifier.width(150.dp),
+                singleLine = true
             )
         }
     }

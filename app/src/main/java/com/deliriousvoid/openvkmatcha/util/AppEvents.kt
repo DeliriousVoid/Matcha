@@ -86,6 +86,12 @@ object AppEvents {
     private val _topBarState = MutableStateFlow<TopBarState?>(null)
     val topBarState = _topBarState.asStateFlow()
 
+    private val _topBarAlpha = MutableStateFlow(1f)
+    val topBarAlpha = _topBarAlpha.asStateFlow()
+
+    private val _isTopBarTransparent = MutableStateFlow(false)
+    val isTopBarTransparent = _isTopBarTransparent.asStateFlow()
+
     private val _searchQuery = MutableStateFlow("")
     val searchQuery = _searchQuery.asStateFlow()
 
@@ -105,6 +111,14 @@ object AppEvents {
 
     fun setTopBarState(state: TopBarState?) {
         _topBarState.value = state
+    }
+
+    fun setTopBarAlpha(alpha: Float) {
+        _topBarAlpha.value = alpha
+    }
+
+    fun setTopBarTransparent(transparent: Boolean) {
+        _isTopBarTransparent.value = transparent
     }
 
     fun setSearchQuery(query: String) {
@@ -151,6 +165,8 @@ object AppEvents {
         _isInPipMode.value = inPip
         if (!inPip) {
             _shouldEnterPip.value = false
+        } else {
+            _shouldEnterPip.value = false
         }
     }
 
@@ -164,6 +180,10 @@ object AppEvents {
 
     fun triggerEnterPip() {
         _shouldEnterPip.value = true
+    }
+
+    fun consumeEnterPipTrigger() {
+        _shouldEnterPip.value = false
     }
 
     suspend fun emitNetworkError() {

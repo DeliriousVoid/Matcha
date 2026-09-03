@@ -13,7 +13,129 @@ import kotlinx.coroutines.withContext
 
 class ListenBrainzRepository {
     private val client = OkHttpClient()
-    private val apiUrl = "https://api.listenbrainz.org/1/submit-listens"
+    private val baseUrl = "https://api.listenbrainz.org/1"
+    private val resolvedTracksCache = mutableMapOf<String, List<AudioTrack>>()
+
+    fun getCachedTracks(mbid: String): List<AudioTrack>? {
+        return resolvedTracksCache[mbid]
+    }
+
+    fun cacheTracks(mbid: String, tracks: List<AudioTrack>) {
+        resolvedTracksCache[mbid] = tracks
+    }
+
+    fun clearCache(mbid: String) {
+        resolvedTracksCache.remove(mbid)
+    }
+
+    suspend fun validateToken(token: String): Result<String> = withContext(Dispatchers.IO) {
+        val trimmedToken = token.trim()
+        if (trimmedToken.isBlank()) return@withContext Result.failure(Exception("Token is empty"))
+
+        try {
+            val request = Request.Builder()
+                .url("$baseUrl/validate-token")
+                .addHeader("Authorization", "Token $trimmedToken")
+                .build()
+
+            client.newCall(request).execute().use { response ->
+                val body = response.body?.string() ?: ""
+                val json = JSONObject(body)
+                if (json.optBoolean("valid")) {
+                    Result.success(json.getString("user_name"))
+                } else {
+                    Result.failure(Exception(json.optString("message", "Invalid token")))
+                }
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun getRecommendations(username: String, token: String?): Result<List<com.deliriousvoid.openvkmatcha.data.model.Playlist>> = withContext(Dispatchers.IO) {
+        try {
+            val requestBuilder = Request.Builder()
+                .url("$baseUrl/user/$username/playlists/createdfor")
+            
+            token?.trim()?.takeIf { it.isNotBlank() }?.let {
+                requestBuilder.addHeader("Authorization", "Token $it")
+            }
+
+            client.newCall(requestBuilder.build()).execute().use { response ->
+                val body = response.body?.string() ?: ""
+                if (!response.isSuccessful) return@withContext Result.failure(Exception("HTTP ${response.code}"))
+                
+                val json = JSONObject(body)
+                val playlists = json.getJSONArray("playlists")
+                val result = mutableListOf<com.deliriousvoid.openvkmatcha.data.model.Playlist>()
+                
+                for (i in 0 until playlists.length()) {
+                    val item = playlists.getJSONObject(i)
+                    val playlistObj = item.getJSONObject("playlist")
+                    val identifier = playlistObj.optString("identifier", "")
+                    val mbid = identifier.substringAfterLast("/")
+
+                    result.add(
+                        com.deliriousvoid.openvkmatcha.data.model.Playlist(
+                            id = 0,
+                            ownerId = 0,
+                            title = playlistObj.getString("title"),
+                            description = playlistObj.optString("description", ""),
+                            trackCount = 0, // Will be fetched later
+                            photoUrl = com.deliriousvoid.openvkmatcha.Constants.RECOMMENDATION_COVER_URL,
+                            mbid = mbid,
+                        )
+                    )
+                }
+                Result.success(result)
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun getPlaylistTracks(mbid: String, token: String?): Result<List<AudioTrack>> = withContext(Dispatchers.IO) {
+        try {
+            val requestBuilder = Request.Builder()
+                .url("$baseUrl/playlist/$mbid")
+            
+            token?.trim()?.takeIf { it.isNotBlank() }?.let {
+                requestBuilder.addHeader("Authorization", "Token $it")
+            }
+
+            client.newCall(requestBuilder.build()).execute().use { response ->
+                val body = response.body?.string() ?: ""
+                if (!response.isSuccessful) return@withContext Result.failure(Exception("HTTP ${response.code}"))
+                
+                val json = JSONObject(body)
+                val playlist = json.getJSONObject("playlist")
+                val tracks = playlist.getJSONArray("track")
+                val result = mutableListOf<AudioTrack>()
+                
+                for (i in 0 until tracks.length()) {
+                    val item = tracks.getJSONObject(i)
+                    val creator = item.optString("creator", "Unknown Artist")
+                    val title = item.optString("title", "Unknown Track")
+                    val duration = item.optInt("duration", 0) / 1000
+                    
+                    result.add(
+                        AudioTrack(
+                            id = i + 1, // Artificial ID
+                            ownerId = -1, // Mark as ListenBrainz
+                            artist = creator,
+                            title = title,
+                            duration = duration,
+                            url = null,
+                            isReady = true
+                        )
+                    )
+                }
+                Result.success(result)
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
 
     suspend fun submitListen(
         token: String, 
@@ -49,11 +171,12 @@ class ListenBrainzRepository {
 
             val authHeader = "Token $trimmedToken"
             
-            Log.d("ListenBrainz", "SUBMIT ($type) to $apiUrl")
+            val submitUrl = "$baseUrl/submit-listens"
+            Log.d("ListenBrainz", "SUBMIT ($type) to $submitUrl")
             Log.d("ListenBrainz", "Auth: ${authHeader.take(15)}...")
 
             val request = Request.Builder()
-                .url(apiUrl)
+                .url(submitUrl)
                 .post(requestBody.toRequestBody("application/json; charset=utf-8".toMediaType()))
                 .addHeader("Authorization", authHeader)
                 .build()

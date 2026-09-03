@@ -316,7 +316,8 @@ data class AudioTrack(
     val artworkUrl: String? = null,
     val isAdded: Boolean = false,
     val accessKey: String? = null,
-    val isReady: Boolean = true
+    val isReady: Boolean = true,
+    val originalRecommendation: AudioTrack? = null
 ) {
     val stableId: String get() = "${ownerId}_$id"
 }
@@ -328,6 +329,7 @@ data class Playlist(
     val description: String,
     val trackCount: Int,
     val photoUrl: String?,
+    val mbid: String? = null,
 )
 
 sealed class PlaylistSource {
@@ -335,6 +337,7 @@ sealed class PlaylistSource {
     data class PlaylistAudio(val ownerId: Int, val playlistId: Int) : PlaylistSource()
     data class SearchAudio(val query: String) : PlaylistSource()
     data class LocalAudio(val tracks: List<AudioTrack>) : PlaylistSource()
+    data class ListenBrainz(val mbid: String) : PlaylistSource()
     data object Unknown : PlaylistSource()
 
     fun toJsonString(): String {
@@ -343,6 +346,7 @@ sealed class PlaylistSource {
             is PlaylistAudio -> "playlist_audio:$ownerId:$playlistId"
             is SearchAudio -> "search_audio:$query"
             is LocalAudio -> "local_audio"
+            is ListenBrainz -> "listenbrainz:$mbid"
             is Unknown -> "unknown"
         }
     }
@@ -356,6 +360,7 @@ sealed class PlaylistSource {
                 "playlist_audio" -> PlaylistAudio(parts.getOrNull(1)?.toIntOrNull() ?: 0, parts.getOrNull(2)?.toIntOrNull() ?: 0)
                 "search_audio" -> SearchAudio(parts.drop(1).joinToString(":"))
                 "local_audio" -> LocalAudio(emptyList()) // Tracks should be restored separately
+                "listenbrainz" -> ListenBrainz(parts.getOrNull(1) ?: "")
                 else -> Unknown
             }
         }

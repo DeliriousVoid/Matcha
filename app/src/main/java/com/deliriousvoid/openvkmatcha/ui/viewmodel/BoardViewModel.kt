@@ -18,7 +18,10 @@ import com.deliriousvoid.openvkmatcha.OpenVKMatchaApp
 import com.deliriousvoid.openvkmatcha.R
 import com.deliriousvoid.openvkmatcha.util.AppEvents
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Job
@@ -60,6 +63,9 @@ class BoardViewModel(
         isDeveloperMode = OpenVKMatchaApp.instance.getSharedPreferences("settings", Context.MODE_PRIVATE).getBoolean("experimental_features", false)
     ))
     val uiState: StateFlow<BoardUiState> = _uiState
+    
+    private val _scrollToBottom = MutableSharedFlow<Unit>()
+    val scrollToBottom = _scrollToBottom.asSharedFlow()
     
     private val likeJobs = ConcurrentHashMap<Int, Job>()
 
@@ -451,6 +457,7 @@ class BoardViewModel(
                     android.util.Log.d("Board", "Post success")
                     _uiState.update { it.copy(inputText = "", pendingAttachments = emptyList(), isSending = false, replyingTo = null) }
                     loadComments(refresh = true)
+                    viewModelScope.launch { _scrollToBottom.emit(Unit) }
                 }
                 .onFailure { error ->
                     android.util.Log.e("Board", "Post failure: ${error.message}")
@@ -462,7 +469,12 @@ class BoardViewModel(
     fun votePoll(comment: TopicComment, answerIds: List<Int>) {
         val poll = comment.poll ?: return
         viewModelScope.launch {
-            feedRepository.addPollVote(poll.ownerId, poll.id, answerIds).onSuccess {
+            val result = if (answerIds.isEmpty()) {
+                feedRepository.deletePollVote(poll.ownerId, poll.id)
+            } else {
+                feedRepository.addPollVote(poll.ownerId, poll.id, answerIds)
+            }
+            result.onSuccess {
                 loadComments(refresh = true)
             }
         }

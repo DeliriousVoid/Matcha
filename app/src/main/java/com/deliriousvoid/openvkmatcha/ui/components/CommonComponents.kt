@@ -56,6 +56,7 @@ import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.SentimentVeryDissatisfied
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.WifiOff
 import androidx.compose.material.icons.automirrored.filled.InsertDriveFile
 import androidx.compose.material3.AlertDialog
@@ -1142,7 +1143,29 @@ fun AudioTrackItem(
     onRemoveFromPlaylist: (() -> Unit)? = null
 ) {
     var showMenu by remember { mutableStateOf(false) }
+    var showWarningDialog by remember { mutableStateOf(false) }
     val effectiveIsDownloaded = isDownloaded || track.url?.startsWith("/") == true || track.url?.startsWith("content://") == true
+
+    if (showWarningDialog && track.originalRecommendation != null) {
+        val original = track.originalRecommendation
+        AlertDialog(
+            onDismissRequest = { showWarningDialog = false },
+            title = { Text(matchaStringResource(R.string.recommendation_warning_title)) },
+            text = { 
+                Text(matchaStringResource(
+                    R.string.recommendation_warning_desc, 
+                    original.artist, 
+                    original.title, 
+                    formatDuration(original.duration)
+                )) 
+            },
+            confirmButton = {
+                TextButton(onClick = { showWarningDialog = false }) {
+                    Text(matchaStringResource(R.string.action_ok))
+                }
+            }
+        )
+    }
 
     Row(
         modifier = modifier
@@ -1219,6 +1242,16 @@ fun AudioTrackItem(
                     imageVector = if (track.isAdded) Icons.Default.Check else Icons.Default.Add,
                     contentDescription = if (track.isAdded) matchaStringResource(R.string.action_remove) else matchaStringResource(R.string.action_add),
                     tint = if (track.isAdded) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+
+        if (track.originalRecommendation != null) {
+            IconButton(onClick = { showWarningDialog = true }) {
+                Icon(
+                    imageVector = Icons.Default.Warning,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.error
                 )
             }
         }

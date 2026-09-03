@@ -21,6 +21,7 @@ import com.deliriousvoid.openvkmatcha.playback.PreloadManager
 import com.deliriousvoid.openvkmatcha.util.LongPollManager
 import com.deliriousvoid.openvkmatcha.util.OnlineManager
 import androidx.lifecycle.ProcessLifecycleOwner
+import android.content.Context
 import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 import java.util.concurrent.TimeUnit
@@ -170,7 +171,11 @@ class OpenVKMatchaApp : Application(), ImageLoaderFactory {
 
         initScope.launch {
             if (tokenManager.hasToken()) {
-                com.deliriousvoid.openvkmatcha.services.LongPollService.start(this@OpenVKMatchaApp)
+                val prefs = getSharedPreferences("settings", Context.MODE_PRIVATE)
+                val bgNotif = prefs.getBoolean("background_notifications", false)
+                if (bgNotif) {
+                    com.deliriousvoid.openvkmatcha.services.LongPollService.start(this@OpenVKMatchaApp)
+                }
                 onlineManager.start()
             }
         }

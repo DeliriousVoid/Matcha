@@ -133,8 +133,8 @@ fun CommentsScreen(
         }
     }
 
-    LaunchedEffect(state.comments) {
-        if (state.comments.isNotEmpty()) {
+    LaunchedEffect(Unit) {
+        viewModel.scrollToBottom.collect {
             listState.animateScrollToItem(state.comments.size)
         }
     }
@@ -182,6 +182,7 @@ fun CommentsScreen(
                                 onEditClick = { editingPost = it },
                                 onDeleteClick = { postToDelete = it },
                                 onReportClick = { reportingPost = it },
+                                onPollVote = { p, answers -> viewModel.votePoll(p, answers) },
                                 onGeoClick = { com.deliriousvoid.openvkmatcha.ui.util.LinkHandler.handleGeo(context, it) },
                                 doubleTapEnabled = doubleTapToLike,
                                 doubleTapTimeout = doubleTapTimeout

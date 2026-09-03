@@ -30,9 +30,11 @@ object Routes {
     const val SETTINGS_ACCENT_EDITOR = "settings/appearance/accent_editor?id={id}"
     const val CHAT = "chat/{peerId}?title={title}"
     const val PLAYLIST_DETAILS = "playlist/{ownerId}/{playlistId}?title={title}"
+    const val LISTENBRAINZ_PLAYLIST = "listenbrainz_playlist/{mbid}?title={title}&thumbUrl={thumbUrl}"
     const val PROFILE = "profile/{id}"
     const val EXPLORE = "explore"
     const val SEARCH = "search"
+    const val MUSIC_SEARCH = "music_search"
     const val TWO_FACTOR = "two_factor/{username}/{password}/{instance}"
     const val TRANSFER = "transfer"
     const val VIDEOS = "videos/{userId}"
@@ -94,6 +96,12 @@ object Routes {
     fun playlistRoute(ownerId: Int, playlistId: Int, title: String): String {
         val encodedTitle = Uri.encode(title)
         return "playlist/$ownerId/$playlistId?title=$encodedTitle"
+    }
+
+    fun listenBrainzPlaylistRoute(mbid: String, title: String, thumbUrl: String? = null): String {
+        val encodedTitle = Uri.encode(title)
+        val encodedThumb = thumbUrl?.let { Uri.encode(it) } ?: ""
+        return "listenbrainz_playlist/$mbid?title=$encodedTitle&thumbUrl=$encodedThumb"
     }
 
     fun profileRoute(id: Any): String {

@@ -3,6 +3,7 @@ package com.deliriousvoid.openvkmatcha.services
 import android.app.*
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import android.util.Log
@@ -26,7 +27,15 @@ class LongPollService : Service() {
         Log.d(TAG, "Service started")
         
         try {
-            startForeground(NOTIFICATION_ID, createForegroundNotification())
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                startForeground(
+                    NOTIFICATION_ID, 
+                    createForegroundNotification(),
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+                )
+            } else {
+                startForeground(NOTIFICATION_ID, createForegroundNotification())
+            }
             
             val app = application as OpenVKMatchaApp
             if (!app.longPollManager.isRunning()) {
@@ -39,6 +48,12 @@ class LongPollService : Service() {
         }
         
         return START_STICKY
+    }
+
+    override fun onTimeout(startId: Int, fgsType: Int) {
+        super.onTimeout(startId, fgsType)
+        Log.w(TAG, "Foreground service timeout reached for type $fgsType. Stopping service.")
+        stopSelf()
     }
 
     override fun onDestroy() {
@@ -63,7 +78,7 @@ class LongPollService : Service() {
             .setSmallIcon(R.mipmap.matcha) // Use Matcha icon
             .setContentIntent(pendingIntent)
             .setOngoing(true)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .build()
     }
 
@@ -72,7 +87,7 @@ class LongPollService : Service() {
             val channel = NotificationChannel(
                 CHANNEL_ID,
                 "LongPoll Service",
-                NotificationManager.IMPORTANCE_LOW
+                NotificationManager.IMPORTANCE_DEFAULT
             ).apply {
                 description = "Используется для поддержания связи с сервером для получения уведомлений"
                 setShowBadge(false)

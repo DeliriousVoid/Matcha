@@ -46,6 +46,9 @@ class SettingsViewModel(private val context: Context) : ViewModel() {
     private val _autoHidePlayer = MutableStateFlow(prefs.getBoolean("auto_hide_player", false))
     val autoHidePlayer = _autoHidePlayer.asStateFlow()
 
+    private val _openPlayerOnStart = MutableStateFlow(prefs.getBoolean("open_player_on_start", false))
+    val openPlayerOnStart = _openPlayerOnStart.asStateFlow()
+
     private val _currentIcon = MutableStateFlow(
         try {
             AppIconVariant.valueOf(prefs.getString("app_icon_variant", AppIconVariant.DEFAULT.name) ?: AppIconVariant.DEFAULT.name)
@@ -66,6 +69,9 @@ class SettingsViewModel(private val context: Context) : ViewModel() {
 
     private val _offlineMode = MutableStateFlow(prefs.getBoolean("offline_mode", false))
     val offlineMode = _offlineMode.asStateFlow()
+
+    private val _backgroundNotifications = MutableStateFlow(prefs.getBoolean("background_notifications", false))
+    val backgroundNotifications = _backgroundNotifications.asStateFlow()
 
     private val _listenBrainzEnabled = MutableStateFlow(prefs.getBoolean("lb_enabled", false))
     val listenBrainzEnabled = _listenBrainzEnabled.asStateFlow()
@@ -361,6 +367,11 @@ class SettingsViewModel(private val context: Context) : ViewModel() {
         prefs.edit().putBoolean("auto_hide_player", enabled).apply()
     }
 
+    fun setOpenPlayerOnStart(enabled: Boolean) {
+        _openPlayerOnStart.value = enabled
+        prefs.edit().putBoolean("open_player_on_start", enabled).apply()
+    }
+
     fun setPauseVideoOnScroll(enabled: Boolean) {
         _pauseVideoOnScroll.value = enabled
         prefs.edit().putBoolean("pause_video_on_scroll", enabled).apply()
@@ -379,6 +390,16 @@ class SettingsViewModel(private val context: Context) : ViewModel() {
     fun setOfflineMode(enabled: Boolean) {
         _offlineMode.value = enabled
         prefs.edit().putBoolean("offline_mode", enabled).apply()
+    }
+
+    fun setBackgroundNotifications(enabled: Boolean) {
+        _backgroundNotifications.value = enabled
+        prefs.edit().putBoolean("background_notifications", enabled).apply()
+        if (enabled) {
+            com.deliriousvoid.openvkmatcha.services.LongPollService.start(context)
+        } else {
+            com.deliriousvoid.openvkmatcha.services.LongPollService.stop(context)
+        }
     }
 
     fun setListenBrainzEnabled(enabled: Boolean) {

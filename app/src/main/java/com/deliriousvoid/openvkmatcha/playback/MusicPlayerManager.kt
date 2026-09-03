@@ -279,7 +279,11 @@ class MusicPlayerManager(
         _playbackState.value = controller.playbackState
         
         if (controller.mediaItemCount == 0) {
-            restoreLastTrack(controller)
+            val settingsPrefs = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
+            val openPlayerOnStart = settingsPrefs.getBoolean("open_player_on_start", false)
+            if (openPlayerOnStart) {
+                restoreLastTrack(controller)
+            }
         } else {
             // Re-sync currentPlaylist from controller if it was empty but service was running
             if (currentPlaylist.isEmpty()) {
@@ -641,6 +645,7 @@ class MusicPlayerManager(
                     is PlaylistSource.UserAudio -> musicRepository.loadMyAudio(source.userId, offset, pageSize)
                     is PlaylistSource.PlaylistAudio -> musicRepository.loadPlaylistTracks(source.ownerId, source.playlistId, offset, pageSize)
                     is PlaylistSource.SearchAudio -> musicRepository.searchAudio(source.query, offset, pageSize)
+                    is PlaylistSource.ListenBrainz -> Result.success(emptyList()) // Already loaded
                     else -> Result.failure(Exception("Unsupported source for background fetch"))
                 }
 

@@ -41,6 +41,7 @@ class PlayerViewModel(
     val isPlaying = playerManager.isPlaying
     val playWhenReady = playerManager.playWhenReady
     val playbackState = playerManager.playbackState
+    val playlistSource = playerManager.playlistSource
     val shuffleMode = playerManager.shuffleMode
     val repeatMode = playerManager.repeatMode
     val currentPosition = playerManager.currentPosition

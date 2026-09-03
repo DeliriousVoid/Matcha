@@ -24,6 +24,7 @@ import com.deliriousvoid.openvkmatcha.ui.screens.login.TwoFactorScreen
 import com.deliriousvoid.openvkmatcha.ui.screens.main.MainScreen
 import com.deliriousvoid.openvkmatcha.ui.screens.map.MapPickerScreen
 import com.deliriousvoid.openvkmatcha.ui.screens.messages.ChatScreen
+import com.deliriousvoid.openvkmatcha.ui.screens.music.ListenBrainzPlaylistScreen
 import com.deliriousvoid.openvkmatcha.ui.screens.music.MusicScreen
 import com.deliriousvoid.openvkmatcha.ui.screens.music.PlaylistDetailsScreen
 import com.deliriousvoid.openvkmatcha.ui.screens.music.UploadAudioScreen
@@ -38,6 +39,7 @@ import com.deliriousvoid.openvkmatcha.ui.screens.webview.WebViewScreen
 import com.deliriousvoid.openvkmatcha.ui.util.LinkHandler
 import com.deliriousvoid.openvkmatcha.ui.viewmodel.*
 import com.deliriousvoid.openvkmatcha.util.AppEvents
+import com.deliriousvoid.openvkmatcha.util.SearchCategory
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
@@ -146,6 +148,41 @@ fun AppNavigation(
             )
         }
 
+        composable(Routes.MUSIC_SEARCH) {
+            val searchViewModel: GlobalSearchViewModel = viewModel(factory = GlobalSearchViewModel.factory())
+            val downloadedTracksSet by musicViewModel.downloadedTracks.collectAsState()
+            val currentTrack by playerViewModel.currentTrack.collectAsState()
+
+            androidx.compose.runtime.LaunchedEffect(Unit) {
+                if (AppEvents.searchCategory.value != SearchCategory.MUSIC && 
+                    AppEvents.searchCategory.value != SearchCategory.PLAYLISTS) {
+                    AppEvents.setSearchCategory(SearchCategory.MUSIC)
+                }
+            }
+
+            GlobalSearchScreen(
+                onOpenProfile = { id -> navController.navigate(Routes.profileRoute(id)) },
+                onOpenPlaylist = { ownerId, playlistId, title ->
+                    navController.navigate(Routes.playlistRoute(ownerId, playlistId, title))
+                },
+                onPlayTrack = { tracks, index ->
+                    val query = searchViewModel.uiState.value.searchQuery
+                    playerViewModel.play(tracks, index, PlaylistSource.SearchAudio(query))
+                },
+                onToggleTrackAdded = { track -> playerViewModel.toggleTrackAdded(track) },
+                onDownloadTrack = { track -> musicViewModel.downloadTrack(track) },
+                onShareTrack = { track ->
+                    val url = track.remoteUrl ?: track.url ?: ""
+                    if (url.isNotEmpty()) clipboardManager.setText(AnnotatedString(url))
+                },
+                onAddToQueue = { track -> playerViewModel.playerManager.addToQueue(track) },
+                onPlayNext = { track -> playerViewModel.playerManager.playNext(track) },
+                currentTrackId = currentTrack?.id,
+                downloadedTracks = downloadedTracksSet,
+                viewModel = searchViewModel
+            )
+        }
+
         composable(Routes.MAIN) {
             MainScreen(
                 selectedTab = selectedTab,
@@ -158,6 +195,9 @@ fun AppNavigation(
                 },
                 onOpenPlaylist = { ownerId: Int, playlistId: Int, title: String ->
                     navController.navigate(Routes.playlistRoute(ownerId, playlistId, title))
+                },
+                onOpenListenBrainzPlaylist = { mbid, title, thumbUrl ->
+                    navController.navigate(Routes.listenBrainzPlaylistRoute(mbid, title, thumbUrl))
                 },
                 onOpenProfile = { target: Any ->
                     navController.navigate(Routes.profileRoute(target))
@@ -631,6 +671,24 @@ fun AppNavigation(
                 playlistId = playlistId,
                 title = title,
                 onBack = { navController.popBackStack() }
+            )
+        }
+
+        composable(
+            route = Routes.LISTENBRAINZ_PLAYLIST,
+            arguments = listOf(
+                navArgument("mbid") { type = NavType.StringType },
+                navArgument("title") { type = NavType.StringType; nullable = true; defaultValue = "" },
+                navArgument("thumbUrl") { type = NavType.StringType; nullable = true; defaultValue = "" }
+            )
+        ) { backStackEntry ->
+            val mbid = backStackEntry.arguments?.getString("mbid") ?: ""
+            val title = backStackEntry.arguments?.getString("title") ?: ""
+            val thumbUrl = backStackEntry.arguments?.getString("thumbUrl")?.takeIf { it.isNotEmpty() }
+            ListenBrainzPlaylistScreen(
+                mbid = mbid,
+                title = title,
+                thumbUrl = thumbUrl
             )
         }
 

@@ -1,6 +1,9 @@
 package com.deliriousvoid.openvkmatcha.ui.components
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.*
 import androidx.compose.foundation.layout.*
@@ -60,6 +63,7 @@ fun ImageViewer(
     ) {
         Scaffold(
             containerColor = Color.Black.copy(alpha = (1f - (abs(offsetY.value) / (dismissThreshold * 2f))).coerceIn(0f, 1f)),
+            contentWindowInsets = WindowInsets(0, 0, 0, 0),
             modifier = Modifier
                 .fillMaxSize()
                 .pointerInput(isAnyPageZoomed) {
@@ -87,9 +91,44 @@ fun ImageViewer(
                             }
                         )
                     }
-                },
-            topBar = {
-                if (showUI && abs(offsetY.value) < 10f) {
+                }
+        ) { paddingValues ->
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues)
+            ) {
+                HorizontalPager(
+                    state = pagerState,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer {
+                            translationY = offsetY.value
+                            alpha = (1f - (abs(offsetY.value) / (dismissThreshold * 3f))).coerceIn(0f, 1f)
+                        },
+                    userScrollEnabled = !isAnyPageZoomed,
+                    pageSpacing = 16.dp,
+                    beyondViewportPageCount = 1
+                ) { pageIndex ->
+                    ZoomableImage(
+                        url = imageUrls[pageIndex],
+                        onZoomChange = { zoomed -> 
+                            // Only update global zoom state if it's the current page
+                            if (pageIndex == pagerState.currentPage) {
+                                isAnyPageZoomed = zoomed
+                            }
+                        },
+                        onTap = { showUI = !showUI }
+                    )
+                }
+
+                // Top Bar Overlay
+                AnimatedVisibility(
+                    visible = showUI && abs(offsetY.value) < 10f,
+                    enter = fadeIn(),
+                    exit = fadeOut(),
+                    modifier = Modifier.align(Alignment.TopCenter)
+                ) {
                     TopAppBar(
                         title = {
                             if (imageUrls.size > 1) {
@@ -134,110 +173,93 @@ fun ImageViewer(
                             containerColor = Color.Black.copy(alpha = 0.5f),
                             navigationIconContentColor = Color.White,
                             actionIconContentColor = Color.White
-                        )
+                        ),
+                        windowInsets = WindowInsets.statusBars
                     )
                 }
-            },
-            bottomBar = {
-                if (showUI && post != null && abs(offsetY.value) < 10f && !isAnyPageZoomed) {
-                    Surface(
-                        color = Color.Black.copy(alpha = 0.5f),
-                        contentColor = Color.White
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 8.dp)
-                                .navigationBarsPadding(),
-                            horizontalArrangement = Arrangement.SpaceAround,
-                            verticalAlignment = Alignment.CenterVertically
+
+                // Bottom Bar Overlay
+                AnimatedVisibility(
+                    visible = showUI && post != null && abs(offsetY.value) < 10f,
+                    enter = fadeIn(),
+                    exit = fadeOut(),
+                    modifier = Modifier.align(Alignment.BottomCenter)
+                ) {
+                    post?.let { currentPost ->
+                        Surface(
+                            color = Color.Black.copy(alpha = 0.5f),
+                            contentColor = Color.White
                         ) {
-                            // Like
                             Row(
-                                modifier = Modifier.clickable(onClick = onLikeClick),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                                    .navigationBarsPadding(),
+                                horizontalArrangement = Arrangement.SpaceAround,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Icon(
-                                    imageVector = if (post.isLiked) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                                    contentDescription = null,
-                                    tint = if (post.isLiked) MaterialTheme.colorScheme.error else Color.White,
-                                    modifier = Modifier.size(24.dp)
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = post.likeCount.toString(),
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    color = Color.White
-                                )
-                            }
-                            
-                            // Comment
-                            Row(
-                                modifier = Modifier.clickable(onClick = { onCommentClick(post.ownerId, post.id) }),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Outlined.ChatBubbleOutline,
-                                    contentDescription = null,
-                                    tint = Color.White,
-                                    modifier = Modifier.size(24.dp)
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = post.commentCount.toString(),
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    color = Color.White
-                                )
-                            }
-                            
-                            // Repost
-                            Row(
-                                modifier = Modifier.clickable(onClick = onRepostClick),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Filled.Campaign,
-                                    contentDescription = null,
-                                    tint = Color.White,
-                                    modifier = Modifier
-                                        .size(24.dp)
-                                        .rotate(-15f)
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = post.repostCount.toString(),
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    color = Color.White
-                                )
+                                // Like
+                                Row(
+                                    modifier = Modifier.clickable(onClick = onLikeClick),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = if (currentPost.isLiked) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                                        contentDescription = null,
+                                        tint = if (currentPost.isLiked) MaterialTheme.colorScheme.error else Color.White,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = currentPost.likeCount.toString(),
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        color = Color.White
+                                    )
+                                }
+                                
+                                // Comment
+                                Row(
+                                    modifier = Modifier.clickable(onClick = { onCommentClick(currentPost.ownerId, currentPost.id) }),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Outlined.ChatBubbleOutline,
+                                        contentDescription = null,
+                                        tint = Color.White,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = currentPost.commentCount.toString(),
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        color = Color.White
+                                    )
+                                }
+                                
+                                // Repost
+                                Row(
+                                    modifier = Modifier.clickable(onClick = onRepostClick),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Campaign,
+                                        contentDescription = null,
+                                        tint = Color.White,
+                                        modifier = Modifier
+                                            .size(24.dp)
+                                            .rotate(-15f)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = currentPost.repostCount.toString(),
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        color = Color.White
+                                    )
+                                }
                             }
                         }
                     }
                 }
-            }
-        ) { padding ->
-            HorizontalPager(
-                state = pagerState,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding)
-                    .graphicsLayer {
-                        translationY = offsetY.value
-                        alpha = (1f - (abs(offsetY.value) / (dismissThreshold * 3f))).coerceIn(0f, 1f)
-                    },
-                userScrollEnabled = !isAnyPageZoomed,
-                pageSpacing = 16.dp,
-                beyondViewportPageCount = 1
-            ) { pageIndex ->
-                ZoomableImage(
-                    url = imageUrls[pageIndex],
-                    onZoomChange = { zoomed -> 
-                        // Only update global zoom state if it's the current page
-                        if (pageIndex == pagerState.currentPage) {
-                            isAnyPageZoomed = zoomed
-                        }
-                    },
-                    onTap = { showUI = !showUI }
-                )
             }
         }
     }

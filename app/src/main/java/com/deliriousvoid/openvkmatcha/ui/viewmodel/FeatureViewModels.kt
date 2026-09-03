@@ -17,6 +17,7 @@ import com.deliriousvoid.openvkmatcha.data.model.Notification
 import com.deliriousvoid.openvkmatcha.data.model.Photo
 import com.deliriousvoid.openvkmatcha.data.model.PhotosResponse
 import com.deliriousvoid.openvkmatcha.data.model.Playlist
+import com.deliriousvoid.openvkmatcha.data.model.PlaylistSource
 import com.deliriousvoid.openvkmatcha.data.model.Post
 import com.deliriousvoid.openvkmatcha.data.model.PendingAttachment
 import com.deliriousvoid.openvkmatcha.data.model.AttachmentType
@@ -27,6 +28,7 @@ import com.deliriousvoid.openvkmatcha.data.repository.MessagesRepository
 import com.deliriousvoid.openvkmatcha.data.repository.MusicRepository
 import com.deliriousvoid.openvkmatcha.data.repository.ProfileRepository
 import com.deliriousvoid.openvkmatcha.util.AppEvents
+import com.deliriousvoid.openvkmatcha.util.SearchCategory
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -437,15 +439,16 @@ class ChatViewModel(
 }
 
 enum class MusicMode {
-    Tracks, Playlists, Downloaded
+    Main, Tracks, Playlists, Downloaded, Recommendations
 }
 
 data class MusicUiState(
     val tracks: List<AudioTrack> = emptyList(),
     val playlists: List<Playlist> = emptyList(),
     val downloadedTracks: List<AudioTrack> = emptyList(),
+    val recommendations: List<Playlist> = emptyList(),
     val userProfile: UserProfile? = null,
-    val mode: MusicMode = MusicMode.Tracks,
+    val mode: MusicMode = MusicMode.Main,
     val searchQuery: String = "",
     val isLoading: Boolean = false,
     val isRefreshing: Boolean = false,
@@ -454,6 +457,7 @@ data class MusicUiState(
     val isDownloadingAll: Boolean = false,
     val error: String? = null,
     val currentUserId: Int? = null,
+    val hasStoragePermission: Boolean = true,
 )
 
 @OptIn(kotlinx.coroutines.FlowPreview::class)
@@ -466,10 +470,16 @@ class MusicViewModel(
     private val initialUserId: Int? = null,
 ) : ViewModel() {
 
-    private val _uiState = MutableStateFlow(MusicUiState(isLoading = true))
+    private val _uiState = MutableStateFlow(MusicUiState(
+        isLoading = true,
+        mode = if (initialUserId != null) MusicMode.Tracks else MusicMode.Main
+    ))
     val uiState: StateFlow<MusicUiState> = _uiState.asStateFlow()
     val downloadedTracks = downloadRepository.downloadedTracksFlow
+    val listenBrainzEnabled = settingsViewModel.listenBrainzEnabled
     private var userId: Int? = initialUserId
+    private var lbUsername: String? = null
+    private var lastModeBeforeSearch: MusicMode? = null
     private var loadJob: Job? = null
 
     init {
@@ -479,9 +489,11 @@ class MusicViewModel(
                 .collect { mode ->
                     val state = _uiState.value
                     val needsLoad = when (mode) {
+                        MusicMode.Main -> state.tracks.isEmpty()
                         MusicMode.Tracks -> state.tracks.isEmpty()
                         MusicMode.Playlists -> state.playlists.isEmpty()
                         MusicMode.Downloaded -> state.downloadedTracks.isEmpty()
+                        MusicMode.Recommendations -> state.recommendations.isEmpty()
                     }
                     if (needsLoad) {
                         loadMusic(isRefresh = true, isManual = false)
@@ -495,8 +507,37 @@ class MusicViewModel(
         }
         viewModelScope.launch {
             AppEvents.searchQuery.collect { query ->
-                _uiState.update { it.copy(searchQuery = query) }
+                _uiState.update { state ->
+                    var newMode = state.mode
+                    if (query.isNotBlank()) {
+                        if (state.mode == MusicMode.Main || state.mode == MusicMode.Tracks || state.mode == MusicMode.Playlists) {
+                            if (state.mode == MusicMode.Main && lastModeBeforeSearch == null) {
+                                lastModeBeforeSearch = MusicMode.Main
+                            }
+                            newMode = if (AppEvents.searchCategory.value == SearchCategory.PLAYLISTS) MusicMode.Playlists else MusicMode.Tracks
+                        }
+                    } else if (lastModeBeforeSearch != null) {
+                        newMode = lastModeBeforeSearch!!
+                        lastModeBeforeSearch = null
+                    }
+                    state.copy(searchQuery = query, mode = newMode)
+                }
                 loadMusic(isRefresh = true, isManual = false)
+            }
+        }
+        viewModelScope.launch {
+            AppEvents.searchCategory.collect { category ->
+                val query = _uiState.value.searchQuery
+                if (query.isNotBlank()) {
+                    val newMode = when (category) {
+                        SearchCategory.MUSIC -> MusicMode.Tracks
+                        SearchCategory.PLAYLISTS -> MusicMode.Playlists
+                        else -> null
+                    }
+                    if (newMode != null) {
+                        setMode(newMode)
+                    }
+                }
             }
         }
         viewModelScope.launch {
@@ -510,7 +551,16 @@ class MusicViewModel(
 
     fun setMode(mode: MusicMode) {
         if (_uiState.value.mode != mode) {
+            lastModeBeforeSearch = null
             _uiState.update { it.copy(mode = mode, searchQuery = "") }
+        }
+    }
+
+    fun updateStoragePermission() {
+        val hasPermission = downloadRepository.hasStoragePermission()
+        _uiState.update { it.copy(hasStoragePermission = hasPermission) }
+        if (hasPermission && _uiState.value.mode == MusicMode.Main) {
+            loadMusic(isRefresh = true)
         }
     }
 
@@ -527,13 +577,15 @@ class MusicViewModel(
             }
             _uiState.update {
                 it.copy(
-                    isLoading = if (isManual) false else (isRefresh || (it.tracks.isEmpty() && it.playlists.isEmpty() && it.downloadedTracks.isEmpty())),
+                    isLoading = if (isManual) false else (isRefresh || (it.tracks.isEmpty() && it.playlists.isEmpty() && it.downloadedTracks.isEmpty() && it.recommendations.isEmpty())),
                     isRefreshing = isManual,
                     canLoadMore = if (isRefresh) true else it.canLoadMore,
                     error = null,
                     tracks = if (isRefresh && !isManual) emptyList() else it.tracks,
                     playlists = if (isRefresh && !isManual) emptyList() else it.playlists,
-                    downloadedTracks = if (isRefresh && !isManual) emptyList() else it.downloadedTracks
+                    downloadedTracks = if (isRefresh && !isManual) emptyList() else it.downloadedTracks,
+                    recommendations = if (isRefresh && !isManual) emptyList() else it.recommendations,
+                    hasStoragePermission = downloadRepository.hasStoragePermission()
                 )
             }
             val mode = _uiState.value.mode
@@ -557,6 +609,47 @@ class MusicViewModel(
             }
 
             val result = when (mode) {
+                MusicMode.Main -> {
+                    val tracksResult = musicRepository.loadMyAudio(
+                        userId = id!!,
+                        offset = if (isRefresh) 0 else _uiState.value.tracks.size,
+                        count = pageSize
+                    )
+                    
+                    if (isRefresh && tracksResult.isSuccess) {
+                        viewModelScope.launch {
+                            musicRepository.loadPlaylists(ownerId = id, count = 15).onSuccess { playlists ->
+                                _uiState.update { it.copy(playlists = playlists) }
+                            }
+                        }
+
+                        if (downloadRepository.hasStoragePermission()) {
+                            viewModelScope.launch {
+                                val downloaded = downloadRepository.getDownloadedTracksFromFiles()
+                                _uiState.update { it.copy(downloadedTracks = downloaded) }
+                            }
+                        }
+                        
+                        if (listenBrainzEnabled.value) {
+                            viewModelScope.launch {
+                                val token = settingsViewModel.listenBrainzToken.value
+                                if (token.isNotBlank()) {
+                                    val usernameResult = if (lbUsername != null) Result.success(lbUsername!!) 
+                                                       else OpenVKMatchaApp.instance.listenBrainzRepository.validateToken(token)
+                                    
+                                    usernameResult.onSuccess { username ->
+                                        lbUsername = username
+                                        OpenVKMatchaApp.instance.listenBrainzRepository.getRecommendations(username, token)
+                                            .onSuccess { recs ->
+                                                _uiState.update { it.copy(recommendations = recs) }
+                                            }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    tracksResult
+                }
                 MusicMode.Tracks -> {
                     val query = _uiState.value.searchQuery
                     if (query.isNotBlank()) {
@@ -592,13 +685,35 @@ class MusicViewModel(
                 MusicMode.Downloaded -> {
                     Result.success(downloadRepository.getDownloadedTracksFromFiles())
                 }
+                MusicMode.Recommendations -> {
+                    val token = settingsViewModel.listenBrainzToken.value
+                    if (token.isBlank()) {
+                        Result.failure(Exception("ListenBrainz token is empty"))
+                    } else {
+                        val validationResult = if (lbUsername != null) {
+                            Result.success(lbUsername!!)
+                        } else {
+                            OpenVKMatchaApp.instance.listenBrainzRepository.validateToken(token)
+                        }
+                        
+                        validationResult.fold(
+                            onSuccess = { username ->
+                                lbUsername = username
+                                OpenVKMatchaApp.instance.listenBrainzRepository.getRecommendations(username, token)
+                            },
+                            onFailure = { error ->
+                                Result.failure(error)
+                            }
+                        )
+                    }
+                }
             }
 
             result
                 .onSuccess { data ->
                     _uiState.update { state ->
                         when (state.mode) {
-                            MusicMode.Tracks -> {
+                            MusicMode.Main, MusicMode.Tracks -> {
                                 val downloadRepository = OpenVKMatchaApp.instance.downloadRepository
                                 val tracks = (data as List<AudioTrack>).map { downloadRepository.enrichTrack(it) }
                                 val isSearch = state.searchQuery.isNotBlank()
@@ -636,6 +751,15 @@ class MusicViewModel(
                             MusicMode.Downloaded -> {
                                 state.copy(downloadedTracks = data as List<AudioTrack>, isLoading = false, isRefreshing = false, canLoadMore = false)
                             }
+                            MusicMode.Recommendations -> {
+                                val playlists = data as List<Playlist>
+                                state.copy(
+                                    recommendations = if (isRefresh) playlists else (state.recommendations + playlists).distinctBy { it.mbid },
+                                    isLoading = false,
+                                    isRefreshing = false,
+                                    canLoadMore = false
+                                )
+                            }
                         }
                     }
                     if (data is List<*> && data.isNotEmpty() && data[0] is AudioTrack) {
@@ -667,7 +791,7 @@ class MusicViewModel(
             }
 
             val result = when (state.mode) {
-                MusicMode.Tracks -> {
+                MusicMode.Main, MusicMode.Tracks -> {
                     if (state.searchQuery.isNotBlank()) {
                         musicRepository.searchAudio(
                             query = state.searchQuery,
@@ -692,12 +816,15 @@ class MusicViewModel(
                 MusicMode.Downloaded -> {
                     Result.success(emptyList<AudioTrack>())
                 }
+                MusicMode.Recommendations -> {
+                    Result.success(emptyList<Playlist>())
+                }
             }
 
             result.onSuccess { data ->
                 _uiState.update { s ->
                     when (s.mode) {
-                        MusicMode.Tracks -> {
+                        MusicMode.Main, MusicMode.Tracks -> {
                             val tracks = data as List<AudioTrack>
                             val isSearch = s.searchQuery.isNotBlank()
                             val effectivePageSize = if (isSearch) pageSize.coerceAtMost(200) else pageSize
@@ -721,6 +848,9 @@ class MusicViewModel(
                             )
                         }
                         MusicMode.Downloaded -> {
+                            s.copy(isLoadingMore = false, canLoadMore = false)
+                        }
+                        MusicMode.Recommendations -> {
                             s.copy(isLoadingMore = false, canLoadMore = false)
                         }
                     }
@@ -1201,6 +1331,7 @@ data class PlaylistDetailsUiState(
     val isLoadingMore: Boolean = false,
     val canLoadMore: Boolean = true,
     val isDownloadingAll: Boolean = false,
+    val isResolving: Boolean = false,
     val error: String? = null,
     val playlistDeleted: Boolean = false,
 )
@@ -1676,6 +1807,9 @@ class CreatePostViewModel(
     ))
     val uiState = _uiState.asStateFlow()
     
+    private val _scrollToBottom = MutableSharedFlow<Unit>()
+    val scrollToBottom = _scrollToBottom.asSharedFlow()
+    
     private val likeJobs = ConcurrentHashMap<String, Job>()
 
     init {
@@ -1970,6 +2104,9 @@ class CommentsViewModel(
         isDeveloperMode = OpenVKMatchaApp.instance.getSharedPreferences("settings", Context.MODE_PRIVATE).getBoolean("experimental_features", false)
     ))
     val uiState = _uiState.asStateFlow()
+    
+    private val _scrollToBottom = MutableSharedFlow<Unit>()
+    val scrollToBottom = _scrollToBottom.asSharedFlow()
     
     private val likeJobs = ConcurrentHashMap<String, Job>()
 
@@ -2289,6 +2426,7 @@ class CommentsViewModel(
             result.onSuccess {
                 _uiState.update { it.copy(inputText = "", pendingAttachments = emptyList(), isSending = false, editingComment = null, replyingTo = null) }
                 loadComments(refresh = true)
+                viewModelScope.launch { _scrollToBottom.emit(Unit) }
             }.onFailure { err ->
                 _uiState.update { it.copy(isSending = false, error = err.message) }
             }
@@ -2316,8 +2454,27 @@ class CommentsViewModel(
     fun votePoll(comment: Comment, answerIds: List<Int>) {
         val poll = comment.poll ?: return
         viewModelScope.launch {
-            feedRepository.addPollVote(poll.ownerId, poll.id, answerIds).onSuccess {
+            val result = if (answerIds.isEmpty()) {
+                feedRepository.deletePollVote(poll.ownerId, poll.id)
+            } else {
+                feedRepository.addPollVote(poll.ownerId, poll.id, answerIds)
+            }
+            result.onSuccess {
                 loadComments(refresh = true)
+            }
+        }
+    }
+
+    fun votePoll(post: Post, answerIds: List<Int>) {
+        val poll = post.poll ?: return
+        viewModelScope.launch {
+            val result = if (answerIds.isEmpty()) {
+                feedRepository.deletePollVote(poll.ownerId, poll.id)
+            } else {
+                feedRepository.addPollVote(poll.ownerId, poll.id, answerIds)
+            }
+            result.onSuccess {
+                refresh()
             }
         }
     }
@@ -2424,7 +2581,10 @@ class MusicPickerViewModel(
     private val profileRepository: ProfileRepository,
     private val settingsViewModel: SettingsViewModel,
 ) : ViewModel() {
-    private val _uiState = MutableStateFlow(MusicUiState(isLoading = true))
+    private val _uiState = MutableStateFlow(MusicUiState(
+        isLoading = true,
+        mode = MusicMode.Tracks
+    ))
     val uiState = _uiState.asStateFlow()
     private var userId: Int? = null
 
@@ -3487,6 +3647,335 @@ class PhotoAlbumsViewModel(
             override fun <T : ViewModel> create(modelClass: Class<T>): T {
                 val app = OpenVKMatchaApp.instance
                 return PhotoAlbumsViewModel(app.profileRepository, SettingsViewModel(app), userId) as T
+            }
+        }
+    }
+}
+
+class ListenBrainzPlaylistViewModel(
+    private val musicRepository: MusicRepository,
+    private val artworkRepository: ArtworkRepository,
+    private val settingsViewModel: SettingsViewModel,
+    private val mbid: String,
+) : ViewModel() {
+
+    private val _uiState = MutableStateFlow(PlaylistDetailsUiState(isLoading = true))
+    val uiState: StateFlow<PlaylistDetailsUiState> = _uiState.asStateFlow()
+
+    private var resolutionJob: Job? = null
+
+    init {
+        loadTracks()
+    }
+
+    fun loadTracks() {
+        val cached = OpenVKMatchaApp.instance.listenBrainzRepository.getCachedTracks(mbid)
+        if (cached != null && cached.isNotEmpty()) {
+            _uiState.update { 
+                it.copy(
+                    tracks = cached, 
+                    isLoading = false, 
+                    isResolving = false, 
+                    canLoadMore = false,
+                    error = null
+                ) 
+            }
+            loadArtworks(cached)
+            return
+        }
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true, error = null) }
+            val token = settingsViewModel.listenBrainzToken.value
+            OpenVKMatchaApp.instance.listenBrainzRepository.getPlaylistTracks(mbid, token)
+                .onSuccess { tracks ->
+                    _uiState.update { it.copy(tracks = tracks, isLoading = false, canLoadMore = false) }
+                    loadArtworks(tracks)
+                    resolveTracksInBackground(tracks)
+                }
+                .onFailure { error ->
+                    _uiState.update { it.copy(isLoading = false, error = error.message) }
+                }
+        }
+    }
+
+    fun refreshMatches() {
+        resolutionJob?.cancel()
+        OpenVKMatchaApp.instance.listenBrainzRepository.clearCache(mbid)
+        viewModelScope.launch {
+            _uiState.update { it.copy(isResolving = true, error = null) }
+            val token = settingsViewModel.listenBrainzToken.value
+            OpenVKMatchaApp.instance.listenBrainzRepository.getPlaylistTracks(mbid, token)
+                .onSuccess { tracks ->
+                    _uiState.update { it.copy(tracks = tracks, isLoading = false, canLoadMore = false) }
+                    loadArtworks(tracks)
+                    resolveTracksInBackground(tracks)
+                }
+                .onFailure { error ->
+                    _uiState.update { it.copy(isLoading = false, isResolving = false, error = error.message) }
+                }
+        }
+    }
+
+    private fun resolveTracksInBackground(tracks: List<AudioTrack>) {
+        resolutionJob?.cancel()
+        resolutionJob = viewModelScope.launch {
+            _uiState.update { it.copy(isResolving = true) }
+            tracks.forEachIndexed { index, track ->
+                if (track.url == null) {
+                    val strategies = listOf(
+                        track.title.replace(Regex("[^\\p{L}\\p{N}\\s$'-]"), "").replace(Regex("\\s+"), " ").trim(),
+                        track.title.replace(Regex("[^\\p{L}\\p{N}\\s]"), " ").replace(Regex("\\s+"), " ").trim(),
+                        track.artist.replace(Regex("[^\\p{L}\\p{N}\\s]"), " ").replace(Regex("\\s+"), " ").trim()
+                    ).distinct().filter { it.length >= 2 }
+
+                    var resolved: AudioTrack? = null
+                    for (q in strategies) {
+                        musicRepository.searchAudio(q, count = 50)
+                            .onSuccess { searchResults ->
+                                resolved = findBestMatch(track, searchResults)
+                            }
+                        if (resolved != null) break
+                        delay(50)
+                    }
+
+                    _uiState.update { state ->
+                        val updatedTracks = state.tracks.toMutableList()
+                        if (index in updatedTracks.indices && 
+                            updatedTracks[index].artist == track.artist && 
+                            updatedTracks[index].title == track.title) {
+                            
+                            if (resolved != null) {
+                                val enriched = OpenVKMatchaApp.instance.downloadRepository.enrichTrack(resolved)
+                                val finalTrack = if (isSignificantlyDifferent(track, enriched)) {
+                                    enriched.copy(originalRecommendation = track)
+                                } else enriched
+                                updatedTracks[index] = finalTrack
+                                loadArtworks(listOf(finalTrack))
+                            } else {
+                                updatedTracks[index] = updatedTracks[index].copy(accessKey = "not_found")
+                            }
+                        }
+                        state.copy(tracks = updatedTracks)
+                    }
+                    
+                    if (resolved != null) delay(100) else delay(50)
+                }
+            }
+            
+            val finalTracks = _uiState.value.tracks
+            OpenVKMatchaApp.instance.listenBrainzRepository.cacheTracks(mbid, finalTracks)
+            _uiState.update { it.copy(isResolving = false) }
+        }
+    }
+
+    private fun normalizeForComparison(str: String): String {
+        return str.lowercase()
+            .replace(Regex("[^\\p{L}\\p{N}]"), "")
+            .trim()
+    }
+
+    private fun findBestMatch(original: AudioTrack, candidates: List<AudioTrack>): AudioTrack? {
+        if (candidates.isEmpty()) return null
+        
+        val normOrigArtist = normalizeForComparison(original.artist)
+        val normOrigTitle = normalizeForComparison(original.title)
+        
+        val versionWords = listOf("live", "remix", "edit", "acoustic", "cover", "demo", "instrumental", "version", "mix", "extended")
+        val artistStopWords = listOf("feat", "ft", "with", "pres", "presents", "prod", "by")
+        
+        val origText = "${original.artist} ${original.title}".lowercase()
+        val origVersionWords = versionWords.filter { origText.contains(it) }
+        
+        val origArtistWords = original.artist.lowercase()
+            .split(Regex("[^\\p{L}\\p{N}]+"))
+            .filter { it.length > 1 && !artistStopWords.contains(it) }
+            .toSet()
+            
+        val origTitleWords = original.title.lowercase()
+            .split(Regex("[^\\p{L}\\p{N}]+"))
+            .filter { it.length > 1 }
+            .toSet()
+
+        val ranked = candidates.filter { !it.url.isNullOrBlank() }.map { cand ->
+            var score = 0
+            
+            val candArtistLower = cand.artist.lowercase()
+            val candTitleLower = cand.title.lowercase()
+            
+            // 1. Artist matching (Crucial)
+            val candArtistWords = candArtistLower
+                .split(Regex("[^\\p{L}\\p{N}]+"))
+                .filter { it.length > 1 && !artistStopWords.contains(it) }
+                .toSet()
+            
+            val artistIntersection = origArtistWords.intersect(candArtistWords)
+            if (origArtistWords.isNotEmpty()) {
+                if (artistIntersection.isEmpty()) {
+                    score -= 200 // CRITICAL PENALTY: Different artist
+                } else {
+                    val ratio = artistIntersection.size.toDouble() / origArtistWords.size.toDouble()
+                    score += (ratio * 80).toInt()
+                    if (ratio >= 1.0) score += 20 // Bonus for full artist match
+                }
+            }
+            
+            // 2. Title matching
+            val candTitleWords = candTitleLower
+                .split(Regex("[^\\p{L}\\p{N}]+"))
+                .filter { it.length > 1 }
+                .toSet()
+            
+            val titleIntersection = origTitleWords.intersect(candTitleWords)
+            if (origTitleWords.isNotEmpty()) {
+                val ratio = titleIntersection.size.toDouble() / origTitleWords.size.toDouble()
+                score += (ratio * 70).toInt()
+                if (ratio >= 1.0) score += 30 // Bonus for full title match
+            }
+
+            // 3. Duration Match (High Priority if artist matches)
+            if (original.duration > 0 && cand.duration > 0) {
+                val diff = kotlin.math.abs(original.duration - cand.duration)
+                when {
+                    diff <= 2 -> score += 120
+                    diff <= 5 -> score += 80
+                    diff <= 10 -> score += 40
+                    diff > 30 -> score -= 60 
+                }
+            }
+            
+            // 4. Exact normalized matches (Extra boost)
+            if (normalizeForComparison(cand.artist) == normOrigArtist) score += 30
+            if (normalizeForComparison(cand.title) == normOrigTitle) score += 30
+            
+            // 5. Version Word mismatches
+            val candText = "$candArtistLower $candTitleLower"
+            versionWords.forEach { word ->
+                val inOrig = origVersionWords.contains(word)
+                val inCand = candText.contains(word)
+                
+                if (inCand && !inOrig) score -= 100 // Penalty for unsolicited version (Remix/Live/etc)
+                if (inCand && inOrig) score += 50   // Bonus for matching version
+            }
+            
+            cand to score
+        }
+
+        val best = ranked.maxByOrNull { it.second } ?: return null
+        
+        // Thresholds:
+        // With duration: 180 (Needs some artist match + duration)
+        // Without duration: 150 (Needs very strong text match)
+        val threshold = if (original.duration > 0) 180 else 150
+        
+        return if (best.second >= threshold) best.first else null
+    }
+
+    private fun loadArtworks(tracks: List<AudioTrack>) {
+        viewModelScope.launch {
+            tracks.forEach { track ->
+                if (track.artworkUrl == null) {
+                    artworkRepository.getArtworkUrl(track.artist, track.title)
+                        .onSuccess { url ->
+                            if (url != null) {
+                                _uiState.update { state ->
+                                    state.copy(
+                                        tracks = state.tracks.map {
+                                            if (it.artist == track.artist && it.title == track.title) {
+                                                it.copy(artworkUrl = url)
+                                            } else it
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                }
+            }
+        }
+    }
+
+    fun resolveAndPlay(index: Int, playerViewModel: PlayerViewModel) {
+        val allTracks = _uiState.value.tracks
+        if (index !in allTracks.indices) return
+        val track = allTracks[index]
+
+        if (track.url != null) {
+            val playableTracks = allTracks.filter { it.url != null }
+            val newIndex = playableTracks.indexOfFirst { it.stableId == track.stableId }.coerceAtLeast(0)
+            playerViewModel.play(playableTracks, newIndex, PlaylistSource.ListenBrainz(mbid))
+            return
+        }
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true) }
+            
+            val strategies = listOf(
+                track.title.replace(Regex("[^\\p{L}\\p{N}\\s$'-]"), "").replace(Regex("\\s+"), " ").trim(),
+                track.title.replace(Regex("[^\\p{L}\\p{N}\\s]"), " ").replace(Regex("\\s+"), " ").trim(),
+                track.artist.replace(Regex("[^\\p{L}\\p{N}\\s]"), " ").replace(Regex("\\s+"), " ").trim()
+            ).distinct().filter { it.length >= 2 }
+
+            var resolved: AudioTrack? = null
+            for (q in strategies) {
+                musicRepository.searchAudio(q, count = 50)
+                    .onSuccess { searchResults ->
+                        resolved = findBestMatch(track, searchResults)
+                    }
+                if (resolved != null) break
+                delay(50)
+            }
+
+            if (resolved != null) {
+                val enriched = OpenVKMatchaApp.instance.downloadRepository.enrichTrack(resolved)
+                val finalTrack = if (isSignificantlyDifferent(track, enriched)) {
+                    enriched.copy(originalRecommendation = track)
+                } else enriched
+                
+                _uiState.update { state ->
+                    val updatedTracks = state.tracks.toMutableList()
+                    if (index in updatedTracks.indices && 
+                        updatedTracks[index].artist == track.artist && 
+                        updatedTracks[index].title == track.title) {
+                        updatedTracks[index] = finalTrack
+                    }
+                    state.copy(tracks = updatedTracks, isLoading = false)
+                }
+                
+                val updatedAllTracks = _uiState.value.tracks
+                val playableTracks = updatedAllTracks.filter { it.url != null }
+                val newIndex = playableTracks.indexOfFirst { it.stableId == finalTrack.stableId }.coerceAtLeast(0)
+                playerViewModel.play(playableTracks, newIndex, PlaylistSource.ListenBrainz(mbid))
+            } else {
+                _uiState.update { it.copy(isLoading = false, error = "Track not found in OpenVK") }
+            }
+        }
+    }
+
+    private fun isSignificantlyDifferent(original: AudioTrack, resolved: AudioTrack): Boolean {
+        val origWords = original.title.lowercase()
+            .split(Regex("[^\\p{L}\\p{N}]+"))
+            .filter { it.length > 1 }
+            .toSet()
+            
+        val resWords = resolved.title.lowercase()
+            .split(Regex("[^\\p{L}\\p{N}]+"))
+            .filter { it.length > 1 }
+            .toSet()
+
+        if (origWords.isEmpty()) return false
+        
+        val intersection = origWords.intersect(resWords)
+        val similarity = intersection.size.toDouble() / origWords.size.toDouble()
+        
+        return similarity < 0.7
+    }
+
+    companion object {
+        fun factory(mbid: String): ViewModelProvider.Factory = object : ViewModelProvider.Factory {
+            @Suppress("UNCHECKED_CAST")
+            override fun <T : ViewModel> create(modelClass: Class<T>): T {
+                val app = OpenVKMatchaApp.instance
+                return ListenBrainzPlaylistViewModel(app.musicRepository, app.artworkRepository, SettingsViewModel(app), mbid) as T
             }
         }
     }

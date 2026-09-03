@@ -2,6 +2,8 @@ package com.deliriousvoid.openvkmatcha.ui.screens.settings
 
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -74,6 +76,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.lifecycle.viewModelScope
 import com.deliriousvoid.openvkmatcha.BuildConfig
@@ -309,7 +312,6 @@ fun AppearanceSettingsScreen(
     val selectedCustomAccentId by viewModel.selectedCustomAccentId.collectAsState()
     
     val navBarLabelsVisible by viewModel.navBarLabelsVisible.collectAsState()
-    val autoHidePlayer by viewModel.autoHidePlayer.collectAsState()
     
     val context = LocalContext.current
     
@@ -504,25 +506,6 @@ fun AppearanceSettingsScreen(
             checked = navBarLabelsVisible,
             onCheckedChange = { viewModel.setNavBarLabelsVisible(it) }
         )
-
-        Spacer(modifier = Modifier.height(32.dp))
-
-        Text(
-            text = matchaStringResource(R.string.player),
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(bottom = 12.dp)
-        )
-        SettingsSwitchRow(
-            label = matchaStringResource(com.deliriousvoid.openvkmatcha.R.string.settings_auto_hide_player),
-            checked = autoHidePlayer,
-            onCheckedChange = { viewModel.setAutoHidePlayer(it) }
-        )
-        Text(
-            text = matchaStringResource(com.deliriousvoid.openvkmatcha.R.string.settings_auto_hide_player_desc),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
     }
 }
 
@@ -691,8 +674,9 @@ fun MusicSettingsScreen(
     val offlineMode by viewModel.offlineMode.collectAsState()
     val lbEnabled by viewModel.listenBrainzEnabled.collectAsState()
     val lbToken by viewModel.listenBrainzToken.collectAsState()
-    val tracksPerPage by viewModel.tracksPerPage.collectAsState()
     val hidePlayedTracks by viewModel.hidePlayedTracks.collectAsState()
+    val openPlayerOnStart by viewModel.openPlayerOnStart.collectAsState()
+    val autoHidePlayer by viewModel.autoHidePlayer.collectAsState()
 
     Column(
         modifier = Modifier
@@ -713,6 +697,38 @@ fun MusicSettingsScreen(
         )
         Text(
             text = matchaStringResource(R.string.offline_mode_desc),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Text(
+            text = matchaStringResource(R.string.player),
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(bottom = 8.dp)
+        )
+        SettingsSwitchRow(
+            label = matchaStringResource(R.string.settings_open_player_on_start),
+            checked = openPlayerOnStart,
+            onCheckedChange = { viewModel.setOpenPlayerOnStart(it) }
+        )
+        Text(
+            text = matchaStringResource(R.string.settings_open_player_on_start_desc),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        SettingsSwitchRow(
+            label = matchaStringResource(com.deliriousvoid.openvkmatcha.R.string.settings_auto_hide_player),
+            checked = autoHidePlayer,
+            onCheckedChange = { viewModel.setAutoHidePlayer(it) }
+        )
+        Text(
+            text = matchaStringResource(com.deliriousvoid.openvkmatcha.R.string.settings_auto_hide_player_desc),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -748,25 +764,6 @@ fun MusicSettingsScreen(
             label = matchaStringResource(R.string.auto_download),
             checked = autoDownload,
             onCheckedChange = { viewModel.setAutoDownload(it) }
-        )
-        
-        Spacer(modifier = Modifier.height(16.dp))
-        
-        Text(
-            text = matchaStringResource(R.string.tracks_per_page_format, tracksPerPage),
-            style = MaterialTheme.typography.bodyLarge
-        )
-        Slider(
-            value = tracksPerPage.toFloat(),
-            onValueChange = { viewModel.setTracksPerPage(it.toInt()) },
-            valueRange = 50f..500f,
-            steps = 8, // (500-50)/50 - 1 = 8 steps for increments of 50
-            modifier = Modifier.fillMaxWidth()
-        )
-        Text(
-            text = matchaStringResource(R.string.tracks_per_page_desc),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
         )
 
         HorizontalDivider(
@@ -814,11 +811,25 @@ fun DeveloperSettingsScreen(
     val currentClientName by viewModel.clientName.collectAsState()
     val invisibility by viewModel.invisibility.collectAsState()
     val experimentalFeatures by viewModel.experimentalFeatures.collectAsState()
+    val backgroundNotifications by viewModel.backgroundNotifications.collectAsState()
+    val tracksPerPage by viewModel.tracksPerPage.collectAsState()
+    
+    val context = LocalContext.current
     val opaqueColorScheme = LocalOpaqueColorScheme.current
     val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
     var showDialog by remember { mutableStateOf(value = false) }
     var customName by remember { mutableStateOf("") }
     var showLoginHint by remember { mutableStateOf(value = false) }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            viewModel.setBackgroundNotifications(true)
+        } else {
+            Toast.makeText(context, R.string.error_notifications_permission, Toast.LENGTH_SHORT).show()
+        }
+    }
 
     val predefinedNames = listOf(
         "openvk_native",
@@ -866,6 +877,63 @@ fun DeveloperSettingsScreen(
         )
         Text(
             text = matchaStringResource(R.string.experimental_features_desc),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(bottom = 16.dp)
+        )
+
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Text(
+            text = matchaStringResource(R.string.settings_background_notifications),
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+        )
+        SettingsSwitchRow(
+            label = matchaStringResource(R.string.settings_background_notifications),
+            checked = backgroundNotifications,
+            onCheckedChange = { enabled ->
+                if (enabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    val hasPermission = ContextCompat.checkSelfPermission(
+                        context,
+                        android.Manifest.permission.POST_NOTIFICATIONS
+                    ) == PackageManager.PERMISSION_GRANTED
+                    
+                    if (hasPermission) {
+                        viewModel.setBackgroundNotifications(true)
+                    } else {
+                        permissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                    }
+                } else {
+                    viewModel.setBackgroundNotifications(enabled)
+                }
+            }
+        )
+        Text(
+            text = matchaStringResource(R.string.settings_background_notifications_desc),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(bottom = 16.dp)
+        )
+
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Text(
+            text = matchaStringResource(R.string.tracks_per_page_format, tracksPerPage),
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+        )
+        Slider(
+            value = tracksPerPage.toFloat(),
+            onValueChange = { viewModel.setTracksPerPage(it.toInt()) },
+            valueRange = 50f..500f,
+            steps = 8,
+            modifier = Modifier.fillMaxWidth()
+        )
+        Text(
+            text = matchaStringResource(R.string.tracks_per_page_desc),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(bottom = 16.dp)
