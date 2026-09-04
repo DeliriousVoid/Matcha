@@ -616,6 +616,7 @@
     <string name="ignored_empty">Список игнорируемых пуст</string>
     <string name="blue">Синий</string>
     <string name="green">Зелёный</string>
+    <string name="monet">Monet</string>
     <string name="navigation">Навигация</string>
     <string name="attachment_video">Видео</string>
     <string name="attachment_document">Документ</string>

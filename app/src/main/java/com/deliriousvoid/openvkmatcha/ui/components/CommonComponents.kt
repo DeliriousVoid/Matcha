@@ -131,6 +131,7 @@ import com.deliriousvoid.openvkmatcha.data.model.Post
 import com.deliriousvoid.openvkmatcha.data.model.Geo
 import com.deliriousvoid.openvkmatcha.data.model.PendingAttachment
 import com.deliriousvoid.openvkmatcha.data.model.AttachmentType
+import com.deliriousvoid.openvkmatcha.ui.theme.LocalExtraColors
 import com.deliriousvoid.openvkmatcha.ui.theme.LocalOpaqueColorScheme
 import com.deliriousvoid.openvkmatcha.ui.util.LinkHandler
 import androidx.compose.ui.res.painterResource
@@ -976,7 +977,7 @@ fun RepostContent(
                                 Icon(
                                     imageVector = if (post.isLiked) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
                                     contentDescription = null,
-                                    tint = if (post.isLiked) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    tint = if (post.isLiked) LocalExtraColors.current.like else MaterialTheme.colorScheme.onSurfaceVariant,
                                     modifier = Modifier.size(20.dp),
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
@@ -1560,6 +1561,7 @@ fun OnlineIndicator(
     iconSize: Dp = 14.dp,
 ) {
     if (!isOnline) return
+    val extraColors = LocalExtraColors.current
 
     Box(
         modifier = modifier
@@ -1572,13 +1574,13 @@ fun OnlineIndicator(
                 imageVector = Icons.Default.Smartphone,
                 contentDescription = "Online from mobile",
                 modifier = Modifier.size(iconSize),
-                tint = MaterialTheme.colorScheme.primary
+                tint = extraColors.online
             )
         } else {
             Box(
                 modifier = Modifier
                     .size(dotSize)
-                    .background(MaterialTheme.colorScheme.primary, CircleShape)
+                    .background(extraColors.online, CircleShape)
             )
         }
     }
@@ -1593,7 +1595,8 @@ fun VerifiedBadge(
 ) {
     val isCustom = Constants.CUSTOM_VERIFIED_IDS.contains(userId)
     if (isCustom || isVerified) {
-        val badgeColor = if (isVerified) Color(0xFF82B1FF) else Color(0xFF4BB34B)
+        val extraColors = LocalExtraColors.current
+        val badgeColor = if (isVerified) extraColors.blueTick else extraColors.greenTick
         
         Icon(
             imageVector = Icons.Default.Verified,

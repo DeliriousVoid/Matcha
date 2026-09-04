@@ -59,5 +59,10 @@ data class CustomColorScheme(
     val surfaceContainerLow: Long,
     val surfaceContainer: Long,
     val surfaceContainerHigh: Long,
-    val surfaceContainerHighest: Long
+    val surfaceContainerHighest: Long,
+    val online: Long? = null,
+    val like: Long? = null,
+    val wallet: Long? = null,
+    val greenTick: Long? = null,
+    val blueTick: Long? = null
 )

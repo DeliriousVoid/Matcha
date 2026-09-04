@@ -28,6 +28,7 @@ import androidx.compose.ui.window.DialogProperties
 import coil.compose.AsyncImage
 import com.deliriousvoid.openvkmatcha.OpenVKMatchaApp
 import com.deliriousvoid.openvkmatcha.data.model.Post
+import com.deliriousvoid.openvkmatcha.ui.theme.LocalExtraColors
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 
@@ -206,7 +207,7 @@ fun ImageViewer(
                                     Icon(
                                         imageVector = if (currentPost.isLiked) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
                                         contentDescription = null,
-                                        tint = if (currentPost.isLiked) MaterialTheme.colorScheme.error else Color.White,
+                                        tint = if (currentPost.isLiked) LocalExtraColors.current.like else Color.White,
                                         modifier = Modifier.size(24.dp)
                                     )
                                     Spacer(modifier = Modifier.width(8.dp))

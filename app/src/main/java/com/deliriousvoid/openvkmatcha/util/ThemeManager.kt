@@ -115,6 +115,11 @@ class ThemeManager(private val context: Context) {
             colorsJson.put("surfaceContainer", colors.surfaceContainer)
             colorsJson.put("surfaceContainerHigh", colors.surfaceContainerHigh)
             colorsJson.put("surfaceContainerHighest", colors.surfaceContainerHighest)
+            colorsJson.put("online", colors.online)
+            colorsJson.put("like", colors.like)
+            colorsJson.put("wallet", colors.wallet)
+            colorsJson.put("greenTick", colors.greenTick)
+            colorsJson.put("blueTick", colors.blueTick)
             put("colors", colorsJson)
             
             theme.internalAccent?.let { accent ->
@@ -262,7 +267,12 @@ class ThemeManager(private val context: Context) {
             surfaceContainerLow = colorsJson.getLong("surfaceContainerLow"),
             surfaceContainer = colorsJson.getLong("surfaceContainer"),
             surfaceContainerHigh = colorsJson.getLong("surfaceContainerHigh"),
-            surfaceContainerHighest = colorsJson.getLong("surfaceContainerHighest")
+            surfaceContainerHighest = colorsJson.getLong("surfaceContainerHighest"),
+            online = if (colorsJson.has("online")) colorsJson.getLong("online") else null,
+            like = if (colorsJson.has("like")) colorsJson.getLong("like") else null,
+            wallet = if (colorsJson.has("wallet")) colorsJson.getLong("wallet") else null,
+            greenTick = if (colorsJson.has("greenTick")) colorsJson.getLong("greenTick") else null,
+            blueTick = if (colorsJson.has("blueTick")) colorsJson.getLong("blueTick") else null
         )
         
         val internalAccent = if (json.has("internalAccent")) {

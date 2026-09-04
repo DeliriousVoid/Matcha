@@ -1,9 +1,12 @@
 package com.deliriousvoid.openvkmatcha.ui.theme
 
 import android.app.Activity
+import android.os.Build
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.dynamicDarkColorScheme
+import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -13,6 +16,7 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
@@ -31,7 +35,7 @@ enum class AppTheme {
 }
 
 enum class AccentColor {
-    BLUE, GREEN, CUSTOM
+    BLUE, GREEN, MONET, CUSTOM
 }
 
 val LocalOpaqueColorScheme = staticCompositionLocalOf<ColorScheme> {
@@ -44,6 +48,18 @@ val LocalCustomTheme = staticCompositionLocalOf<CustomTheme?> {
 
 val LocalAppTheme = staticCompositionLocalOf<AppTheme> {
     AppTheme.AMOLED
+}
+
+data class ExtraColors(
+    val online: Color,
+    val like: Color,
+    val wallet: Color,
+    val greenTick: Color,
+    val blueTick: Color
+)
+
+val LocalExtraColors = staticCompositionLocalOf<ExtraColors> {
+    error("No ExtraColors provided")
 }
 
 private fun getCustomColorScheme(theme: CustomTheme): ColorScheme {
@@ -131,6 +147,7 @@ private fun getLightColorScheme(accent: AccentColor, customAccent: CustomAccent?
     val primaryColor = when (accent) {
         AccentColor.BLUE -> VkBlue
         AccentColor.GREEN -> VkGreen
+        AccentColor.MONET -> VkGreen
         AccentColor.CUSTOM -> customAccent?.let { Color(it.primary) } ?: VkGreen
     }
     return lightColorScheme(
@@ -153,11 +170,13 @@ private fun getAmoledColorScheme(accent: AccentColor, customAccent: CustomAccent
     val primaryColor = when (accent) {
         AccentColor.BLUE -> VkBlue80
         AccentColor.GREEN -> VkGreen80
+        AccentColor.MONET -> VkGreen80
         AccentColor.CUSTOM -> customAccent?.let { Color(it.primary) } ?: VkGreen80
     }
     val containerColor = when (accent) {
         AccentColor.BLUE -> VkBlueDark
         AccentColor.GREEN -> VkGreenDark
+        AccentColor.MONET -> VkGreenDark
         AccentColor.CUSTOM -> customAccent?.let { it.primaryContainer?.let { Color(it) } ?: Color(it.primary).copy(alpha = 0.3f) } ?: VkGreenDark
     }
     return darkColorScheme(
@@ -184,10 +203,27 @@ fun OpenVKMatchaTheme(
     customAccent: CustomAccent? = null,
     content: @Composable () -> Unit,
 ) {
+    val context = LocalContext.current
     val baseColorScheme = remember(theme, accent, customTheme, customAccent) {
+        val isDynamic = accent == AccentColor.MONET && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+        
         when (theme) {
-            AppTheme.LIGHT -> getLightColorScheme(accent, customAccent)
-            AppTheme.AMOLED -> getAmoledColorScheme(accent, customAccent)
+            AppTheme.LIGHT -> {
+                if (isDynamic) dynamicLightColorScheme(context).copy(
+                    error = VkError,
+                    onError = Color.White
+                )
+                else getLightColorScheme(accent, customAccent)
+            }
+            AppTheme.AMOLED -> {
+                if (isDynamic) dynamicDarkColorScheme(context).copy(
+                    background = Color.Black,
+                    surface = Color.Black,
+                    error = VkError,
+                    onError = Color.White
+                )
+                else getAmoledColorScheme(accent, customAccent)
+            }
             AppTheme.CUSTOM -> customTheme?.let { getCustomColorScheme(it) } ?: getAmoledColorScheme(accent, customAccent)
         }
     }
@@ -214,6 +250,17 @@ fun OpenVKMatchaTheme(
         }
     }
 
+    val extraColors = remember(colorScheme, customTheme) {
+        val c = customTheme?.colors
+        ExtraColors(
+            online = c?.online?.let { Color(it) } ?: colorScheme.primary,
+            like = c?.like?.let { Color(it) } ?: colorScheme.error,
+            wallet = c?.wallet?.let { Color(it) } ?: colorScheme.primary,
+            greenTick = c?.greenTick?.let { Color(it) } ?: Color(0xFF4BB34B),
+            blueTick = c?.blueTick?.let { Color(it) } ?: Color(0xFF82B1FF)
+        )
+    }
+
     val view = LocalView.current
 
     if (!view.isInEditMode) {
@@ -227,7 +274,8 @@ fun OpenVKMatchaTheme(
     CompositionLocalProvider(
         LocalOpaqueColorScheme provides baseColorScheme,
         LocalCustomTheme provides customTheme,
-        LocalAppTheme provides theme
+        LocalAppTheme provides theme,
+        LocalExtraColors provides extraColors
     ) {
         MaterialTheme(
             colorScheme = colorScheme,

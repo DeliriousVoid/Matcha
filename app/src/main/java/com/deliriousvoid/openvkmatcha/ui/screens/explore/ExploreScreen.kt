@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.deliriousvoid.openvkmatcha.R
 import com.deliriousvoid.openvkmatcha.ui.util.matchaStringResource
+import com.deliriousvoid.openvkmatcha.ui.theme.LocalExtraColors
 import com.deliriousvoid.openvkmatcha.ui.viewmodel.ExploreViewModel
 
 data class ExploreFeature(
@@ -205,7 +206,7 @@ fun WalletSection(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(24.dp),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.7f)
+            containerColor = LocalExtraColors.current.wallet.copy(alpha = 0.8f)
         )
     ) {
         Column(modifier = Modifier.padding(20.dp)) {
@@ -218,20 +219,21 @@ fun WalletSection(
                     Icon(
                         imageVector = Icons.Default.AccountBalanceWallet,
                         contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary
+                        tint = MaterialTheme.colorScheme.onPrimary
                     )
                     Spacer(modifier = Modifier.width(12.dp))
                     Text(
                         text = matchaStringResource(R.string.explore_wallet),
                         style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimary
                     )
                 }
                 
                 Text(
                     text = matchaStringResource(R.string.explore_balance_format, balance),
                     style = MaterialTheme.typography.titleLarge,
-                    color = MaterialTheme.colorScheme.primary,
+                    color = MaterialTheme.colorScheme.onPrimary,
                     fontWeight = FontWeight.ExtraBold
                 )
             }

@@ -59,6 +59,8 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.dynamicDarkColorScheme
+import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -313,6 +315,12 @@ fun AppearanceSettingsScreen(
     
     val navBarLabelsVisible by viewModel.navBarLabelsVisible.collectAsState()
     
+    val isDark = when (currentTheme) {
+        AppTheme.AMOLED -> true
+        AppTheme.LIGHT -> false
+        AppTheme.CUSTOM -> customThemes.find { it.id == selectedCustomThemeId }?.isDark ?: true
+    }
+    
     val context = LocalContext.current
     
     val themeImportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
@@ -448,6 +456,17 @@ fun AppearanceSettingsScreen(
                 selected = currentAccent == AccentColor.GREEN,
                 onClick = { viewModel.setAccent(AccentColor.GREEN) }
             )
+            
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                val monetColor = if (isDark) dynamicDarkColorScheme(context).primary else dynamicLightColorScheme(context).primary
+                Spacer(modifier = Modifier.width(8.dp))
+                AccentButton(
+                    label = matchaStringResource(R.string.monet),
+                    color = monetColor,
+                    selected = currentAccent == AccentColor.MONET,
+                    onClick = { viewModel.setAccent(AccentColor.MONET) }
+                )
+            }
             
             customAccents.forEach { accent ->
                 Spacer(modifier = Modifier.width(8.dp))

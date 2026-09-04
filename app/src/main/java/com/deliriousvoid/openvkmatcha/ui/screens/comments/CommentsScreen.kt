@@ -54,6 +54,7 @@ import com.deliriousvoid.openvkmatcha.data.model.AudioTrack
 import com.deliriousvoid.openvkmatcha.data.model.PlaylistSource
 import com.deliriousvoid.openvkmatcha.data.model.Document
 import com.deliriousvoid.openvkmatcha.ui.util.formatTimeAgo
+import com.deliriousvoid.openvkmatcha.ui.theme.LocalExtraColors
 import com.deliriousvoid.openvkmatcha.ui.viewmodel.CommentsViewModel
 import com.deliriousvoid.openvkmatcha.ui.viewmodel.SettingsViewModel
 import com.deliriousvoid.openvkmatcha.ui.viewmodel.MusicActionsViewModel
@@ -591,7 +592,7 @@ fun CommentItem(
                     Icon(
                         imageVector = if (comment.isLiked) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
                         contentDescription = null,
-                        tint = if (comment.isLiked) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                        tint = if (comment.isLiked) LocalExtraColors.current.like else MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(16.dp)
                     )
                     if (comment.likeCount > 0) {

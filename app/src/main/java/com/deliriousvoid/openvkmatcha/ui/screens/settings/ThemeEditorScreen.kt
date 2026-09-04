@@ -45,6 +45,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -96,6 +97,13 @@ fun ThemeEditorScreen(
     var surface by remember { mutableStateOf(existingTheme?.colors?.surface?.let { Color(it) } ?: defaultSurface) }
     var onSurface by remember { mutableStateOf(existingTheme?.colors?.onSurface?.let { Color(it) } ?: defaultOnSurface) }
     var onSurfaceVariant by remember { mutableStateOf(existingTheme?.colors?.onSurfaceVariant?.let { Color(it) } ?: onSurface.copy(alpha = 0.6f)) }
+    
+    var online by remember { mutableStateOf(existingTheme?.colors?.online?.let { Color(it) } ?: primary) }
+    var like by remember { mutableStateOf(existingTheme?.colors?.like?.let { Color(it) } ?: Color(0xFFE64646)) } // VkError equivalent
+    var wallet by remember { mutableStateOf(existingTheme?.colors?.wallet?.let { Color(it) } ?: primary) }
+    var greenTick by remember { mutableStateOf(existingTheme?.colors?.greenTick?.let { Color(it) } ?: Color(0xFF4BB34B)) }
+    var blueTick by remember { mutableStateOf(existingTheme?.colors?.blueTick?.let { Color(it) } ?: Color(0xFF82B1FF)) }
+
     var isSecondaryAutomatic by remember { mutableStateOf(existingTheme == null) }
     
     var currentImagePath by remember { mutableStateOf(existingTheme?.backgroundImagePath) }
@@ -170,6 +178,14 @@ fun ThemeEditorScreen(
             ColorSelectionRow("Text", onSurface, { pickingColorFor = "onSurface" }, { onSurface = defaultOnSurface })
             ColorSelectionRow("Secondary Text", onSurfaceVariant, { pickingColorFor = "onSurfaceVariant" }, { onSurfaceVariant = onSurface.copy(alpha = 0.6f) })
             
+            Spacer(modifier = Modifier.height(16.dp))
+            Text("Extra Colors", style = MaterialTheme.typography.titleMedium)
+            ColorSelectionRow("Online indicator", online, { pickingColorFor = "online" }, { online = primary })
+            ColorSelectionRow("Like icon", like, { pickingColorFor = "like" }, { like = Color(0xFFE64646) })
+            ColorSelectionRow("Wallet icon", wallet, { pickingColorFor = "wallet" }, { wallet = primary })
+            ColorSelectionRow("Green tick", greenTick, { pickingColorFor = "greenTick" }, { greenTick = Color(0xFF4BB34B) })
+            ColorSelectionRow("Blue tick", blueTick, { pickingColorFor = "blueTick" }, { blueTick = Color(0xFF82B1FF) })
+
             Spacer(modifier = Modifier.height(24.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -251,7 +267,12 @@ fun ThemeEditorScreen(
                         surfaceContainerLow = surface.toArgb().toLong(),
                         surfaceContainer = surface.toArgb().toLong(),
                         surfaceContainerHigh = surface.toArgb().toLong(),
-                        surfaceContainerHighest = surface.toArgb().toLong()
+                        surfaceContainerHighest = surface.toArgb().toLong(),
+                        online = online.toArgb().toLong(),
+                        like = like.toArgb().toLong(),
+                        wallet = wallet.toArgb().toLong(),
+                        greenTick = greenTick.toArgb().toLong(),
+                        blueTick = blueTick.toArgb().toLong()
                     )
                     val theme = CustomTheme(
                         id = id,
@@ -289,22 +310,34 @@ fun ThemeEditorScreen(
                     "surface" -> surface
                     "onSurface" -> onSurface
                     "onSurfaceVariant" -> onSurfaceVariant
+                    "online" -> online
+                    "like" -> like
+                    "wallet" -> wallet
+                    "greenTick" -> greenTick
+                    "blueTick" -> blueTick
                     else -> Color.White
                 }
-                ColorPicker(initialColor = initial) { color ->
-                    when (pickingColorFor) {
-                        "primary" -> primary = color
-                        "background" -> background = color
-                        "surface" -> surface = color
-                        "onSurface" -> {
-                            onSurface = color
-                            if (isSecondaryAutomatic) {
-                                onSurfaceVariant = color.copy(alpha = 0.6f)
+                key(pickingColorFor) {
+                    ColorPicker(initialColor = initial) { color ->
+                        when (pickingColorFor) {
+                            "primary" -> primary = color
+                            "background" -> background = color
+                            "surface" -> surface = color
+                            "onSurface" -> {
+                                onSurface = color
+                                if (isSecondaryAutomatic) {
+                                    onSurfaceVariant = color.copy(alpha = 0.6f)
+                                }
                             }
-                        }
-                        "onSurfaceVariant" -> {
-                            onSurfaceVariant = color
-                            isSecondaryAutomatic = false
+                            "onSurfaceVariant" -> {
+                                onSurfaceVariant = color
+                                isSecondaryAutomatic = false
+                            }
+                            "online" -> online = color
+                            "like" -> like = color
+                            "wallet" -> wallet = color
+                            "greenTick" -> greenTick = color
+                            "blueTick" -> blueTick = color
                         }
                     }
                 }

@@ -902,7 +902,7 @@ class MainActivity : ComponentActivity() {
                                                         NavigationBarItem(
                                                             selected = selected,
                                                             onClick = {
-                                                                if (isPlaylistDetails || isProfile || isFriends || isGroups || isUserMusic || isGifts || isFollowers || isSendGift || isCreatePost || isVideos || isDocuments || isNotes || isNoteDetails || isEvents || isWebView || isTransfer || isTopics || isTopicComments || isSearch || isMusicSearch || isUpload) {
+                                                                if (isPlaylistDetails || isListenBrainzPlaylist || isProfile || isFriends || isGroups || isUserMusic || isGifts || isFollowers || isSendGift || isCreatePost || isVideos || isDocuments || isNotes || isNoteDetails || isEvents || isWebView || isTransfer || isTopics || isTopicComments || isSearch || isMusicSearch || isUpload || isEditProfile || isEditGroup || isPhotoAlbums || isPhotos) {
                                                                     navController.popBackStack(Routes.MAIN, false)
                                                                 }
                                                                 isSearchActive = false

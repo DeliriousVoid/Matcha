@@ -55,6 +55,7 @@ import com.deliriousvoid.openvkmatcha.ui.components.DocsPickerBottomSheet
 import com.deliriousvoid.openvkmatcha.ui.components.ReportDialog
 import com.deliriousvoid.openvkmatcha.ui.components.ParsedText
 import com.deliriousvoid.openvkmatcha.ui.components.ImageViewer
+import com.deliriousvoid.openvkmatcha.ui.theme.LocalExtraColors
 import com.deliriousvoid.openvkmatcha.util.downloadDocument
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
@@ -450,7 +451,7 @@ private fun CommentItem(
                     Icon(
                         imageVector = if (comment.isLiked) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
                         contentDescription = null,
-                        tint = if (comment.isLiked) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                        tint = if (comment.isLiked) LocalExtraColors.current.like else MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(16.dp)
                     )
                     if (comment.likeCount > 0) {
