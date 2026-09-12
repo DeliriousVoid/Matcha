@@ -194,6 +194,15 @@ class AccountsViewModel(
         refreshAccounts()
     }
 
+    fun moveAccount(from: Int, to: Int) {
+        val current = _accounts.value.toMutableList()
+        if (from !in current.indices || to !in current.indices) return
+        val item = current.removeAt(from)
+        current.add(to, item)
+        _accounts.value = current
+        authRepository.reorderAccounts(current)
+    }
+
     companion object {
         fun factory(): ViewModelProvider.Factory = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")

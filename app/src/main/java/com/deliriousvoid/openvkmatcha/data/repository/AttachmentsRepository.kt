@@ -5,6 +5,7 @@ import android.net.Uri
 import com.deliriousvoid.openvkmatcha.data.api.OpenVKApi
 import com.deliriousvoid.openvkmatcha.data.model.AttachmentType
 import com.deliriousvoid.openvkmatcha.data.model.PendingAttachment
+import com.deliriousvoid.openvkmatcha.util.MLog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -36,17 +37,17 @@ class AttachmentsRepository(private val context: Context, private val api: OpenV
     }
 
     private suspend fun uploadPhoto(bytes: ByteArray, fileName: String): Result<String> {
-        android.util.Log.d("Attachments", "Getting wall upload server...")
+        MLog.d("Attachments", "Getting wall upload server...")
         return api.callMethod("photos.getWallUploadServer").fold(
             onSuccess = { json ->
                 val uploadUrl = json.getJSONObject("response").getString("upload_url")
-                android.util.Log.d("Attachments", "Uploading to: $uploadUrl")
+                MLog.d("Attachments", "Uploading to: $uploadUrl")
                 api.uploadFile(uploadUrl, bytes, fileName, "photo").fold(
                     onSuccess = { uploadResult ->
                         val server = uploadResult.optString("server")
                         val photo = uploadResult.optString("photo")
                         val hash = uploadResult.optString("hash")
-                        android.util.Log.d("Attachments", "Saving wall photo: server=$server, hash=$hash")
+                        MLog.d("Attachments", "Saving wall photo: server=$server, hash=$hash")
                         api.callMethod("photos.saveWallPhoto", mapOf(
                             "server" to server,
                             "photo" to photo,
@@ -54,18 +55,18 @@ class AttachmentsRepository(private val context: Context, private val api: OpenV
                         )).map { saveResult ->
                             val photoObj = saveResult.getJSONArray("response").getJSONObject(0)
                             val result = "photo${photoObj.getInt("owner_id")}_${photoObj.getInt("id")}"
-                            android.util.Log.d("Attachments", "Photo saved: $result")
+                            MLog.d("Attachments", "Photo saved: $result")
                             result
                         }
                     },
                     onFailure = { 
-                        android.util.Log.e("Attachments", "Upload failed: ${it.message}")
+                        MLog.e("Attachments", "Upload failed: ${it.message}")
                         Result.failure(it) 
                     }
                 )
             },
             onFailure = { 
-                android.util.Log.e("Attachments", "Failed to get upload server: ${it.message}")
+                MLog.e("Attachments", "Failed to get upload server: ${it.message}")
                 Result.failure(it) 
             }
         )
@@ -91,7 +92,7 @@ class AttachmentsRepository(private val context: Context, private val api: OpenV
                             val ownerId = docObj.optInt("owner_id")
                             val id = docObj.optInt("id")
                             val result = "document${ownerId}_$id"
-                            android.util.Log.d("Attachments", "Document saved: $result")
+                            MLog.d("Attachments", "Document saved: $result")
                             result
                         }
                     },

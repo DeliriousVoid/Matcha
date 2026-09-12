@@ -36,6 +36,7 @@ import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FileOpen
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.People
@@ -76,8 +77,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import coil.compose.rememberAsyncImagePainter
+import coil.request.ImageRequest
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.lifecycle.viewModelScope
@@ -90,6 +94,8 @@ import com.deliriousvoid.openvkmatcha.ui.theme.CustomAccent
 import com.deliriousvoid.openvkmatcha.ui.theme.CustomTheme
 import com.deliriousvoid.openvkmatcha.ui.theme.LocalOpaqueColorScheme
 import com.deliriousvoid.openvkmatcha.ui.util.matchaStringResource
+import com.deliriousvoid.openvkmatcha.ui.viewmodel.NsfwHidingStyle
+import com.deliriousvoid.openvkmatcha.ui.viewmodel.NsfwVisibility
 import com.deliriousvoid.openvkmatcha.ui.viewmodel.SettingsViewModel
 import kotlinx.coroutines.launch
 import java.io.File
@@ -99,6 +105,7 @@ fun SettingsScreen(
     onNavigateToGeneral: () -> Unit,
     onNavigateToAppearance: () -> Unit,
     onNavigateToMusic: () -> Unit,
+    onNavigateToMatcha: () -> Unit,
     onNavigateToDeveloper: () -> Unit,
     @Suppress("UNUSED_PARAMETER") onBack: () -> Unit,
     onLogout: () -> Unit,
@@ -136,6 +143,15 @@ fun SettingsScreen(
             subtitle = matchaStringResource(R.string.settings_music_desc),
             icon = Icons.Default.MusicNote,
             onClick = onNavigateToMusic
+        )
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        SettingsCategoryButton(
+            title = matchaStringResource(R.string.settings_category_matcha),
+            subtitle = matchaStringResource(R.string.settings_category_matcha_desc, BuildConfig.VERSION_NAME),
+            icon = R.mipmap.matcha,
+            onClick = onNavigateToMatcha
         )
 
         if (isDeveloperMode) {
@@ -182,7 +198,17 @@ fun GeneralSettingsScreen(
     val pauseVideoOnScroll by viewModel.pauseVideoOnScroll.collectAsState()
     val doubleTapToLike by viewModel.doubleTapToLike.collectAsState()
     val doubleTapTimeout by viewModel.doubleTapTimeout.collectAsState()
+    val nsfwVisibility by viewModel.nsfwVisibility.collectAsState()
+    val nsfwHidingStyle by viewModel.nsfwHidingStyle.collectAsState()
     val context = LocalContext.current
+    val opaqueColorScheme = LocalOpaqueColorScheme.current
+    var showRestartDialog by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        viewModel.showRestartDialog.collect {
+            showRestartDialog = true
+        }
+    }
 
     LaunchedEffect(Unit) {
         viewModel.developerHint.collect { message ->
@@ -275,6 +301,58 @@ fun GeneralSettingsScreen(
         }
 
         Spacer(modifier = Modifier.height(24.dp))
+
+        Text(
+            text = matchaStringResource(R.string.settings_nsfw_category),
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(bottom = 8.dp)
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            ThemeButton(
+                label = matchaStringResource(R.string.settings_nsfw_visibility_hide),
+                selected = nsfwVisibility == NsfwVisibility.HIDE,
+                onClick = { viewModel.setNsfwVisibility(NsfwVisibility.HIDE) },
+                modifier = Modifier.weight(1f)
+            )
+            ThemeButton(
+                label = matchaStringResource(R.string.settings_nsfw_visibility_show),
+                selected = nsfwVisibility == NsfwVisibility.SHOW,
+                onClick = { viewModel.setNsfwVisibility(NsfwVisibility.SHOW) },
+                modifier = Modifier.weight(1f)
+            )
+        }
+
+        if (nsfwVisibility == NsfwVisibility.HIDE) {
+            Spacer(modifier = Modifier.height(16.dp))
+            Text(
+                text = matchaStringResource(R.string.settings_nsfw_hiding_style),
+                style = MaterialTheme.typography.bodyLarge,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                ThemeButton(
+                    label = matchaStringResource(R.string.settings_nsfw_hiding_style_blur),
+                    selected = nsfwHidingStyle == NsfwHidingStyle.BLUR,
+                    onClick = { viewModel.setNsfwHidingStyle(NsfwHidingStyle.BLUR) },
+                    modifier = Modifier.weight(1f)
+                )
+                ThemeButton(
+                    label = matchaStringResource(R.string.settings_nsfw_hiding_style_fill),
+                    selected = nsfwHidingStyle == NsfwHidingStyle.FILL,
+                    onClick = { viewModel.setNsfwHidingStyle(NsfwHidingStyle.FILL) },
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
         
         Text(
             text = matchaStringResource(R.string.info),
@@ -291,6 +369,28 @@ fun GeneralSettingsScreen(
             label = matchaStringResource(R.string.version),
             value = BuildConfig.VERSION_NAME,
             onClick = { viewModel.onVersionClick() }
+        )
+    }
+
+    if (showRestartDialog) {
+        AlertDialog(
+            onDismissRequest = { showRestartDialog = false },
+            containerColor = opaqueColorScheme.surface,
+            title = { Text(matchaStringResource(R.string.restart_dialog_title)) },
+            text = { Text(matchaStringResource(R.string.restart_dialog_message)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    showRestartDialog = false
+                    viewModel.restartApp()
+                }) {
+                    Text(matchaStringResource(R.string.restart_button))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRestartDialog = false }) {
+                    Text(matchaStringResource(R.string.later_button))
+                }
+            }
         )
     }
 }
@@ -1125,7 +1225,7 @@ fun DeveloperSettingsScreen(
 private fun SettingsCategoryButton(
     title: String,
     subtitle: String,
-    icon: ImageVector,
+    icon: Any,
     onClick: () -> Unit
 ) {
     Surface(
@@ -1147,12 +1247,24 @@ private fun SettingsCategoryButton(
                     .background(MaterialTheme.colorScheme.primaryContainer),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(24.dp)
-                )
+                when (icon) {
+                    is ImageVector -> Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    is Int -> Icon(
+                        painter = rememberAsyncImagePainter(
+                            model = ImageRequest.Builder(LocalContext.current)
+                                .data(icon)
+                                .build()
+                        ),
+                        contentDescription = null,
+                        tint = Color.Unspecified,
+                        modifier = Modifier.size(32.dp)
+                    )
+                }
             }
             Spacer(modifier = Modifier.width(16.dp))
             Column(modifier = Modifier.weight(1f)) {

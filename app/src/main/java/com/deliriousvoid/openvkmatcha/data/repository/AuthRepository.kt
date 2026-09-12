@@ -1,11 +1,12 @@
 package com.deliriousvoid.openvkmatcha.data.repository
 
-import android.util.Log
 import android.content.Context
 import com.deliriousvoid.openvkmatcha.data.api.OpenVKApi
 import com.deliriousvoid.openvkmatcha.data.parser.JsonParsers
 import com.deliriousvoid.openvkmatcha.services.LongPollService
 import com.deliriousvoid.openvkmatcha.OpenVKMatchaApp
+import com.deliriousvoid.openvkmatcha.data.security.AccountManager
+import com.deliriousvoid.openvkmatcha.util.MLog
 
 class AuthRepository(private val api: OpenVKApi) {
 
@@ -48,7 +49,7 @@ class AuthRepository(private val api: OpenVKApi) {
                 val profile = JsonParsers.parseUser(response)
                 app.accountManager.addAccount(token, instance, profile)
             } catch (e: Exception) {
-                Log.e("AuthRepository", "Failed to parse profile", e)
+                MLog.e("AuthRepository", "Failed to parse profile", e)
             }
         }
     }
@@ -78,6 +79,9 @@ class AuthRepository(private val api: OpenVKApi) {
     }
 
     fun getAccounts() = OpenVKMatchaApp.instance.accountManager.getAccounts()
+    
+    fun reorderAccounts(accounts: List<AccountManager.Account>) = 
+        OpenVKMatchaApp.instance.accountManager.reorderAccounts(accounts)
     
     fun removeAccount(id: String) = OpenVKMatchaApp.instance.accountManager.removeAccount(id)
 

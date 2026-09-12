@@ -44,6 +44,7 @@ class PlayerViewModel(
     val playlistSource = playerManager.playlistSource
     val shuffleMode = playerManager.shuffleMode
     val repeatMode = playerManager.repeatMode
+    val currentIndex = playerManager.currentIndex
     val currentPosition = playerManager.currentPosition
     val duration = playerManager.duration
     val queue = playerManager.queue
@@ -173,9 +174,7 @@ class PlayerViewModel(
     fun toggleTrackAdded(track: AudioTrack) {
         val newState = !track.isAdded
         // Optimistic update
-        if (_trackWithArtwork.value?.id == track.id && _trackWithArtwork.value?.ownerId == track.ownerId) {
-            _trackWithArtwork.value = track.copy(isAdded = newState)
-        }
+        playerManager.updateTrackAddedStatus(track.id, track.ownerId, newState)
 
         viewModelScope.launch {
             val result = if (newState) {
@@ -186,9 +185,7 @@ class PlayerViewModel(
 
             result.onFailure {
                 // Revert on failure
-                if (_trackWithArtwork.value?.id == track.id && _trackWithArtwork.value?.ownerId == track.ownerId) {
-                    _trackWithArtwork.value = track
-                }
+                playerManager.updateTrackAddedStatus(track.id, track.ownerId, track.isAdded)
             }
         }
     }

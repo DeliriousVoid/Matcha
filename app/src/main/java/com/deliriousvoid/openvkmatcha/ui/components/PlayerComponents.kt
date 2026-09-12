@@ -80,6 +80,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -218,6 +219,7 @@ fun MiniPlayer(
     isPlaying: Boolean,
     isBuffering: Boolean,
     queue: List<AudioTrack>,
+    currentIndex: Int,
     repeatMode: Int,
     artworkCache: Map<String, String>,
     onPlayPause: () -> Unit,
@@ -229,9 +231,6 @@ fun MiniPlayer(
 ) {
     if (currentTrack == null) return
 
-    val currentIndex = remember(currentTrack.stableId, queue) {
-        queue.indexOfFirst { it.stableId == currentTrack.stableId }
-    }
     val basePage = 5000
     val pageCount = if (queue.size > 1) 10000 else queue.size
     
@@ -250,10 +249,12 @@ fun MiniPlayer(
         return
     }
 
-    val pagerState = rememberPagerState(
-        initialPage = if (pageCount > queue.size) basePage - (basePage % queue.size) + currentIndex 
-                      else currentIndex
-    ) { pageCount }
+    val pagerState = key(queue.size > 1) {
+        rememberPagerState(
+            initialPage = if (pageCount > queue.size) basePage - (basePage % queue.size) + currentIndex 
+                          else currentIndex
+        ) { pageCount }
+    }
 
     LaunchedEffect(currentIndex, queue.size) {
         val targetPage = if (pageCount > queue.size) {
@@ -301,10 +302,7 @@ fun MiniPlayer(
                 userScrollEnabled = queue.size > 1,
                 reverseLayout = false,
                 beyondViewportPageCount = 1,
-                key = { page ->
-                    val trackIndex = if (pageCount > queue.size) page % queue.size else page
-                    queue.getOrNull(trackIndex)?.stableId ?: page
-                },
+                key = { page -> page },
                 verticalAlignment = Alignment.CenterVertically,
             ) { page ->
                 val trackIndex = if (pageCount > queue.size) page % queue.size else page
@@ -392,6 +390,7 @@ fun FullPlayer(
     repeatMode: Int,
     shuffleMode: Boolean,
     queue: List<AudioTrack>,
+    currentIndex: Int,
     hidePlayedTracks: Boolean,
     playerViewModel: PlayerViewModel,
     appTheme: AppTheme = AppTheme.AMOLED,
@@ -445,9 +444,6 @@ fun FullPlayer(
     val artworkCache by playerViewModel.artworkCache.collectAsState()
     val lyricsLoading by playerViewModel.lyricsLoading.collectAsState()
 
-    val currentIndex = remember(currentTrack.stableId, queue) {
-        queue.indexOfFirst { it.stableId == currentTrack.stableId }
-    }
     val basePage = 5000
     val pageCount = if (queue.size > 1) 10000 else queue.size
     
@@ -467,10 +463,12 @@ fun FullPlayer(
         return
     }
 
-    val pagerState = rememberPagerState(
-        initialPage = if (pageCount > queue.size) basePage - (basePage % queue.size) + currentIndex 
-                      else currentIndex
-    ) { pageCount }
+    val pagerState = key(queue.size > 1) {
+        rememberPagerState(
+            initialPage = if (pageCount > queue.size) basePage - (basePage % queue.size) + currentIndex 
+                          else currentIndex
+        ) { pageCount }
+    }
 
     LaunchedEffect(currentIndex, queue.size) {
         val targetPage = if (pageCount > queue.size) {
@@ -555,10 +553,7 @@ fun FullPlayer(
                     pageSpacing = with(LocalDensity.current) { 92.toDp() },
                     userScrollEnabled = queue.size > 1,
                     beyondViewportPageCount = 1,
-                    key = { page ->
-                        val pageTrackIndex = if (pageCount > queue.size) page % queue.size else page
-                        queue.getOrNull(pageTrackIndex)?.stableId ?: page
-                    },
+                    key = { page -> page },
                     verticalAlignment = Alignment.CenterVertically,
                 ) { page ->
                     val pageTrackIndex = if (pageCount > queue.size) page % queue.size else page
@@ -812,7 +807,7 @@ fun FullPlayer(
                     ThemedPopupBackground {
                         QueueView(
                             queue = queue,
-                            currentTrackStableId = currentTrack.stableId,
+                            currentIndex = currentIndex,
                             hidePlayedTracks = hidePlayedTracks,
                             onTrackClick = onSkipToQueueItem,
                             onRemove = onRemoveFromQueue,
@@ -893,7 +888,7 @@ fun LyricsView(
 @Composable
 fun QueueView(
     queue: List<AudioTrack>,
-    currentTrackStableId: String,
+    currentIndex: Int,
     hidePlayedTracks: Boolean,
     onTrackClick: (Int) -> Unit,
     onRemove: (Int) -> Unit,
@@ -904,7 +899,6 @@ fun QueueView(
     var draggedItemIndex by remember { mutableStateOf<Int?>(null) }
     var draggingOffset by remember { mutableStateOf(0f) }
     
-    val currentIndex = queue.indexOfFirst { it.stableId == currentTrackStableId }
     val displayQueue = if (hidePlayedTracks && currentIndex != -1) {
         queue.subList(currentIndex, queue.size)
     } else {
@@ -945,9 +939,9 @@ fun QueueView(
                 state = listState,
                 modifier = Modifier.fillMaxSize()
             ) {
-                itemsIndexed(displayQueue, key = { _, track -> track.stableId }) { index, track ->
+                itemsIndexed(displayQueue, key = { index, track -> "${track.stableId}_${index + offset}" }) { index, track ->
                     val originalIndex = index + offset
-                    val isPlaying = track.stableId == currentTrackStableId
+                    val isPlaying = originalIndex == currentIndex
                     val isDragging = draggedItemIndex == index
                     
                     val elevation by animateDpAsState(

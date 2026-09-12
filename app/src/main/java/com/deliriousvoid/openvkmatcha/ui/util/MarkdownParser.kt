@@ -77,7 +77,7 @@ object MarkdownParser {
                 "<(/)?($colorNames|[0-9a-fA-F]{6})>|" +
                 "\\[(id|club|public)(\\d+)\\|(.*?)\\]|" +
                 "\\[(.*?)\\|@([\\w\\d._-]+)\\]|" +
-                "(?:https?://|www\\.)[\\w\\d.\\-]+[\\w\\d/\\-?%&=._~#+!]*|(?:[\\w\\d\\-]+\\.)+[a-z]{2,10}(?:/[\\w\\d/\\-?%&=._~#+!]*)?",
+                "(?:https?://|www\\.)[\\w\\d.\\-]+[\\w\\d/\\-?%&=._~#+!:@$,;*()]*|(?:[\\w\\d\\-]+\\.)+[a-z]{2,10}(?:/[\\w\\d/\\-?%&=._~#+!:@$,;*()]*)?",
                 RegexOption.IGNORE_CASE
             )
         }
@@ -153,7 +153,8 @@ object MarkdownParser {
             val path = uri?.path?.trim('/') ?: ""
             val host = uri?.host ?: ""
 
-            val isOvk = host.contains("openvk.org") || host.contains("openvk.uk") || host.contains("openvk.su") || host.contains("ovk.to")
+            val currentHost = com.deliriousvoid.openvkmatcha.OpenVKMatchaApp.instance.tokenManager.getWebInstanceHost()
+            val isOvk = host.contains(currentHost) || host.contains("openvk.org") || host.contains("openvk.uk") || host.contains("openvk.su") || host.contains("ovk.to")
 
             when {
                 isOvk && path.startsWith("id") && path.substring(2).all { it.isDigit() } -> {
@@ -257,9 +258,42 @@ object MarkdownParser {
                 else -> 18.sp
             }
             builder.withStyle(SpanStyle(fontWeight = FontWeight.Bold, fontSize = fontSize)) {
+                builder.append("#".repeat(heading.level) + " ")
                 visitChildren(heading)
             }
             if (heading.next != null) builder.append("\n\n")
+        }
+
+        private val listIndexStack = mutableListOf<Int>()
+
+        override fun visit(bulletList: BulletList) {
+            visitChildren(bulletList)
+            if (bulletList.next != null) builder.append("\n\n")
+        }
+
+        override fun visit(orderedList: OrderedList) {
+            listIndexStack.add(orderedList.markerStartNumber ?: 1)
+            visitChildren(orderedList)
+            listIndexStack.removeAt(listIndexStack.size - 1)
+            if (orderedList.next != null) builder.append("\n\n")
+        }
+
+        override fun visit(listItem: ListItem) {
+            val parent = listItem.parent
+            when (parent) {
+                is BulletList -> {
+                    builder.append("${parent.marker ?: "-"} ")
+                }
+                is OrderedList -> {
+                    val index = listIndexStack.lastOrNull() ?: 1
+                    builder.append("$index${parent.markerDelimiter ?: "."} ")
+                    if (listIndexStack.isNotEmpty()) {
+                        listIndexStack[listIndexStack.size - 1] = index + 1
+                    }
+                }
+            }
+            visitChildren(listItem)
+            if (listItem.next != null) builder.append("\n")
         }
 
         override fun visit(blockQuote: BlockQuote) {

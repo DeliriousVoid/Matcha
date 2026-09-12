@@ -71,7 +71,7 @@ fun AppNavigation(
         composable(Routes.SPLASH) {
             SplashScreen(
                 onNavigateToLogin = {
-                    navController.navigate(Routes.LOGIN) {
+                    navController.navigate(Routes.loginRoute(false)) {
                         popUpTo(Routes.SPLASH) { inclusive = true }
                     }
                 },
@@ -83,7 +83,13 @@ fun AppNavigation(
             )
         }
 
-        composable(Routes.LOGIN) {
+        composable(
+            route = Routes.LOGIN,
+            arguments = listOf(
+                navArgument("canGoBack") { type = NavType.BoolType; defaultValue = false }
+            )
+        ) { backStackEntry ->
+            val canGoBack = backStackEntry.arguments?.getBoolean("canGoBack") ?: false
             LoginScreen(
                 onLoginSuccess = {
                     navController.navigate(Routes.MAIN) {
@@ -92,7 +98,8 @@ fun AppNavigation(
                 },
                 onNavigateTo2FA = { username, password, instance ->
                     navController.navigate(Routes.twoFactorRoute(username, password, instance))
-                }
+                },
+                onBack = if (canGoBack) { { navController.popBackStack() } } else null
             )
         }
 
@@ -134,7 +141,7 @@ fun AppNavigation(
                     val query = searchViewModel.uiState.value.searchQuery
                     playerViewModel.play(tracks, index, PlaylistSource.SearchAudio(query))
                 },
-                onToggleTrackAdded = { track -> playerViewModel.toggleTrackAdded(track) },
+                onToggleTrackAdded = { track -> searchViewModel.toggleTrackAdded(track) },
                 onDownloadTrack = { track -> musicViewModel.downloadTrack(track) },
                 onShareTrack = { track ->
                     val url = track.remoteUrl ?: track.url ?: ""
@@ -142,7 +149,7 @@ fun AppNavigation(
                 },
                 onAddToQueue = { track -> playerViewModel.playerManager.addToQueue(track) },
                 onPlayNext = { track -> playerViewModel.playerManager.playNext(track) },
-                currentTrackId = currentTrack?.id,
+                currentTrackStableId = currentTrack?.stableId,
                 downloadedTracks = downloadedTracksSet,
                 viewModel = searchViewModel
             )
@@ -155,6 +162,8 @@ fun AppNavigation(
 
             androidx.compose.runtime.LaunchedEffect(Unit) {
                 if (AppEvents.searchCategory.value != SearchCategory.MUSIC && 
+                    AppEvents.searchCategory.value != SearchCategory.MY_MUSIC &&
+                    AppEvents.searchCategory.value != SearchCategory.DOWNLOADED &&
                     AppEvents.searchCategory.value != SearchCategory.PLAYLISTS) {
                     AppEvents.setSearchCategory(SearchCategory.MUSIC)
                 }
@@ -169,7 +178,7 @@ fun AppNavigation(
                     val query = searchViewModel.uiState.value.searchQuery
                     playerViewModel.play(tracks, index, PlaylistSource.SearchAudio(query))
                 },
-                onToggleTrackAdded = { track -> playerViewModel.toggleTrackAdded(track) },
+                onToggleTrackAdded = { track -> searchViewModel.toggleTrackAdded(track) },
                 onDownloadTrack = { track -> musicViewModel.downloadTrack(track) },
                 onShareTrack = { track ->
                     val url = track.remoteUrl ?: track.url ?: ""
@@ -177,7 +186,7 @@ fun AppNavigation(
                 },
                 onAddToQueue = { track -> playerViewModel.playerManager.addToQueue(track) },
                 onPlayNext = { track -> playerViewModel.playerManager.playNext(track) },
-                currentTrackId = currentTrack?.id,
+                currentTrackStableId = currentTrack?.stableId,
                 downloadedTracks = downloadedTracksSet,
                 viewModel = searchViewModel
             )
@@ -520,10 +529,11 @@ fun AppNavigation(
                 onNavigateToGeneral = { navController.navigate(Routes.SETTINGS_GENERAL) },
                 onNavigateToAppearance = { navController.navigate(Routes.SETTINGS_APPEARANCE) },
                 onNavigateToMusic = { navController.navigate(Routes.SETTINGS_MUSIC) },
+                onNavigateToMatcha = { navController.navigate(Routes.SETTINGS_MATCHA) },
                 onNavigateToDeveloper = { navController.navigate(Routes.SETTINGS_DEVELOPER) },
                 onBack = { navController.popBackStack() },
                 onLogout = {
-                    navController.navigate(Routes.LOGIN) {
+                    navController.navigate(Routes.loginRoute(false)) {
                         popUpTo(Routes.MAIN) { inclusive = true }
                     }
                 }
@@ -533,7 +543,7 @@ fun AppNavigation(
         composable(Routes.SETTINGS_ACCOUNTS) {
             AccountManagementScreen(
                 onAddAccount = {
-                    navController.navigate(Routes.LOGIN)
+                    navController.navigate(Routes.loginRoute(true))
                 },
                 onAccountSwitched = {
                     navController.navigate(Routes.MAIN) {
@@ -617,6 +627,13 @@ fun AppNavigation(
             )
         }
 
+        composable(Routes.SETTINGS_MATCHA) {
+            MatchaSettingsScreen(
+                viewModel = settingsViewModel,
+                onBack = { navController.popBackStack() }
+            )
+        }
+
         composable(Routes.SETTINGS_NAVIGATION) {
             NavigationSettingsScreen(
                 viewModel = settingsViewModel,
@@ -651,7 +668,8 @@ fun AppNavigation(
             ChatScreen(
                 peerId = peerId,
                 title = title,
-                onBack = { navController.popBackStack() }
+                onBack = { navController.popBackStack() },
+                onOpenProfile = { id -> navController.navigate(Routes.profileRoute(id)) }
             )
         }
 

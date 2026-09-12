@@ -89,6 +89,8 @@ fun CommentsScreen(
     val currentTrack by playerViewModel.currentTrack.collectAsState()
     val doubleTapToLike by settingsViewModel.doubleTapToLike.collectAsState()
     val doubleTapTimeout by settingsViewModel.doubleTapTimeout.collectAsState()
+    val nsfwVisibility by settingsViewModel.nsfwVisibility.collectAsState()
+    val nsfwHidingStyle by settingsViewModel.nsfwHidingStyle.collectAsState()
     val context = androidx.compose.ui.platform.LocalContext.current
     val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
     var editingPost by remember { mutableStateOf<Post?>(null) }
@@ -186,7 +188,9 @@ fun CommentsScreen(
                                 onPollVote = { p, answers -> viewModel.votePoll(p, answers) },
                                 onGeoClick = { com.deliriousvoid.openvkmatcha.ui.util.LinkHandler.handleGeo(context, it) },
                                 doubleTapEnabled = doubleTapToLike,
-                                doubleTapTimeout = doubleTapTimeout
+                                doubleTapTimeout = doubleTapTimeout,
+                                nsfwVisibility = nsfwVisibility,
+                                nsfwHidingStyle = nsfwHidingStyle
                             )
                             HorizontalDivider(
                                 thickness = 4.dp,

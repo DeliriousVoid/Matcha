@@ -66,6 +66,7 @@ fun CreateEditNoteScreen(
         Column(
             modifier = Modifier
                 .padding(padding)
+                .imePadding()
                 .padding(16.dp)
                 .fillMaxSize(),
             verticalArrangement = Arrangement.spacedBy(16.dp)

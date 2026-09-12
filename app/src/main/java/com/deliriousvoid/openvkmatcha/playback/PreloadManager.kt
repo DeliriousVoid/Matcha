@@ -1,7 +1,6 @@
 package com.deliriousvoid.openvkmatcha.playback
 
 import android.content.Context
-import android.util.Log
 import androidx.annotation.OptIn
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DataSpec
@@ -12,6 +11,7 @@ import androidx.media3.datasource.cache.LeastRecentlyUsedCacheEvictor
 import androidx.media3.datasource.cache.SimpleCache
 import androidx.core.net.toUri
 import com.deliriousvoid.openvkmatcha.data.model.AudioTrack
+import com.deliriousvoid.openvkmatcha.util.MLog
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -68,7 +68,7 @@ class PreloadManager(private val context: Context) {
                         }
                         dataSource.close()
                     } catch (e: Exception) {
-                        Log.e("PreloadManager", "Preload failed for ${track.stableId}", e)
+                        MLog.e("PreloadManager", "Preload failed for ${track.stableId}", e)
                     }
                 }
                 prefetchJobs[track.stableId] = job

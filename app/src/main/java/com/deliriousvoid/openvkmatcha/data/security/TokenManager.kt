@@ -2,6 +2,7 @@ package com.deliriousvoid.openvkmatcha.data.security
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.net.Uri
 import androidx.security.crypto.MasterKey
 import com.deliriousvoid.openvkmatcha.Constants
 
@@ -30,6 +31,23 @@ class TokenManager(private val context: Context) {
     }
 
     fun getInstance(): String = prefs.getString(KEY_INSTANCE, Constants.DEFAULT_INSTANCE)!!
+
+    fun getWebInstance(): String {
+        val instance = getInstance()
+        return if (instance.contains("://api.")) {
+            instance.replace("://api.", "://")
+        } else {
+            instance
+        }
+    }
+
+    fun getWebInstanceHost(): String {
+        return try {
+            Uri.parse(getWebInstance()).host ?: ""
+        } catch (_: Exception) {
+            ""
+        }
+    }
 
     fun updateAccount(token: String, instance: String) {
         prefs.edit()

@@ -11,6 +11,7 @@ import android.provider.MediaStore
 import android.webkit.MimeTypeMap
 import android.widget.Toast
 import com.deliriousvoid.openvkmatcha.data.model.AudioTrack
+import com.deliriousvoid.openvkmatcha.util.MLog
 import com.mpatric.mp3agic.ID3v24Tag
 import com.mpatric.mp3agic.Mp3File
 import okhttp3.OkHttpClient
@@ -20,7 +21,10 @@ import org.json.JSONObject
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -37,12 +41,15 @@ class DownloadRepository(private val context: Context) {
 
     private var metadataCache = mapOf<String, AudioTrack>()
     private var artistTitleIndex = mapOf<String, AudioTrack>()
+    private val repositoryScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
     init {
-        updateDownloadedFlow()
+        repositoryScope.launch {
+            updateDownloadedFlow()
+        }
     }
 
-    fun updateDownloadedFlow() {
+    suspend fun updateDownloadedFlow() = withContext(Dispatchers.IO) {
         if (hasStoragePermission()) {
             val tracks = getDownloadedTracksFromFiles()
             metadataCache = tracks.associateBy { it.stableId }
@@ -167,7 +174,7 @@ class DownloadRepository(private val context: Context) {
                         }
                     }
                 } catch (e: Exception) {
-                    android.util.Log.e("DownloadRepository", "Error downloading artwork: ${e.message}")
+                    MLog.e("DownloadRepository", "Error downloading artwork: ${e.message}")
                 }
             }
 
@@ -179,7 +186,7 @@ class DownloadRepository(private val context: Context) {
                 tempFile.renameTo(file)
             }
         } catch (e: Exception) {
-            android.util.Log.e("DownloadRepository", "Error writing metadata: ${e.message}")
+            MLog.e("DownloadRepository", "Error writing metadata: ${e.message}")
         }
     }
 
@@ -205,12 +212,12 @@ class DownloadRepository(private val context: Context) {
         }
     }
 
-    fun getDownloadedTracks(): List<AudioTrack> = getDownloadedTracksFromFiles()
+    fun getDownloadedTracks(): List<AudioTrack> = metadataCache.values.toList()
 
-    fun getDownloadedTracksFromFiles(): List<AudioTrack> {
+    suspend fun getDownloadedTracksFromFiles(): List<AudioTrack> = withContext(Dispatchers.IO) {
         val fileSystemTracks = getDownloadedTracksFromFileSystem()
         val mediaStoreTracks = getDownloadedTracksFromMediaStore()
-        return (fileSystemTracks + mediaStoreTracks).distinctBy { it.url }
+        (fileSystemTracks + mediaStoreTracks).distinctBy { it.url }
     }
 
     private fun getDownloadedTracksFromFileSystem(): List<AudioTrack> = try {
@@ -312,13 +319,15 @@ class DownloadRepository(private val context: Context) {
                 }
             }
         } catch (e: Exception) {
-            android.util.Log.e("DownloadRepository", "MediaStore error: ${e.message}")
+            MLog.e("DownloadRepository", "MediaStore error: ${e.message}")
         }
         return tracks
     }
 
     fun refresh() {
-        updateDownloadedFlow()
+        repositoryScope.launch {
+            updateDownloadedFlow()
+        }
     }
 
     private fun getDownloadedTracksInternal(): List<AudioTrack> {
@@ -370,7 +379,7 @@ class DownloadRepository(private val context: Context) {
                 try {
                     context.contentResolver.delete(Uri.parse(url), null, null)
                 } catch (e: Exception) {
-                    android.util.Log.e("DownloadRepository", "Error deleting via MediaStore: ${e.message}")
+                    MLog.e("DownloadRepository", "Error deleting via MediaStore: ${e.message}")
                 }
             } else {
                 val file = File(url)
@@ -401,7 +410,9 @@ class DownloadRepository(private val context: Context) {
                 array.put(obj)
             }
             manifestFile.writeText(array.toString())
-            updateDownloadedFlow()
+            repositoryScope.launch {
+                updateDownloadedFlow()
+            }
         }
     }
 

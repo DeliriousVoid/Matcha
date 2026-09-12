@@ -324,6 +324,7 @@ class FeedViewModel(
 
 data class MessagesUiState(
     val conversations: List<Conversation> = emptyList(),
+    val typingPeers: Map<Int, String> = emptyMap(),
     val isLoading: Boolean = false,
     val error: String? = null,
 )
@@ -331,19 +332,27 @@ data class MessagesUiState(
 class MessagesViewModel(
     private val messagesRepository: MessagesRepository,
     private val settingsViewModel: SettingsViewModel,
-) : ViewModel() {
+    private val longPollManager: com.deliriousvoid.openvkmatcha.util.LongPollManager,
+) : ViewModel(), com.deliriousvoid.openvkmatcha.util.LongPollManager.OnLongPollEventListener {
 
     private val _uiState = MutableStateFlow(MessagesUiState(isLoading = true))
     val uiState: StateFlow<MessagesUiState> = _uiState.asStateFlow()
 
+    private val typingJobs = ConcurrentHashMap<Int, Job>()
+
     init {
         loadConversations()
+        longPollManager.addListener(this)
         viewModelScope.launch {
             AppEvents.accountChanged.collect {
                 _uiState.update { it.copy(conversations = emptyList(), isLoading = true) }
                 loadConversations()
             }
         }
+    }
+
+    override fun onCleared() {
+        longPollManager.removeListener(this)
     }
 
     fun loadConversations() {
@@ -363,46 +372,240 @@ class MessagesViewModel(
         }
     }
 
+    // LongPoll implementation
+    override fun onNewMessage(messageId: Int, peerId: Int, timestamp: Long, text: String, fromId: Int, isOut: Boolean) {
+        _uiState.update { state ->
+            val existing = state.conversations.find { it.peer.id == peerId }
+            if (existing != null) {
+                val updated = existing.copy(
+                    lastMessage = text,
+                    lastMessageDate = timestamp,
+                    unreadCount = if (isOut) existing.unreadCount else existing.unreadCount + 1,
+                    lastMessageId = messageId
+                )
+                state.copy(conversations = (listOf(updated) + state.conversations.filter { it.peer.id != peerId }))
+            } else {
+                viewModelScope.launch { loadConversations() }
+                state
+            }
+        }
+    }
+
+    override fun onMessageRead(peerId: Int, localId: Int) {
+        loadConversations()
+    }
+
+    override fun onMessageEdit(messageId: Int, peerId: Int, newText: String) {
+        loadConversations()
+    }
+
+    override fun onUserTyping(peerId: Int, userId: Int) {
+        _uiState.update { it.copy(typingPeers = it.typingPeers + (peerId to "печатает...")) }
+        typingJobs[peerId]?.cancel()
+        typingJobs[peerId] = viewModelScope.launch {
+            delay(5000)
+            _uiState.update { it.copy(typingPeers = it.typingPeers - peerId) }
+            typingJobs.remove(peerId)
+        }
+    }
+
+    override fun onUserOnline(userId: Int, isOnline: Boolean) {
+        _uiState.update { state ->
+            state.copy(conversations = state.conversations.map {
+                if (it.peer.id == userId) it.copy(peer = it.peer.copy(online = isOnline))
+                else it
+            })
+        }
+    }
+    override fun onNotificationsCountUpdated() {}
 
     companion object {
         fun factory(): ViewModelProvider.Factory = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T {
                 val app = OpenVKMatchaApp.instance
-                return MessagesViewModel(app.messagesRepository, SettingsViewModel(app)) as T
+                return MessagesViewModel(app.messagesRepository, SettingsViewModel(app), app.longPollManager) as T
             }
         }
     }
 }
 
+sealed class ChatScrollEvent {
+    object ScrollToBottom : ChatScrollEvent()
+    data class JumpToId(val id: Int, val isSmooth: Boolean) : ChatScrollEvent()
+}
+
 data class ChatUiState(
     val messages: List<ChatMessage> = emptyList(),
+    val authors: Map<Int, com.deliriousvoid.openvkmatcha.data.model.AuthorInfo> = emptyMap(),
     val inputText: String = "",
     val isLoading: Boolean = false,
     val isSending: Boolean = false,
+    val isLoadingMore: Boolean = false,
+    val hasMore: Boolean = true,
     val error: String? = null,
+    val replyingTo: ChatMessage? = null,
+    val editingMessage: ChatMessage? = null,
+    val isPeerTyping: Boolean = false,
+    val peer: com.deliriousvoid.openvkmatcha.data.model.Peer? = null,
+    val jumpSourceId: Int? = null,
+    val isJumped: Boolean = false,
 )
 
 class ChatViewModel(
     private val messagesRepository: MessagesRepository,
+    private val longPollManager: com.deliriousvoid.openvkmatcha.util.LongPollManager,
     private val peerId: Int,
-) : ViewModel() {
+) : ViewModel(), com.deliriousvoid.openvkmatcha.util.LongPollManager.OnLongPollEventListener {
 
     private val _uiState = MutableStateFlow(ChatUiState(isLoading = true))
     val uiState: StateFlow<ChatUiState> = _uiState.asStateFlow()
 
+    private val _scrollEvents = MutableSharedFlow<ChatScrollEvent>(extraBufferCapacity = 1)
+    val scrollEvents = _scrollEvents.asSharedFlow()
+
+    private var lastTypingTime = 0L
+    private var typingJob: Job? = null
+
     init {
         loadMessages()
+        loadPeerInfo()
+        longPollManager.addListener(this)
+        markAsRead()
     }
 
-    fun updateInput(text: String) = _uiState.update { it.copy(inputText = text) }
-
-    fun loadMessages() {
+    private fun loadPeerInfo() {
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = it.messages.isEmpty(), error = null) }
-            messagesRepository.loadHistory(peerId)
-                .onSuccess { messages ->
-                    _uiState.update { it.copy(messages = messages, isLoading = false) }
+            messagesRepository.getConversationsById(listOf(peerId))
+                .onSuccess { conversations ->
+                    conversations.firstOrNull()?.let { conv ->
+                        _uiState.update { it.copy(peer = conv.peer) }
+                    }
+                }
+        }
+    }
+
+    override fun onCleared() {
+        longPollManager.removeListener(this)
+    }
+
+    fun updateInput(text: String) {
+        _uiState.update { it.copy(inputText = text) }
+        if (text.isNotEmpty()) {
+            val now = System.currentTimeMillis()
+            if (now - lastTypingTime > 4000) {
+                lastTypingTime = now
+                sendTyping()
+            }
+        }
+    }
+
+    fun loadMessages(isRefresh: Boolean = true) {
+        viewModelScope.launch {
+            if (isRefresh) {
+                _uiState.update { it.copy(isLoading = it.messages.isEmpty(), error = null) }
+            } else {
+                _uiState.update { it.copy(isLoadingMore = true) }
+            }
+            
+            val offset = if (isRefresh) 0 else _uiState.value.messages.size
+            messagesRepository.loadHistory(peerId, offset = offset)
+                .onSuccess { history ->
+                    _uiState.update { state ->
+                        val newList = if (isRefresh) history.messages else (state.messages + history.messages).distinctBy { it.id }
+                        state.copy(
+                            messages = newList,
+                            authors = state.authors + history.authors,
+                            isLoading = false,
+                            isLoadingMore = false,
+                            hasMore = history.messages.size >= 30
+                        )
+                    }
+                    if (isRefresh) {
+                        _scrollEvents.tryEmit(ChatScrollEvent.ScrollToBottom)
+                    }
+                }
+                .onFailure { error ->
+                    _uiState.update { it.copy(isLoading = false, isLoadingMore = false, error = error.message) }
+                }
+        }
+    }
+
+    fun sendMessage() {
+        val text = _uiState.value.inputText.trim()
+        if (text.isBlank() && _uiState.value.editingMessage == null) return
+
+        val editing = _uiState.value.editingMessage
+        val replying = _uiState.value.replyingTo
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(isSending = true, error = null) }
+            
+            val result = if (editing != null) {
+                messagesRepository.editMessage(peerId, editing.id, text)
+            } else {
+                messagesRepository.sendMessage(peerId, text, replyTo = replying?.id)
+            }
+
+            result.onSuccess {
+                _uiState.update { it.copy(inputText = "", isSending = false, replyingTo = null, editingMessage = null) }
+                loadMessages(isRefresh = true)
+            }.onFailure { error ->
+                _uiState.update { it.copy(isSending = false, error = error.message) }
+            }
+        }
+    }
+
+    fun deleteMessages(messageIds: List<Int>, forAll: Boolean = true) {
+        viewModelScope.launch {
+            messagesRepository.deleteMessages(peerId, messageIds, forAll).onSuccess {
+                loadMessages()
+            }
+        }
+    }
+
+    fun startReply(message: ChatMessage) {
+        _uiState.update { it.copy(replyingTo = message, editingMessage = null) }
+    }
+
+    fun cancelReply() {
+        _uiState.update { it.copy(replyingTo = null) }
+    }
+
+    fun startEdit(message: ChatMessage) {
+        _uiState.update { it.copy(editingMessage = message, inputText = message.text, replyingTo = null) }
+    }
+
+    fun cancelEdit() {
+        _uiState.update { it.copy(editingMessage = null, inputText = "") }
+    }
+
+    fun jumpToMessage(targetId: Int) {
+        val message = _uiState.value.messages.find { it.id == targetId }
+        if (message != null) {
+            _scrollEvents.tryEmit(ChatScrollEvent.JumpToId(targetId, true))
+        } else {
+            val sourceId = _uiState.value.messages.firstOrNull()?.id
+            _uiState.update { it.copy(jumpSourceId = sourceId) }
+            loadMessagesAround(targetId)
+        }
+    }
+
+    private fun loadMessagesAround(targetId: Int) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true, error = null) }
+            messagesRepository.loadHistory(peerId, offset = -20, count = 40, startMessageId = targetId)
+                .onSuccess { history ->
+                    _uiState.update { state ->
+                        state.copy(
+                            messages = history.messages,
+                            authors = state.authors + history.authors,
+                            isLoading = false,
+                            isJumped = true,
+                            hasMore = true
+                        )
+                    }
+                    _scrollEvents.tryEmit(ChatScrollEvent.JumpToId(targetId, false))
                 }
                 .onFailure { error ->
                     _uiState.update { it.copy(isLoading = false, error = error.message) }
@@ -410,29 +613,87 @@ class ChatViewModel(
         }
     }
 
-    fun sendMessage() {
-        val text = _uiState.value.inputText.trim()
-        if (text.isBlank()) return
-
-        viewModelScope.launch {
-            _uiState.update { it.copy(isSending = true, error = null) }
-            messagesRepository.sendMessage(peerId, text)
-                .onSuccess {
-                    _uiState.update { it.copy(inputText = "", isSending = false) }
-                    loadMessages()
-                }
-                .onFailure { error ->
-                    _uiState.update { it.copy(isSending = false, error = error.message) }
-                }
+    fun returnFromJump() {
+        val sourceId = _uiState.value.jumpSourceId
+        _uiState.update { it.copy(isJumped = false, jumpSourceId = null) }
+        if (sourceId != null && _uiState.value.messages.any { it.id == sourceId }) {
+            _scrollEvents.tryEmit(ChatScrollEvent.JumpToId(sourceId, true))
+        } else {
+            loadMessages(isRefresh = true)
         }
     }
+
+    private fun markAsRead() {
+        viewModelScope.launch { messagesRepository.markAsRead(peerId) }
+    }
+
+    private fun sendTyping() {
+        viewModelScope.launch { messagesRepository.setActivity(peerId) }
+    }
+
+    // LongPoll
+    override fun onNewMessage(messageId: Int, peerId: Int, timestamp: Long, text: String, fromId: Int, isOut: Boolean) {
+        if (peerId == this.peerId) {
+            val newMessage = com.deliriousvoid.openvkmatcha.data.model.ChatMessage(
+                id = messageId,
+                peerId = peerId,
+                fromId = fromId,
+                text = text,
+                date = timestamp,
+                isOutgoing = isOut,
+                isRead = isOut
+            )
+            
+            _uiState.update { state ->
+                if (state.messages.any { it.id == messageId }) return@update state
+                state.copy(messages = (listOf(newMessage) + state.messages).distinctBy { it.id })
+            }
+            _scrollEvents.tryEmit(ChatScrollEvent.ScrollToBottom)
+            markAsRead()
+        }
+    }
+
+    override fun onMessageRead(peerId: Int, localId: Int) {
+        if (peerId == this.peerId) {
+            _uiState.update { state ->
+                state.copy(messages = state.messages.map { 
+                    if (it.id <= localId) it.copy(isRead = true) else it 
+                })
+            }
+        }
+    }
+
+    override fun onMessageEdit(messageId: Int, peerId: Int, newText: String) {
+        if (peerId == this.peerId) {
+            _uiState.update { state ->
+                state.copy(messages = state.messages.map {
+                    if (it.id == messageId) it.copy(text = newText, isEdited = true) else it
+                })
+            }
+        }
+    }
+
+    override fun onUserTyping(peerId: Int, userId: Int) {
+        if (peerId == this.peerId) {
+            typingJob?.cancel()
+            typingJob = viewModelScope.launch {
+                _uiState.update { it.copy(isPeerTyping = true) }
+                delay(5000)
+                _uiState.update { it.copy(isPeerTyping = false) }
+            }
+        }
+    }
+
+    override fun onUserOnline(userId: Int, isOnline: Boolean) {}
+    override fun onNotificationsCountUpdated() {}
 
 
     companion object {
         fun factory(peerId: Int): ViewModelProvider.Factory = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T {
-                return ChatViewModel(OpenVKMatchaApp.instance.messagesRepository, peerId) as T
+                val app = OpenVKMatchaApp.instance
+                return ChatViewModel(app.messagesRepository, app.longPollManager, peerId) as T
             }
         }
     }
@@ -489,7 +750,7 @@ class MusicViewModel(
                 .collect { mode ->
                     val state = _uiState.value
                     val needsLoad = when (mode) {
-                        MusicMode.Main -> state.tracks.isEmpty()
+                        MusicMode.Main -> state.tracks.isEmpty() || state.playlists.isEmpty()
                         MusicMode.Tracks -> state.tracks.isEmpty()
                         MusicMode.Playlists -> state.playlists.isEmpty()
                         MusicMode.Downloaded -> state.downloadedTracks.isEmpty()
@@ -514,7 +775,10 @@ class MusicViewModel(
                             if (state.mode == MusicMode.Main && lastModeBeforeSearch == null) {
                                 lastModeBeforeSearch = MusicMode.Main
                             }
-                            newMode = if (AppEvents.searchCategory.value == SearchCategory.PLAYLISTS) MusicMode.Playlists else MusicMode.Tracks
+                            newMode = when (AppEvents.searchCategory.value) {
+                                SearchCategory.PLAYLISTS -> MusicMode.Playlists
+                                else -> MusicMode.Tracks
+                            }
                         }
                     } else if (lastModeBeforeSearch != null) {
                         newMode = lastModeBeforeSearch!!
@@ -530,7 +794,7 @@ class MusicViewModel(
                 val query = _uiState.value.searchQuery
                 if (query.isNotBlank()) {
                     val newMode = when (category) {
-                        SearchCategory.MUSIC -> MusicMode.Tracks
+                        SearchCategory.MUSIC, SearchCategory.MY_MUSIC -> MusicMode.Tracks
                         SearchCategory.PLAYLISTS -> MusicMode.Playlists
                         else -> null
                     }
@@ -576,15 +840,16 @@ class MusicViewModel(
                 delay(300)
             }
             _uiState.update {
+                val mode = it.mode
                 it.copy(
                     isLoading = if (isManual) false else (isRefresh || (it.tracks.isEmpty() && it.playlists.isEmpty() && it.downloadedTracks.isEmpty() && it.recommendations.isEmpty())),
                     isRefreshing = isManual,
                     canLoadMore = if (isRefresh) true else it.canLoadMore,
                     error = null,
-                    tracks = if (isRefresh && !isManual) emptyList() else it.tracks,
-                    playlists = if (isRefresh && !isManual) emptyList() else it.playlists,
-                    downloadedTracks = if (isRefresh && !isManual) emptyList() else it.downloadedTracks,
-                    recommendations = if (isRefresh && !isManual) emptyList() else it.recommendations,
+                    tracks = if (isRefresh && !isManual && (mode == MusicMode.Main || mode == MusicMode.Tracks)) emptyList() else it.tracks,
+                    playlists = if (isRefresh && !isManual && (mode == MusicMode.Main || mode == MusicMode.Playlists)) emptyList() else it.playlists,
+                    downloadedTracks = if (isRefresh && !isManual && mode == MusicMode.Downloaded) emptyList() else it.downloadedTracks,
+                    recommendations = if (isRefresh && !isManual && mode == MusicMode.Recommendations) emptyList() else it.recommendations,
                     hasStoragePermission = downloadRepository.hasStoragePermission()
                 )
             }
@@ -610,54 +875,73 @@ class MusicViewModel(
 
             val result = when (mode) {
                 MusicMode.Main -> {
-                    val tracksResult = musicRepository.loadMyAudio(
-                        userId = id!!,
-                        offset = if (isRefresh) 0 else _uiState.value.tracks.size,
-                        count = pageSize
-                    )
-                    
-                    if (isRefresh && tracksResult.isSuccess) {
-                        viewModelScope.launch {
-                            musicRepository.loadPlaylists(ownerId = id, count = 15).onSuccess { playlists ->
-                                _uiState.update { it.copy(playlists = playlists) }
-                            }
-                        }
+                    if (isRefresh) {
+                        musicRepository.loadMainMusicData(
+                            userId = id!!,
+                            tracksOffset = 0,
+                            tracksCount = pageSize,
+                            playlistsCount = 15
+                        ).map { (tracks, playlists) ->
+                            _uiState.update { it.copy(playlists = playlists) }
 
-                        if (downloadRepository.hasStoragePermission()) {
-                            viewModelScope.launch {
-                                val downloaded = downloadRepository.getDownloadedTracksFromFiles()
-                                _uiState.update { it.copy(downloadedTracks = downloaded) }
+                            if (downloadRepository.hasStoragePermission()) {
+                                viewModelScope.launch {
+                                    val downloaded = downloadRepository.getDownloadedTracksFromFiles()
+                                    _uiState.update { it.copy(downloadedTracks = downloaded) }
+                                }
                             }
-                        }
-                        
-                        if (listenBrainzEnabled.value) {
-                            viewModelScope.launch {
-                                val token = settingsViewModel.listenBrainzToken.value
-                                if (token.isNotBlank()) {
-                                    val usernameResult = if (lbUsername != null) Result.success(lbUsername!!) 
-                                                       else OpenVKMatchaApp.instance.listenBrainzRepository.validateToken(token)
-                                    
-                                    usernameResult.onSuccess { username ->
-                                        lbUsername = username
-                                        OpenVKMatchaApp.instance.listenBrainzRepository.getRecommendations(username, token)
-                                            .onSuccess { recs ->
-                                                _uiState.update { it.copy(recommendations = recs) }
-                                            }
+                            
+                            if (listenBrainzEnabled.value) {
+                                viewModelScope.launch {
+                                    val token = settingsViewModel.listenBrainzToken.value
+                                    if (token.isNotBlank()) {
+                                        val usernameResult = if (lbUsername != null) Result.success(lbUsername!!) 
+                                                           else OpenVKMatchaApp.instance.listenBrainzRepository.validateToken(token)
+                                        
+                                        usernameResult.onSuccess { username ->
+                                            lbUsername = username
+                                            OpenVKMatchaApp.instance.listenBrainzRepository.getRecommendations(username, token)
+                                                .onSuccess { recs ->
+                                                    _uiState.update { it.copy(recommendations = recs) }
+                                                }
+                                        }
                                     }
                                 }
                             }
+                            tracks
                         }
+                    } else {
+                        musicRepository.loadMyAudio(
+                            userId = id!!,
+                            offset = _uiState.value.tracks.size,
+                            count = pageSize
+                        )
                     }
-                    tracksResult
                 }
                 MusicMode.Tracks -> {
                     val query = _uiState.value.searchQuery
                     if (query.isNotBlank()) {
-                        musicRepository.searchAudio(
-                            query = query,
-                            offset = if (isRefresh) 0 else _uiState.value.tracks.size,
-                            count = pageSize.coerceAtMost(200)
-                        )
+                        if (AppEvents.searchCategory.value == SearchCategory.MY_MUSIC) {
+                            // Local filtering for My Music
+                            // To make it effective, we might need to load more tracks if they aren't loaded
+                            // For now, load first 5000 tracks to search in (optimistic)
+                            musicRepository.loadMyAudio(
+                                userId = id!!,
+                                offset = 0,
+                                count = 5000
+                            ).map { allTracks ->
+                                allTracks.filter { 
+                                    it.artist.contains(query, ignoreCase = true) || 
+                                    it.title.contains(query, ignoreCase = true) 
+                                }
+                            }
+                        } else {
+                            musicRepository.searchAudio(
+                                query = query,
+                                offset = if (isRefresh) 0 else _uiState.value.tracks.size,
+                                count = pageSize.coerceAtMost(200)
+                            )
+                        }
                     } else {
                         musicRepository.loadMyAudio(
                             userId = id!!,
@@ -683,7 +967,14 @@ class MusicViewModel(
                     }
                 }
                 MusicMode.Downloaded -> {
-                    Result.success(downloadRepository.getDownloadedTracksFromFiles())
+                    val query = _uiState.value.searchQuery
+                    Result.success(downloadRepository.getDownloadedTracksFromFiles().let { tracks ->
+                        if (query.isBlank()) tracks
+                        else tracks.filter { 
+                            it.artist.contains(query, ignoreCase = true) || 
+                            it.title.contains(query, ignoreCase = true)
+                        }
+                    })
                 }
                 MusicMode.Recommendations -> {
                     val token = settingsViewModel.listenBrainzToken.value
@@ -717,6 +1008,7 @@ class MusicViewModel(
                                 val downloadRepository = OpenVKMatchaApp.instance.downloadRepository
                                 val tracks = (data as List<AudioTrack>).map { downloadRepository.enrichTrack(it) }
                                 val isSearch = state.searchQuery.isNotBlank()
+                                val isMyMusicSearch = isSearch && AppEvents.searchCategory.value == SearchCategory.MY_MUSIC
                                 val pagedTracks = if (isRefresh) {
                                     tracks
                                 } else {
@@ -731,7 +1023,7 @@ class MusicViewModel(
                                     },
                                     isLoading = false,
                                     isRefreshing = false,
-                                    canLoadMore = tracks.size >= effectivePageSize
+                                    canLoadMore = if (isMyMusicSearch) false else tracks.size >= effectivePageSize
                                 )
                             }
                             MusicMode.Playlists -> {
@@ -892,23 +1184,38 @@ class MusicViewModel(
     }
 
     fun toggleTrackAdded(track: AudioTrack) {
+        val newState = !track.isAdded
+        // Optimistic update
+        _uiState.update { state ->
+            state.copy(
+                tracks = state.tracks.map {
+                    if (it.id == track.id && it.ownerId == track.ownerId) {
+                        it.copy(isAdded = newState)
+                    } else it
+                }
+            )
+        }
+        OpenVKMatchaApp.instance.playerManager.updateTrackAddedStatus(track.id, track.ownerId, newState)
+
         viewModelScope.launch {
-            val result = if (track.isAdded) {
-                musicRepository.deleteAudio(track.id, track.ownerId)
-            } else {
+            val result = if (newState) {
                 musicRepository.addAudio(track.id, track.ownerId)
+            } else {
+                musicRepository.deleteAudio(track.id, track.ownerId)
             }
 
-            result.onSuccess {
+            result.onFailure {
+                // Revert on failure
                 _uiState.update { state ->
                     state.copy(
                         tracks = state.tracks.map {
                             if (it.id == track.id && it.ownerId == track.ownerId) {
-                                it.copy(isAdded = !track.isAdded)
+                                it.copy(isAdded = track.isAdded)
                             } else it
                         }
                     )
                 }
+                OpenVKMatchaApp.instance.playerManager.updateTrackAddedStatus(track.id, track.ownerId, track.isAdded)
             }
         }
     }
@@ -983,6 +1290,7 @@ class ProfileViewModel(
     private val profileRepository: ProfileRepository,
     private val feedRepository: FeedRepository,
     private val settingsViewModel: SettingsViewModel,
+    private val accountManager: com.deliriousvoid.openvkmatcha.data.security.AccountManager,
     private val userIdOrName: String? = null,
 ) : ViewModel() {
 
@@ -1037,16 +1345,30 @@ class ProfileViewModel(
                     canLoadMore = if (refresh) true else it.canLoadMore
                 )
             }
-            val profileResult = if (userIdOrName == null) {
-                profileRepository.loadCurrentUser()
-            } else {
-                profileRepository.loadProfile(userIdOrName)
-            }
+            val offset = if (refresh) 0 else _uiState.value.wallPosts.size
+            val target = userIdOrName ?: "0"
 
-            profileResult
-                .onSuccess { profile ->
-                    _uiState.update { it.copy(profile = profile) }
-                    
+            profileRepository.loadProfileFull(target, offset, 20)
+                .onSuccess { (profile, posts) ->
+                    _uiState.update {
+                        val newList = if (refresh) posts else it.wallPosts + posts
+                        it.copy(
+                            profile = profile,
+                            wallPosts = newList,
+                            isLoading = false,
+                            isRefreshing = false,
+                            canLoadMore = posts.size >= 20
+                        )
+                    }
+
+                    if (userIdOrName == null || userIdOrName == "0" || profile.id == _uiState.value.currentUserId) {
+                        accountManager.updateAccountInfo(
+                            profile.id.toString(),
+                            OpenVKMatchaApp.instance.tokenManager.getInstance(),
+                            profile
+                        )
+                    }
+
                     if (userIdOrName == null && profile.bdate == null) {
                         viewModelScope.launch {
                             profileRepository.getProfileInfo().onSuccess { info ->
@@ -1059,27 +1381,6 @@ class ProfileViewModel(
                                 }
                             }
                         }
-                    }
-
-                    profileRepository.loadUserWall(
-                        userId = profile.id,
-                        offset = if (refresh) 0 else _uiState.value.wallPosts.size,
-                        count = 20
-                    ).onSuccess { posts ->
-                        _uiState.update {
-                            val newList = if (refresh) posts else it.wallPosts + posts
-                            it.copy(
-                                wallPosts = newList,
-                                isLoading = false,
-                                isRefreshing = false,
-                                canLoadMore = posts.size >= 20
-                            )
-                        }
-                    }.onFailure { error ->
-                        if (AppEvents.isNetworkError(error.message)) {
-                            AppEvents.emitNetworkError()
-                        }
-                        _uiState.update { it.copy(isLoading = false, isRefreshing = false, error = error.message) }
                     }
                 }
                 .onFailure { error ->
@@ -1316,7 +1617,13 @@ class ProfileViewModel(
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T {
                 val app = OpenVKMatchaApp.instance
-                return ProfileViewModel(app.profileRepository, app.feedRepository, SettingsViewModel(app), userIdOrName) as T
+                return ProfileViewModel(
+                    app.profileRepository,
+                    app.feedRepository,
+                    SettingsViewModel(app),
+                    app.accountManager,
+                    userIdOrName
+                ) as T
             }
         }
     }
@@ -1513,23 +1820,38 @@ class PlaylistDetailsViewModel(
     }
 
     fun toggleTrackAdded(track: AudioTrack) {
+        val newState = !track.isAdded
+        // Optimistic update
+        _uiState.update { state ->
+            state.copy(
+                tracks = state.tracks.map {
+                    if (it.id == track.id && it.ownerId == track.ownerId) {
+                        it.copy(isAdded = newState)
+                    } else it
+                }
+            )
+        }
+        OpenVKMatchaApp.instance.playerManager.updateTrackAddedStatus(track.id, track.ownerId, newState)
+
         viewModelScope.launch {
-            val result = if (track.isAdded) {
-                musicRepository.deleteAudio(track.id, track.ownerId)
-            } else {
+            val result = if (newState) {
                 musicRepository.addAudio(track.id, track.ownerId)
+            } else {
+                musicRepository.deleteAudio(track.id, track.ownerId)
             }
 
-            result.onSuccess {
+            result.onFailure {
+                // Revert on failure
                 _uiState.update { state ->
                     state.copy(
                         tracks = state.tracks.map {
                             if (it.id == track.id && it.ownerId == track.ownerId) {
-                                it.copy(isAdded = !track.isAdded)
+                                it.copy(isAdded = track.isAdded)
                             } else it
                         }
                     )
                 }
+                OpenVKMatchaApp.instance.playerManager.updateTrackAddedStatus(track.id, track.ownerId, track.isAdded)
             }
         }
     }
@@ -1668,7 +1990,7 @@ class NotificationsViewModel(
             }
 
             repository.loadNotifications(
-                startFrom = startFrom, 
+                startFrom = startFrom,
                 archived = _uiState.value.isArchive
             ).onSuccess { response ->
                 _uiState.update { state ->

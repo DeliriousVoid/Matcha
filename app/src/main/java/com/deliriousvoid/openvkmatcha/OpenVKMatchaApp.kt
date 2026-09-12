@@ -88,6 +88,9 @@ class OpenVKMatchaApp : Application(), ImageLoaderFactory {
     lateinit var notesRepository: NotesRepository
         private set
 
+    lateinit var updateRepository: UpdateRepository
+        private set
+
     lateinit var languageManager: LanguageManager
         private set
 
@@ -163,7 +166,9 @@ class OpenVKMatchaApp : Application(), ImageLoaderFactory {
         videoRepository = VideoRepository(api)
         docsRepository = DocsRepository(api)
         notesRepository = NotesRepository(api)
+        updateRepository = UpdateRepository(this)
         longPollManager = LongPollManager(api, notificationsRepository)
+        ProcessLifecycleOwner.get().lifecycle.addObserver(longPollManager)
         onlineManager = OnlineManager(this, authRepository)
         ProcessLifecycleOwner.get().lifecycle.addObserver(onlineManager)
         preloadManager = PreloadManager(this)

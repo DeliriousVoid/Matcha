@@ -115,6 +115,7 @@ fun CreatePostScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
+                .imePadding()
                 .verticalScroll(rememberScrollState())
         ) {
             if (state.error != null) {

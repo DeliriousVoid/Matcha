@@ -133,7 +133,7 @@ object AppEvents {
         if (_activeExoPlayer.value != null && _activeExoPlayer.value != player) {
             _activeExoPlayer.value?.release()
         }
-        
+
         _activeVideo.value = video
         _activeExoPlayer.value = player
 
@@ -228,6 +228,8 @@ enum class SearchCategory(val titleRes: Int) {
     PEOPLE(R.string.search_category_people),
     GROUPS(R.string.search_category_groups),
     MUSIC(R.string.search_category_music),
+    MY_MUSIC(R.string.music_my_music),
+    DOWNLOADED(R.string.music_downloaded),
     PLAYLISTS(R.string.search_category_playlists);
 
     val title: String get() = OpenVKMatchaApp.instance.languageManager.getStringOrDefault(titleRes)

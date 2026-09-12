@@ -2,7 +2,7 @@ package com.deliriousvoid.openvkmatcha.playback
 
 import android.content.ComponentName
 import android.content.Context
-import android.util.Log
+import com.deliriousvoid.openvkmatcha.util.MLog
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
@@ -21,6 +21,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -60,6 +61,9 @@ class MusicPlayerManager(
     private val _currentPosition = MutableStateFlow(0L)
     val currentPosition = _currentPosition.asStateFlow()
 
+    private val _currentIndex = MutableStateFlow(0)
+    val currentIndex = _currentIndex.asStateFlow()
+
     private val _duration = MutableStateFlow(0L)
     val duration = _duration.asStateFlow()
 
@@ -79,6 +83,7 @@ class MusicPlayerManager(
     private var progressJob: Job? = null
     private var isInternalUpdate = false
     private var lastSeekTime: Long = 0
+    private var skipCount = 0
 
     // Cached settings for performance
     private var lbEnabled: Boolean? = null
@@ -123,17 +128,17 @@ class MusicPlayerManager(
         
         if (!enabled) {
             // Log once per track if disabled
-            if (activeTrackId != track.stableId) Log.d("ListenBrainz", "Scrobbling disabled in settings")
+            if (activeTrackId != track.stableId) MLog.d("ListenBrainz", "Scrobbling disabled in settings")
             return
         }
         if (token.isBlank()) {
-            if (activeTrackId != track.stableId) Log.d("ListenBrainz", "Token is blank, skipping scrobble")
+            if (activeTrackId != track.stableId) MLog.d("ListenBrainz", "Token is blank, skipping scrobble")
             return
         }
 
         // Detect physical track change
         if (activeTrackId != track.stableId) {
-            Log.d("ListenBrainz", "Track changed to ${track.stableId} (${track.title}), resetting flags. Token: ${token.take(5)}...")
+            MLog.d("ListenBrainz", "Track changed to ${track.stableId} (${track.title}), resetting flags. Token: ${token.take(5)}...")
             activeTrackId = track.stableId
             lastNowPlayingId = null
             lastScrobbledId = null
@@ -146,17 +151,17 @@ class MusicPlayerManager(
 
         // Handle "Now Playing"
         if (lastNowPlayingId != track.stableId) {
-            Log.d("ListenBrainz", "Sending playing_now for ${track.title}...")
+            MLog.d("ListenBrainz", "Sending playing_now for ${track.title}...")
             OpenVKMatchaApp.instance.listenBrainzRepository.submitListen(
                 token = token,
                 track = track,
                 type = "playing_now"
             ).onSuccess {
-                Log.d("ListenBrainz", "playing_now SUCCESS")
+                MLog.d("ListenBrainz", "playing_now SUCCESS")
                 lastNowPlayingId = track.stableId
                 lastLbErrorTime = 0
             }.onFailure { e ->
-                Log.e("ListenBrainz", "playing_now FAILED: ${e.message}")
+                MLog.e("ListenBrainz", "playing_now FAILED: ${e.message}")
                 lastLbErrorTime = now
             }
         }
@@ -167,18 +172,18 @@ class MusicPlayerManager(
             val thresholdMs = minOf(durationMs / 2, 4 * 60 * 1000L)
             
             if (accumulatedTimeMs >= thresholdMs) {
-                Log.d("ListenBrainz", "Threshold reached (${accumulatedTimeMs/1000}s / ${thresholdMs/1000}s). Sending scrobble...")
+                MLog.d("ListenBrainz", "Threshold reached (${accumulatedTimeMs/1000}s / ${thresholdMs/1000}s). Sending scrobble...")
                 OpenVKMatchaApp.instance.listenBrainzRepository.submitListen(
                     token = token,
                     track = track,
                     type = "single",
                     listenedAt = System.currentTimeMillis() / 1000
                 ).onSuccess {
-                    Log.d("ListenBrainz", "Scrobble SUCCESS")
+                    MLog.d("ListenBrainz", "Scrobble SUCCESS")
                     lastScrobbledId = track.stableId
                     lastLbErrorTime = 0
                 }.onFailure { e ->
-                    Log.e("ListenBrainz", "Scrobble FAILED: ${e.message}")
+                    MLog.e("ListenBrainz", "Scrobble FAILED: ${e.message}")
                     lastLbErrorTime = now
                 }
             }
@@ -202,9 +207,25 @@ class MusicPlayerManager(
         controller.addListener(object : Player.Listener {
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
                 _currentPosition.value = 0L
+                _currentIndex.value = controller.currentMediaItemIndex
                 lastSeekTime = System.currentTimeMillis()
                 updateCurrentTrack(mediaItem)
                 savePlaybackState()
+                
+                // Auto-skip logic for tracks that are still converting
+                val current = _currentTrack.value
+                if (current != null && !current.isReady) {
+                    skipCount++
+                    if (skipCount < currentPlaylist.size) {
+                        skipToNext()
+                    } else {
+                        // Safety: Avoid infinite loop if all tracks are converting
+                        pause()
+                        skipCount = 0
+                    }
+                } else {
+                    skipCount = 0
+                }
                 
                 // Dynamic loading and preloading
                 handleMediaTransition()
@@ -225,6 +246,7 @@ class MusicPlayerManager(
             }
 
             override fun onTimelineChanged(timeline: androidx.media3.common.Timeline, reason: Int) {
+                _currentIndex.value = controller.currentMediaItemIndex
                 updateQueue()
                 savePlaybackState()
             }
@@ -277,6 +299,7 @@ class MusicPlayerManager(
         _isPlaying.value = controller.isPlaying
         _playWhenReady.value = controller.playWhenReady
         _playbackState.value = controller.playbackState
+        _currentIndex.value = controller.currentMediaItemIndex
         
         if (controller.mediaItemCount == 0) {
             val settingsPrefs = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
@@ -614,10 +637,12 @@ class MusicPlayerManager(
         
         currentPlaylist = finalTracks
         _queue.value = finalTracks
+        skipCount = 0
         
         val mediaItems = finalTracks.map { it.toMediaItem() }
         val finalStartIndex = if (_shuffleMode.value) 0 else startIndex
         
+        _currentIndex.value = finalStartIndex
         controller.setMediaItems(mediaItems, finalStartIndex, 0L)
         controller.prepare()
         controller.play()
@@ -800,6 +825,7 @@ class MusicPlayerManager(
                     // Update UI state immediately
                     currentPlaylist = newTrackOrder
                     _queue.value = newTrackOrder
+                    _currentIndex.value = 0
                     
                     if (currentIndex != 0) {
                         controller.moveMediaItem(currentIndex, 0)
@@ -832,6 +858,7 @@ class MusicPlayerManager(
                         // Update UI state
                         currentPlaylist = originalPlaylist
                         _queue.value = originalPlaylist
+                        _currentIndex.value = currentIndexInOriginal
                         
                         // Batch update the controller
                         if (currentControllerIndex != 0) {
@@ -866,6 +893,7 @@ class MusicPlayerManager(
             newList.add(toIndex, item)
             currentPlaylist = newList
             _queue.value = newList
+            _currentIndex.value = toIndex
         }
 
         controller.moveMediaItem(fromIndex, toIndex)
@@ -885,6 +913,8 @@ class MusicPlayerManager(
     fun skipToQueueItem(index: Int) {
         val controller = controller ?: return
         if (index in 0 until controller.mediaItemCount) {
+            _currentIndex.value = index
+            skipCount = 0
             controller.seekToDefaultPosition(index)
             controller.play()
         }
@@ -950,9 +980,34 @@ class MusicPlayerManager(
             currentPlaylist = currentPlaylist.filterIndexed { i, _ -> i != index }
             originalPlaylist = originalPlaylist.filter { it.stableId != trackToRemove.stableId }
             _queue.value = currentPlaylist
+            _currentIndex.value = controller.currentMediaItemIndex
         }
         
         savePlaybackState()
+    }
+
+    fun updateTrackAddedStatus(trackId: Int, ownerId: Int, isAdded: Boolean) {
+        val stableId = "${ownerId}_$trackId"
+        
+        // Update current track
+        if (_currentTrack.value?.stableId == stableId) {
+            _currentTrack.update { it?.copy(isAdded = isAdded) }
+        }
+
+        // Update internal playlists
+        currentPlaylist = currentPlaylist.map {
+            if (it.stableId == stableId) it.copy(isAdded = isAdded) else it
+        }
+        originalPlaylist = originalPlaylist.map {
+            if (it.stableId == stableId) it.copy(isAdded = isAdded) else it
+        }
+
+        // Update queue
+        _queue.update { list ->
+            list.map {
+                if (it.stableId == stableId) it.copy(isAdded = isAdded) else it
+            }
+        }
     }
 
     private fun AudioTrack.toMediaItem(): MediaItem {

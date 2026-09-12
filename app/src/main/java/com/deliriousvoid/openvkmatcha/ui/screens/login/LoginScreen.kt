@@ -11,6 +11,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -24,7 +26,6 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.rememberAsyncImagePainter
 import com.deliriousvoid.openvkmatcha.R
@@ -38,6 +39,7 @@ import com.deliriousvoid.openvkmatcha.ui.viewmodel.LoginViewModel
 fun LoginScreen(
     onLoginSuccess: () -> Unit,
     onNavigateTo2FA: (String, String, String) -> Unit,
+    onBack: (() -> Unit)? = null,
     viewModel: LoginViewModel = viewModel(factory = LoginViewModel.factory()),
 ) {
     val state by viewModel.uiState.collectAsState()
@@ -166,6 +168,22 @@ fun LoginScreen(
                 Text(
                     text = if (state.useTokenLogin) matchaStringResource(R.string.login_by_credentials) else matchaStringResource(R.string.login_by_token),
                     fontWeight = FontWeight.SemiBold
+                )
+            }
+        }
+
+        if (onBack != null) {
+            IconButton(
+                onClick = onBack,
+                modifier = Modifier
+                    .statusBarsPadding()
+                    .padding(8.dp)
+                    .align(Alignment.TopStart)
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = matchaStringResource(R.string.desc_back),
+                    tint = MaterialTheme.colorScheme.onBackground
                 )
             }
         }

@@ -4,6 +4,7 @@ import com.deliriousvoid.openvkmatcha.OpenVKMatchaApp
 import com.deliriousvoid.openvkmatcha.R
 import com.deliriousvoid.openvkmatcha.data.api.OpenVKApi
 import com.deliriousvoid.openvkmatcha.data.parser.JsonParsers
+import com.deliriousvoid.openvkmatcha.data.model.Post
 import com.deliriousvoid.openvkmatcha.data.model.UserProfile
 import com.deliriousvoid.openvkmatcha.data.model.EditableProfileInfo
 import com.deliriousvoid.openvkmatcha.data.model.GroupSettings
@@ -23,6 +24,19 @@ class ProfileRepository(private val api: OpenVKApi) {
             "fields" to userFields
         ),
     ).map { JsonParsers.parseCurrentUser(it) }
+
+    suspend fun loadExploreData(): Result<Pair<UserProfile, Int>> = api.execute(
+        """
+            var u = API.users.get({"user_ids": "0", "fields": "$userFields"});
+            var b = API.account.getBalance();
+            return { "user": u[0], "balance": b.votes };
+        """.trimIndent()
+    ).map { json ->
+        val response = json.getJSONObject("response")
+        val user = JsonParsers.parseUser(response.getJSONObject("user"))
+        val balance = response.optInt("balance", 0)
+        Pair(user, balance)
+    }
 
     suspend fun getProfileInfo() = api.callMethod("account.getProfileInfo")
         .map { JsonParsers.parseProfileInfo(it) }
@@ -90,6 +104,47 @@ class ProfileRepository(private val api: OpenVKApi) {
         ),
         isPost = true
     )
+
+    suspend fun loadProfileFull(idOrName: String, wallOffset: Int = 0, wallCount: Int = 20): Result<Pair<UserProfile, List<Post>>> = withContext(Dispatchers.IO) {
+        val id = idOrName.toIntOrNull()
+        if (id != null) {
+            val targetId = if (id == 0) "0" else id.toString()
+            val code = if (id >= 0) {
+                """
+                    var u = API.users.get({"user_ids": "$targetId", "fields": "$userFields"});
+                    var w = API.wall.get({"owner_id": u[0].id, "offset": $wallOffset, "count": $wallCount, "extended": 1, "fields": "photo_50,verified"});
+                    return { "profile": u[0], "wall": w };
+                """.trimIndent()
+            } else {
+                """
+                    var g = API.groups.getById({"group_id": ${-id}, "fields": "status,verified,members_count,description,counters,topics,screen_name,site,photo_max,photo_400,photo_200,is_member,is_admin,admin_level,can_post,audios"});
+                    var w = API.wall.get({"owner_id": $id, "offset": $wallOffset, "count": $wallCount, "extended": 1, "fields": "photo_50,verified"});
+                    return { "profile": g[0], "wall": w };
+                """.trimIndent()
+            }
+
+            api.execute(code).map { json ->
+                val response = json.getJSONObject("response")
+                val profileJson = response.getJSONObject("profile")
+                val wallJson = response.getJSONObject("wall")
+                
+                val profile = if (id >= 0) JsonParsers.parseUser(profileJson) else JsonParsers.parseGroup(profileJson)
+                val wall = JsonParsers.parseWall(wallJson)
+                Pair(profile, wall)
+            }
+        } else {
+            // If it's a screen name, we first resolve it, then we can use execute or just fallback
+            // To keep it simple and avoid 3-step execute (resolve -> get -> wall), 
+            // we'll just use the old way for screen names or do a resolve first.
+            api.resolveScreenName(idOrName).mapCatching { json ->
+                val res = JsonParsers.getResponseObject(json)
+                val type = res.optString("type")
+                val objectId = res.optInt("object_id")
+                val finalId = if (type == "user") objectId else -objectId
+                loadProfileFull(finalId.toString(), wallOffset, wallCount).getOrThrow()
+            }
+        }
+    }
 
     suspend fun loadProfile(idOrName: String) = withContext(Dispatchers.IO) {
         val id = idOrName.toIntOrNull()

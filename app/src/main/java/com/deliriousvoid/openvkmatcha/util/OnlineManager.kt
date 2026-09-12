@@ -1,7 +1,6 @@
 package com.deliriousvoid.openvkmatcha.util
 
 import android.content.Context
-import android.util.Log
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import com.deliriousvoid.openvkmatcha.data.repository.AuthRepository
@@ -21,12 +20,12 @@ class OnlineManager(
     fun start() {
         if (isRunning) return
         isRunning = true
-        Log.d("OnlineManager", "Starting Online periodic updates")
+        MLog.d("OnlineManager", "Starting Online periodic updates")
         resume()
     }
 
     fun stop() {
-        Log.d("OnlineManager", "Stopping Online periodic updates")
+        MLog.d("OnlineManager", "Stopping Online periodic updates")
         isRunning = false
         pause()
     }
@@ -39,15 +38,15 @@ class OnlineManager(
                 if (isAppInForeground && !prefs.getBoolean("invisibility", false)) {
                     try {
                         authRepository.setOnline().onSuccess {
-                            Log.d("OnlineManager", "Status updated successfully")
+                            MLog.d("OnlineManager", "Status updated successfully")
                         }.onFailure {
-                            Log.e("OnlineManager", "Failed to update status: ${it.message}")
+                            MLog.e("OnlineManager", "Failed to update status: ${it.message}")
                         }
                     } catch (e: Exception) {
-                        Log.e("OnlineManager", "Error updating status", e)
+                        MLog.e("OnlineManager", "Error updating status", e)
                     }
                 } else {
-                    Log.d("OnlineManager", "Skipping update: foreground=$isAppInForeground, invisibility=${prefs.getBoolean("invisibility", false)}")
+                    MLog.d("OnlineManager", "Skipping update: foreground=$isAppInForeground, invisibility=${prefs.getBoolean("invisibility", false)}")
                 }
                 
                 // VK/OpenVK online lasts for ~15 minutes, 
@@ -63,7 +62,7 @@ class OnlineManager(
     }
 
     override fun onStart(owner: LifecycleOwner) {
-        Log.d("OnlineManager", "App moved to foreground")
+        MLog.d("OnlineManager", "App moved to foreground")
         isAppInForeground = true
         
         // Immediate update on start/resume
@@ -71,9 +70,9 @@ class OnlineManager(
             scope.launch {
                 try {
                     authRepository.setOnline()
-                    Log.d("OnlineManager", "Immediate status update successful")
+                    MLog.d("OnlineManager", "Immediate status update successful")
                 } catch (e: Exception) {
-                    Log.e("OnlineManager", "Immediate update failed", e)
+                    MLog.e("OnlineManager", "Immediate update failed", e)
                 }
             }
         }
@@ -82,7 +81,7 @@ class OnlineManager(
     }
 
     override fun onStop(owner: LifecycleOwner) {
-        Log.d("OnlineManager", "App moved to background")
+        MLog.d("OnlineManager", "App moved to background")
         isAppInForeground = false
         pause()
     }

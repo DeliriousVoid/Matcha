@@ -284,15 +284,42 @@ data class NewsfeedResponse(
 )
 
 data class Conversation(
-    val peerId: Int,
-    val title: String,
+    val peer: Peer,
     val lastMessage: String,
     val lastMessageDate: Long,
     val unreadCount: Int,
-    val peerPhoto: String,
-    val isOnline: Boolean,
-    val isMobileOnline: Boolean = false,
-    val peerVerified: Boolean,
+    val lastMessageId: Int = 0,
+    val inRead: Int = 0,
+    val outRead: Int = 0,
+    val chatSettings: ChatSettings? = null,
+    val isImportant: Boolean = false,
+    val isAnswered: Boolean = false,
+    val isMuted: Boolean = false,
+)
+
+enum class PeerType {
+    USER, GROUP, CHAT
+}
+
+data class Peer(
+    val id: Int,
+    val type: PeerType,
+    val title: String,
+    val photo: String,
+    val online: Boolean = false,
+    val mobileOnline: Boolean = false,
+    val verified: Boolean = false,
+    val lastSeen: LastSeen? = null,
+    val membersCount: Int? = null,
+)
+
+data class ChatSettings(
+    val title: String,
+    val membersCount: Int,
+    val adminId: Int,
+    val photo: String? = null,
+    val pinnedMessage: ChatMessage? = null,
+    val state: String? = null, // "in", "kicked", "left"
 )
 
 data class ChatMessage(
@@ -303,7 +330,83 @@ data class ChatMessage(
     val date: Long,
     val isOutgoing: Boolean,
     val isRead: Boolean,
+    val isEdited: Boolean = false,
+    val isPinned: Boolean = false,
+    val isImportant: Boolean = false,
+    val isDeleted: Boolean = false,
+    val attachments: List<MessageAttachment> = emptyList(),
+    val replyMessage: ChatMessage? = null,
+    val fwdMessages: List<ChatMessage> = emptyList(),
+    val stickerId: Int? = null,
 )
+
+sealed interface MessageAttachment {
+    data class Photo(
+        val id: Int,
+        val ownerId: Int,
+        val url: String,
+        val width: Int,
+        val height: Int,
+        val accessKey: String? = null
+    ) : MessageAttachment
+
+    data class Video(
+        val id: Int,
+        val ownerId: Int,
+        val title: String,
+        val duration: Int,
+        val thumbnailUrl: String?,
+        val accessKey: String? = null
+    ) : MessageAttachment
+
+    data class Audio(
+        val id: Int,
+        val ownerId: Int,
+        val artist: String,
+        val title: String,
+        val duration: Int,
+        val url: String?
+    ) : MessageAttachment
+
+    data class Doc(
+        val id: Int,
+        val ownerId: Int,
+        val title: String,
+        val size: Int,
+        val ext: String,
+        val url: String?,
+        val previewUrl: String? = null,
+        val previewGifUrl: String? = null
+    ) : MessageAttachment
+
+    data class Wall(
+        val id: Int,
+        val ownerId: Int,
+        val text: String,
+        val date: Long
+    ) : MessageAttachment
+
+    data class Sticker(
+        val id: Int,
+        val productId: Int,
+        val url: String,
+        val width: Int = 256,
+        val height: Int = 256
+    ) : MessageAttachment
+
+    data class Gift(
+        val id: Int,
+        val url: String,
+        val message: String? = null
+    ) : MessageAttachment
+
+    data class Link(
+        val url: String,
+        val title: String,
+        val description: String? = null,
+        val photoUrl: String? = null
+    ) : MessageAttachment
+}
 
 data class AudioTrack(
     val id: Int,

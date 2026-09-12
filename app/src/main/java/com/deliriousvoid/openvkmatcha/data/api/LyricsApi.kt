@@ -1,6 +1,6 @@
 package com.deliriousvoid.openvkmatcha.data.api
 
-import android.util.Log
+import com.deliriousvoid.openvkmatcha.util.MLog
 import com.deliriousvoid.openvkmatcha.data.model.LyricsRecord
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -26,7 +26,7 @@ class LyricsApi {
             duration?.let { urlBuilder.append("&duration=$it") }
 
             val url = urlBuilder.toString()
-            Log.d(tag, "Fetching lyrics from: $url")
+            MLog.d(tag, "Fetching lyrics from: $url")
 
             val request = Request.Builder()
                 .url(url)
@@ -35,12 +35,12 @@ class LyricsApi {
 
             client.newCall(request).execute().use { response ->
                 if (response.code == 404) {
-                    Log.d(tag, "Lyrics not found (404)")
+                    MLog.d(tag, "Lyrics not found (404)")
                     return@withContext Result.success(null)
                 }
                 if (!response.isSuccessful) {
                     val errorMsg = "HTTP ${response.code}: ${response.message}"
-                    Log.e(tag, errorMsg)
+                    MLog.e(tag, errorMsg)
                     return@withContext Result.failure(Exception(errorMsg))
                 }
 
@@ -62,7 +62,7 @@ class LyricsApi {
                 )
             }
         } catch (e: Exception) {
-            Log.e(tag, "Error fetching lyrics", e)
+            MLog.e(tag, "Error fetching lyrics", e)
             Result.failure(e)
         }
     }

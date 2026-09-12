@@ -31,6 +31,7 @@ class MusicActionsViewModel(
         
         // Optimistic update
         _trackStates.update { it + (track.stableId to currentTrack.copy(isAdded = newState)) }
+        OpenVKMatchaApp.instance.playerManager.updateTrackAddedStatus(track.id, track.ownerId, newState)
         
         viewModelScope.launch {
             val result = if (newState) {
@@ -41,7 +42,9 @@ class MusicActionsViewModel(
 
             result.onFailure {
                 // Revert on failure
-                _trackStates.update { it + (track.stableId to currentTrack) }
+                val original = _trackStates.value[track.stableId] ?: currentTrack
+                _trackStates.update { it + (track.stableId to original.copy(isAdded = currentTrack.isAdded)) }
+                OpenVKMatchaApp.instance.playerManager.updateTrackAddedStatus(track.id, track.ownerId, currentTrack.isAdded)
             }
         }
     }

@@ -1,7 +1,7 @@
 package com.deliriousvoid.openvkmatcha.data.repository
 
-import android.util.Log
 import com.deliriousvoid.openvkmatcha.data.model.AudioTrack
+import com.deliriousvoid.openvkmatcha.util.MLog
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -172,8 +172,8 @@ class ListenBrainzRepository {
             val authHeader = "Token $trimmedToken"
             
             val submitUrl = "$baseUrl/submit-listens"
-            Log.d("ListenBrainz", "SUBMIT ($type) to $submitUrl")
-            Log.d("ListenBrainz", "Auth: ${authHeader.take(15)}...")
+            MLog.d("ListenBrainz", "SUBMIT ($type) to $submitUrl")
+            MLog.d("ListenBrainz", "Auth: ${authHeader.take(15)}...")
 
             val request = Request.Builder()
                 .url(submitUrl)
@@ -183,7 +183,7 @@ class ListenBrainzRepository {
 
             client.newCall(request).execute().use { response ->
                 val body = response.body?.string()
-                Log.d("ListenBrainz", "RESPONSE (${response.code}): $body")
+                MLog.data("ListenBrainz", "RESPONSE (${response.code})", body)
                 if (response.isSuccessful) {
                     Result.success(Unit)
                 } else {
@@ -191,7 +191,7 @@ class ListenBrainzRepository {
                 }
             }
         } catch (e: Exception) {
-            Log.e("ListenBrainz", "ERROR: ${e.message}", e)
+            MLog.e("ListenBrainz", "ERROR: ${e.message}", e)
             Result.failure(e)
         }
     }

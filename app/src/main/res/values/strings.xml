@@ -662,5 +662,32 @@
     <string name="crash_message_5">попробуйте выключить и включить?..</string>
     <string name="crash_message_6">вот к чему приводит вайбкод</string>
     <string name="crash_message_7">приложение аварийно завершило работу, вызываем отряд фиксиков для починки</string>
+    <string name="attachment">Вложение</string>
+    <string name="edited_marker">ред.</string>
+    <string name="pinned_message">Закреплённое сообщение</string>
     <string name="beta">БЕТА</string>
+
+    <string name="settings_nsfw_category">NSFW</string>
+    <string name="settings_nsfw_visibility">Видимость NSFW</string>
+    <string name="settings_nsfw_visibility_hide">Скрывать</string>
+    <string name="settings_nsfw_visibility_show">Показывать</string>
+    <string name="settings_nsfw_hiding_style">Скрытие NSFW</string>
+    <string name="settings_nsfw_hiding_style_blur">Блюр</string>
+    <string name="settings_nsfw_hiding_style_fill">Заливка</string>
+
+    <string name="restart_dialog_title">Требуется перезапуск</string>
+    <string name="restart_dialog_message">Для вступления изменений в силу необходимо перезапустить приложение.</string>
+    <string name="restart_button">Перезапустить</string>
+    <string name="later_button">Позже</string>
+
+    <string name="settings_category_matcha">Matcha</string>
+    <string name="settings_category_matcha_desc">Версия %1$s</string>
+    <string name="settings_matcha_check_updates">Проверить обновления</string>
+    <string name="settings_matcha_install">Установить</string>
+    <string name="settings_matcha_auto_check">Автоматически проверять обновления при запуске</string>
+    <string name="settings_matcha_ignore_prereleases">Игнорировать пре-релизы</string>
+    <string name="settings_matcha_checking">Проверка обновлений...</string>
+    <string name="settings_matcha_no_updates">У вас установлена последняя версия</string>
+    <string name="settings_matcha_error">Ошибка при проверке обновлений</string>
+    <string name="settings_matcha_new_version">Доступно обновление: %1$s -> %2$s</string>
 </resources>

@@ -8,6 +8,8 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.deliriousvoid.openvkmatcha.OpenVKMatchaApp
 import com.deliriousvoid.openvkmatcha.R
+import com.deliriousvoid.openvkmatcha.data.model.GithubRelease
+import com.deliriousvoid.openvkmatcha.data.repository.UpdateRepository
 import com.deliriousvoid.openvkmatcha.ui.navigation.MainTab
 import com.deliriousvoid.openvkmatcha.ui.theme.AccentColor
 import com.deliriousvoid.openvkmatcha.ui.theme.AppTheme
@@ -24,6 +26,14 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.io.File
+
+enum class NsfwVisibility {
+    HIDE, SHOW
+}
+
+enum class NsfwHidingStyle {
+    BLUR, FILL
+}
 
 enum class AppIconVariant(val title: String, val componentName: String, val iconRes: Int) {
     DEFAULT("Matcha", "com.deliriousvoid.openvkmatcha.MainActivityDefault", R.mipmap.matcha),
@@ -42,6 +52,21 @@ class SettingsViewModel(private val context: Context) : ViewModel() {
     
     private val _autoDownload = MutableStateFlow(prefs.getBoolean("auto_download", false))
     val autoDownload = _autoDownload.asStateFlow()
+
+    private val _autoCheckUpdates = MutableStateFlow(prefs.getBoolean("auto_check_updates", true))
+    val autoCheckUpdates = _autoCheckUpdates.asStateFlow()
+
+    private val _ignorePrereleases = MutableStateFlow(prefs.getBoolean("ignore_prereleases", true))
+    val ignorePrereleases = _ignorePrereleases.asStateFlow()
+
+    private val _latestRelease = MutableStateFlow<GithubRelease?>(null)
+    val latestRelease = _latestRelease.asStateFlow()
+
+    private val _updateChecking = MutableStateFlow(false)
+    val updateChecking = _updateChecking.asStateFlow()
+
+    private val _updateAvailable = MutableStateFlow(false)
+    val updateAvailable = _updateAvailable.asStateFlow()
 
     private val _autoHidePlayer = MutableStateFlow(prefs.getBoolean("auto_hide_player", false))
     val autoHidePlayer = _autoHidePlayer.asStateFlow()
@@ -157,6 +182,24 @@ class SettingsViewModel(private val context: Context) : ViewModel() {
     private val _navBarLabelsVisible = MutableStateFlow(prefs.getBoolean("nav_bar_labels_visible", true))
     val navBarLabelsVisible = _navBarLabelsVisible.asStateFlow()
 
+    private val _nsfwVisibility = MutableStateFlow(
+        try {
+            NsfwVisibility.valueOf(prefs.getString("nsfw_visibility", NsfwVisibility.HIDE.name) ?: NsfwVisibility.HIDE.name)
+        } catch (e: Exception) {
+            NsfwVisibility.HIDE
+        }
+    )
+    val nsfwVisibility = _nsfwVisibility.asStateFlow()
+
+    private val _nsfwHidingStyle = MutableStateFlow(
+        try {
+            NsfwHidingStyle.valueOf(prefs.getString("nsfw_hiding_style", NsfwHidingStyle.BLUR.name) ?: NsfwHidingStyle.BLUR.name)
+        } catch (e: Exception) {
+            NsfwHidingStyle.BLUR
+        }
+    )
+    val nsfwHidingStyle = _nsfwHidingStyle.asStateFlow()
+
     private val _hidePlayedTracks = MutableStateFlow(prefs.getBoolean("hide_played_tracks", true))
     val hidePlayedTracks = _hidePlayedTracks.asStateFlow()
 
@@ -172,6 +215,9 @@ class SettingsViewModel(private val context: Context) : ViewModel() {
     private val _navigateToAboutInstance = MutableSharedFlow<Unit>()
     val navigateToAboutInstance = _navigateToAboutInstance.asSharedFlow()
 
+    private val _showRestartDialog = MutableSharedFlow<Unit>()
+    val showRestartDialog = _showRestartDialog.asSharedFlow()
+
     private var versionClicks = 0
     private var lastClickTime = 0L
 
@@ -185,6 +231,9 @@ class SettingsViewModel(private val context: Context) : ViewModel() {
             loadLanguages()
             loadThemes()
             loadAccents()
+            if (_autoCheckUpdates.value) {
+                checkUpdates(isManual = false)
+            }
         }
     }
 
@@ -340,6 +389,50 @@ class SettingsViewModel(private val context: Context) : ViewModel() {
         prefs.edit().putBoolean("experimental_features", enabled).apply()
     }
 
+    fun setAutoCheckUpdates(enabled: Boolean) {
+        _autoCheckUpdates.value = enabled
+        prefs.edit().putBoolean("auto_check_updates", enabled).apply()
+    }
+
+    fun setIgnorePrereleases(enabled: Boolean) {
+        _ignorePrereleases.value = enabled
+        prefs.edit().putBoolean("ignore_prereleases", enabled).apply()
+    }
+
+    fun checkUpdates(isManual: Boolean = true) {
+        viewModelScope.launch {
+            _updateChecking.value = true
+            val result = OpenVKMatchaApp.instance.updateRepository.getLatestRelease(_ignorePrereleases.value)
+            _updateChecking.value = false
+            
+            result.onSuccess { release ->
+                _latestRelease.value = release
+                if (release != null) {
+                    val available = OpenVKMatchaApp.instance.updateRepository.isUpdateAvailable(release.tagName)
+                    _updateAvailable.value = available
+                    if (isManual && !available) {
+                        _developerHint.emit(OpenVKMatchaApp.instance.languageManager.getStringOrDefault(R.string.settings_matcha_no_updates))
+                    }
+                }
+            }.onFailure { e ->
+                if (isManual) {
+                    _developerHint.emit(OpenVKMatchaApp.instance.languageManager.getStringOrDefault(R.string.settings_matcha_error) + ": ${e.message}")
+                }
+            }
+        }
+    }
+
+    fun downloadUpdate(release: GithubRelease) {
+        val apkAsset = release.assets.find { it.name.endsWith(".apk") } ?: release.assets.firstOrNull()
+        apkAsset?.let { asset ->
+            OpenVKMatchaApp.instance.downloadRepository.downloadFile(
+                asset.browserDownloadUrl,
+                asset.name,
+                "apk"
+            )
+        }
+    }
+
     fun triggerCrash() {
         throw RuntimeException("Debug crash triggered from developer settings")
     }
@@ -375,11 +468,13 @@ class SettingsViewModel(private val context: Context) : ViewModel() {
     fun setPauseVideoOnScroll(enabled: Boolean) {
         _pauseVideoOnScroll.value = enabled
         prefs.edit().putBoolean("pause_video_on_scroll", enabled).apply()
+        viewModelScope.launch { _showRestartDialog.emit(Unit) }
     }
 
     fun setDoubleTapToLike(enabled: Boolean) {
         _doubleTapToLike.value = enabled
         prefs.edit().putBoolean("double_tap_to_like", enabled).apply()
+        viewModelScope.launch { _showRestartDialog.emit(Unit) }
     }
 
     fun setDoubleTapTimeout(timeout: Long) {
@@ -483,6 +578,18 @@ class SettingsViewModel(private val context: Context) : ViewModel() {
         prefs.edit().putBoolean("nav_bar_labels_visible", visible).apply()
     }
 
+    fun setNsfwVisibility(visibility: NsfwVisibility) {
+        _nsfwVisibility.value = visibility
+        prefs.edit().putString("nsfw_visibility", visibility.name).apply()
+        viewModelScope.launch { _showRestartDialog.emit(Unit) }
+    }
+
+    fun setNsfwHidingStyle(style: NsfwHidingStyle) {
+        _nsfwHidingStyle.value = style
+        prefs.edit().putString("nsfw_hiding_style", style.name).apply()
+        viewModelScope.launch { _showRestartDialog.emit(Unit) }
+    }
+
     fun setHidePlayedTracks(enabled: Boolean) {
         _hidePlayedTracks.value = enabled
         prefs.edit().putBoolean("hide_played_tracks", enabled).apply()
@@ -525,6 +632,14 @@ class SettingsViewModel(private val context: Context) : ViewModel() {
         val units = arrayOf("B", "KB", "MB", "GB", "TB")
         val digitGroups = (Math.log10(size.toDouble()) / Math.log10(1024.0)).toInt()
         return String.format("%.2f %s", size / Math.pow(1024.0, digitGroups.toDouble()), units[digitGroups])
+    }
+
+    fun restartApp() {
+        val pm = context.packageManager
+        val intent = pm.getLaunchIntentForPackage(context.packageName)
+        val mainIntent = android.content.Intent.makeRestartActivityTask(intent?.component)
+        context.startActivity(mainIntent)
+        Runtime.getRuntime().exit(0)
     }
 
     companion object {

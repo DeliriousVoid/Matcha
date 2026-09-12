@@ -47,6 +47,7 @@ import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.Smartphone
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Verified
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.PersonRemove
 import androidx.compose.material.icons.filled.Group
@@ -126,6 +127,7 @@ import com.deliriousvoid.openvkmatcha.Constants
 import com.deliriousvoid.openvkmatcha.R
 import com.deliriousvoid.openvkmatcha.data.model.AudioTrack
 import com.deliriousvoid.openvkmatcha.data.model.Conversation
+import com.deliriousvoid.openvkmatcha.data.model.PeerType
 import com.deliriousvoid.openvkmatcha.data.model.Document
 import com.deliriousvoid.openvkmatcha.data.model.Post
 import com.deliriousvoid.openvkmatcha.data.model.Geo
@@ -133,6 +135,8 @@ import com.deliriousvoid.openvkmatcha.data.model.PendingAttachment
 import com.deliriousvoid.openvkmatcha.data.model.AttachmentType
 import com.deliriousvoid.openvkmatcha.ui.theme.LocalExtraColors
 import com.deliriousvoid.openvkmatcha.ui.theme.LocalOpaqueColorScheme
+import com.deliriousvoid.openvkmatcha.ui.viewmodel.NsfwHidingStyle
+import com.deliriousvoid.openvkmatcha.ui.viewmodel.NsfwVisibility
 import com.deliriousvoid.openvkmatcha.ui.util.LinkHandler
 import androidx.compose.ui.res.painterResource
 import com.deliriousvoid.openvkmatcha.ui.util.formatDuration
@@ -384,6 +388,8 @@ fun PostCard(
     onGeoClick: (Geo) -> Unit = {},
     doubleTapEnabled: Boolean = false,
     doubleTapTimeout: Long = 100L,
+    nsfwVisibility: NsfwVisibility = NsfwVisibility.HIDE,
+    nsfwHidingStyle: NsfwHidingStyle = NsfwHidingStyle.BLUR,
 ) {
     RepostContent(
         post = post,
@@ -415,6 +421,8 @@ fun PostCard(
         onGeoClick = onGeoClick,
         doubleTapEnabled = doubleTapEnabled,
         doubleTapTimeout = doubleTapTimeout,
+        nsfwVisibility = nsfwVisibility,
+        nsfwHidingStyle = nsfwHidingStyle,
         depth = 0
     )
 }
@@ -451,6 +459,8 @@ fun RepostContent(
     onGeoClick: (Geo) -> Unit = {},
     doubleTapEnabled: Boolean = false,
     doubleTapTimeout: Long = 100L,
+    nsfwVisibility: NsfwVisibility = NsfwVisibility.HIDE,
+    nsfwHidingStyle: NsfwHidingStyle = NsfwHidingStyle.BLUR,
     depth: Int = 0
 ) {
     var showMenu by remember { mutableStateOf(false) }
@@ -714,7 +724,9 @@ fun RepostContent(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .let {
-                                    if (post.isNsfw && !isRevealed) it.blur(25.dp) else it
+                                    if (post.isNsfw && !isRevealed && nsfwVisibility == NsfwVisibility.HIDE) {
+                                        if (nsfwHidingStyle == NsfwHidingStyle.BLUR) it.blur(25.dp) else it
+                                    } else it
                                 }
                         ) {
                             var viewerInitialIndex by remember { mutableIntStateOf(-1) }
@@ -811,6 +823,8 @@ fun RepostContent(
                                         onPollVote = onPollVote,
                                         onGeoClick = onGeoClick,
                                         isRepost = true,
+                                        nsfwVisibility = nsfwVisibility,
+                                        nsfwHidingStyle = nsfwHidingStyle,
                                         depth = depth + 1
                                     )
                                 } else {
@@ -885,12 +899,13 @@ fun RepostContent(
                             }
                         }
 
-                        if (post.isNsfw && !isRevealed) {
+                        if (post.isNsfw && !isRevealed && nsfwVisibility == NsfwVisibility.HIDE) {
                             NsfwSpoiler(
                                 onClick = {
                                     post.isNsfwRevealed = true
                                     isRevealed = true
                                 },
+                                nsfwHidingStyle = nsfwHidingStyle,
                                 modifier = Modifier.matchParentSize()
                             )
                         }
@@ -1045,6 +1060,7 @@ fun RepostContent(
 @Composable
 fun ConversationItem(
     conversation: Conversation,
+    typingStatus: String? = null,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -1055,19 +1071,39 @@ fun ConversationItem(
             .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box {
-            AsyncImage(
-                model = conversation.peerPhoto,
-                contentDescription = null,
-                modifier = Modifier
-                    .size(52.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.surfaceVariant),
-                contentScale = ContentScale.Crop,
-            )
+        Box(contentAlignment = Alignment.Center) {
+            if (conversation.peer.photo.isNotBlank()) {
+                AsyncImage(
+                    model = conversation.peer.photo,
+                    contentDescription = null,
+                    modifier = Modifier
+                        .size(52.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.surfaceVariant),
+                    contentScale = ContentScale.Crop,
+                )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .size(52.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.surfaceVariant),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = when (conversation.peer.type) {
+                            PeerType.CHAT -> Icons.Default.Group
+                            else -> Icons.Default.Person
+                        },
+                        contentDescription = null,
+                        modifier = Modifier.size(28.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
             OnlineIndicator(
-                isOnline = conversation.isOnline,
-                isMobile = conversation.isMobileOnline,
+                isOnline = conversation.peer.online,
+                isMobile = conversation.peer.mobileOnline,
                 modifier = Modifier.align(Alignment.BottomEnd),
                 dotSize = 10.dp,
                 iconSize = 14.dp
@@ -1077,18 +1113,18 @@ fun ConversationItem(
         Column(modifier = Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    text = conversation.title,
+                    text = conversation.peer.title,
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f, fill = false),
                 )
-                if (conversation.peerVerified || com.deliriousvoid.openvkmatcha.Constants.CUSTOM_VERIFIED_IDS.contains(conversation.peerId)) {
+                if (conversation.peer.verified || com.deliriousvoid.openvkmatcha.Constants.CUSTOM_VERIFIED_IDS.contains(conversation.peer.id)) {
                     Spacer(modifier = Modifier.width(4.dp))
                     VerifiedBadge(
-                        userId = conversation.peerId,
-                        isVerified = conversation.peerVerified,
+                        userId = conversation.peer.id,
+                        isVerified = conversation.peer.verified,
                     )
                 }
                 Spacer(modifier = Modifier.width(8.dp))
@@ -1100,14 +1136,26 @@ fun ConversationItem(
             }
             Spacer(modifier = Modifier.height(4.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = conversation.lastMessage,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f),
-                )
+                if (typingStatus != null) {
+                    TypingIndicator(modifier = Modifier.padding(end = 6.dp))
+                    Text(
+                        text = typingStatus,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                } else {
+                    Text(
+                        text = conversation.lastMessage,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
                 if (conversation.unreadCount > 0) {
                     Spacer(modifier = Modifier.width(8.dp))
                     Box(
@@ -1435,11 +1483,17 @@ fun UserListItem(
 fun NsfwSpoiler(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    nsfwHidingStyle: NsfwHidingStyle = NsfwHidingStyle.BLUR,
 ) {
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(12.dp))
-            .background(Color.Black.copy(alpha = 0.4f))
+            .background(
+                if (nsfwHidingStyle == NsfwHidingStyle.FILL) 
+                    MaterialTheme.colorScheme.surfaceVariant 
+                else 
+                    Color.Black.copy(alpha = 0.4f)
+            )
             .clickable(onClick = onClick)
             .padding(16.dp),
         contentAlignment = Alignment.Center,
@@ -1448,7 +1502,7 @@ fun NsfwSpoiler(
             Icon(
                 imageVector = Icons.Default.Visibility,
                 contentDescription = null,
-                tint = Color.White,
+                tint = if (nsfwHidingStyle == NsfwHidingStyle.FILL) MaterialTheme.colorScheme.onSurfaceVariant else Color.White,
                 modifier = Modifier.size(32.dp)
             )
             Spacer(modifier = Modifier.height(8.dp))
@@ -1456,12 +1510,12 @@ fun NsfwSpoiler(
                 text = stringResource(R.string.nsfw_content),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
-                color = Color.White,
+                color = if (nsfwHidingStyle == NsfwHidingStyle.FILL) MaterialTheme.colorScheme.onSurfaceVariant else Color.White,
             )
             Text(
                 text = stringResource(R.string.nsfw_show),
                 style = MaterialTheme.typography.bodySmall,
-                color = Color.White.copy(alpha = 0.8f),
+                color = (if (nsfwHidingStyle == NsfwHidingStyle.FILL) MaterialTheme.colorScheme.onSurfaceVariant else Color.White).copy(alpha = 0.8f),
             )
         }
     }

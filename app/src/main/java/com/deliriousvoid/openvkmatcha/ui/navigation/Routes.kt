@@ -11,7 +11,7 @@ import android.net.Uri
 
 object Routes {
     const val SPLASH = "splash"
-    const val LOGIN = "login"
+    const val LOGIN = "login?canGoBack={canGoBack}"
     const val MAIN = "main"
     const val NOTIFICATIONS = "notifications"
     const val COMMENTS = "comments/{ownerId}/{postId}"
@@ -23,6 +23,7 @@ object Routes {
     const val SETTINGS_MUSIC = "settings/music"
     const val SETTINGS_IGNORED = "settings/ignored"
     const val SETTINGS_DEVELOPER = "settings/developer"
+    const val SETTINGS_MATCHA = "settings/matcha"
     const val SETTINGS_NAVIGATION = "settings/navigation"
     const val SETTINGS_APP_ICON = "settings/app_icon"
     const val SETTINGS_ABOUT_INSTANCE = "settings/about_instance"
@@ -111,6 +112,8 @@ object Routes {
     fun webviewRoute(url: String, title: String): String {
         return "webview?url=${Uri.encode(url)}&title=${Uri.encode(title)}"
     }
+
+    fun loginRoute(canGoBack: Boolean = false): String = "login?canGoBack=$canGoBack"
 
     fun twoFactorRoute(username: String, password: String, instance: String): String {
         return "two_factor/${Uri.encode(username)}/${Uri.encode(password)}/${Uri.encode(instance)}"

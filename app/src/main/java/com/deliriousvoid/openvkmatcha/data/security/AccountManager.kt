@@ -81,6 +81,32 @@ class AccountManager(context: Context) {
         setCurrentAccountId(account.id)
     }
 
+    fun updateAccountInfo(userId: String, instance: String, profile: UserProfile) {
+        val accounts = getAccounts().toMutableList()
+        var updated = false
+        
+        for (i in accounts.indices) {
+            val acc = accounts[i]
+            if (acc.userId == userId && acc.instance == instance) {
+                accounts[i] = acc.copy(
+                    fullName = profile.fullName,
+                    screenName = profile.screenName,
+                    photoUrl = profile.photo200,
+                    isVerified = profile.verified
+                )
+                updated = true
+            }
+        }
+        
+        if (updated) {
+            saveAccounts(accounts)
+        }
+    }
+
+    fun reorderAccounts(accounts: List<Account>) {
+        saveAccounts(accounts)
+    }
+
     fun getAccounts(): List<Account> {
         val json = prefs.getString(KEY_ACCOUNTS, "[]") ?: "[]"
         val array = JSONArray(json)

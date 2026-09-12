@@ -72,6 +72,15 @@ fun MusicScreen(
     val shuffleMode by playerViewModel.shuffleMode.collectAsState()
     val repeatMode by playerViewModel.repeatMode.collectAsState()
 
+    val isMainMusicPlaying by remember(isPlaying, playbackSource, state.currentUserId) {
+        derivedStateOf {
+            isPlaying && when (val source = playbackSource) {
+                is PlaylistSource.UserAudio -> source.userId == (state.currentUserId ?: 0)
+                else -> false
+            }
+        }
+    }
+
     val mainListState = rememberLazyListState()
     val otherListState = rememberLazyListState()
     val density = androidx.compose.ui.platform.LocalDensity.current
@@ -88,6 +97,21 @@ fun MusicScreen(
                 val threshold = with(density) { 200.dp.toPx() }
                 (listState.firstVisibleItemScrollOffset.toFloat() / threshold).coerceIn(0f, 1f)
             }
+        }
+    }
+
+    val shouldLoadMore = remember {
+        derivedStateOf {
+            val layoutInfo = otherListState.layoutInfo
+            val totalItems = layoutInfo.totalItemsCount
+            val lastVisibleItemIndex = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
+            lastVisibleItemIndex > totalItems - 5 && totalItems > 0
+        }
+    }
+
+    LaunchedEffect(shouldLoadMore.value) {
+        if (shouldLoadMore.value && state.mode != MusicMode.Main) {
+            viewModel.loadMore()
         }
     }
 
@@ -115,6 +139,18 @@ fun MusicScreen(
             else -> null
         }
         AppEvents.setCustomTitle(title)
+        
+        // Update search category based on mode
+        val newCategory = when (state.mode) {
+            MusicMode.Main -> SearchCategory.MUSIC
+            MusicMode.Tracks -> SearchCategory.MY_MUSIC
+            MusicMode.Playlists -> SearchCategory.PLAYLISTS
+            MusicMode.Downloaded -> SearchCategory.DOWNLOADED
+            else -> null
+        }
+        if (newCategory != null) {
+            AppEvents.setSearchCategory(newCategory)
+        }
     }
 
     DisposableEffect(Unit) {
@@ -138,7 +174,7 @@ fun MusicScreen(
                     downloadedTracks = state.downloadedTracks,
                     recommendations = state.recommendations,
                     hasStoragePermission = state.hasStoragePermission,
-                    isPlaying = isPlaying,
+                    isPlaying = isMainMusicPlaying,
                     shuffleMode = shuffleMode,
                     repeatMode = repeatMode,
                     onPlayTrack = { track ->
@@ -170,7 +206,13 @@ fun MusicScreen(
                     listenBrainzEnabled = listenBrainzEnabled,
                     onPlayAll = {
                         val currentSource = PlaylistSource.UserAudio(state.currentUserId ?: 0)
-                        if (state.tracks.isNotEmpty()) {
+                        val isCurrentSourceActive = when (val source = playbackSource) {
+                            is PlaylistSource.UserAudio -> source.userId == (state.currentUserId ?: 0)
+                            else -> false
+                        }
+                        if (isCurrentSourceActive && currentTrack != null) {
+                            playerViewModel.playPause()
+                        } else if (state.tracks.isNotEmpty()) {
                             playerViewModel.play(state.tracks, 0, currentSource)
                         }
                     },

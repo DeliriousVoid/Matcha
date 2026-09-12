@@ -6,11 +6,11 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
-import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.deliriousvoid.openvkmatcha.MainActivity
 import com.deliriousvoid.openvkmatcha.OpenVKMatchaApp
 import com.deliriousvoid.openvkmatcha.R
+import com.deliriousvoid.openvkmatcha.util.MLog
 
 class LongPollService : Service() {
     private val TAG = "LongPollService"
@@ -19,12 +19,12 @@ class LongPollService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        Log.d(TAG, "Service created")
+        MLog.d(TAG, "Service created")
         createNotificationChannel()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        Log.d(TAG, "Service started")
+        MLog.d(TAG, "Service started")
         
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
@@ -42,7 +42,7 @@ class LongPollService : Service() {
                 app.longPollManager.start()
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to start foreground service: ${e.message}")
+            MLog.e(TAG, "Failed to start foreground service: ${e.message}")
             stopSelf()
             return START_NOT_STICKY
         }
@@ -52,13 +52,13 @@ class LongPollService : Service() {
 
     override fun onTimeout(startId: Int, fgsType: Int) {
         super.onTimeout(startId, fgsType)
-        Log.w(TAG, "Foreground service timeout reached for type $fgsType. Stopping service.")
+        MLog.w(TAG, "Foreground service timeout reached for type $fgsType. Stopping service.")
         stopSelf()
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        Log.d(TAG, "Service destroyed")
+        MLog.d(TAG, "Service destroyed")
         val app = application as OpenVKMatchaApp
         app.longPollManager.stop()
     }
@@ -107,7 +107,7 @@ class LongPollService : Service() {
                     context.startService(intent)
                 }
             } catch (e: Exception) {
-                Log.e("LongPollService", "Failed to start: ${e.message}")
+                MLog.e("LongPollService", "Failed to start: ${e.message}")
             }
         }
 

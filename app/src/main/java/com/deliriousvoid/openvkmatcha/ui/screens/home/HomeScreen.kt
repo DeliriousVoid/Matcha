@@ -63,6 +63,8 @@ fun HomeScreen(
     val currentTrack by playerViewModel.currentTrack.collectAsState()
     val doubleTapToLike by settingsViewModel.doubleTapToLike.collectAsState()
     val doubleTapTimeout by settingsViewModel.doubleTapTimeout.collectAsState()
+    val nsfwVisibility by settingsViewModel.nsfwVisibility.collectAsState()
+    val nsfwHidingStyle by settingsViewModel.nsfwHidingStyle.collectAsState()
     val context = LocalContext.current
     val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
     var sharingPost by remember { mutableStateOf<Post?>(null) }
@@ -155,7 +157,9 @@ fun HomeScreen(
                             onPollVote = { post, answerIds -> viewModel.votePoll(post, answerIds) },
                             onGeoClick = { LinkHandler.handleGeo(context, it) },
                             doubleTapEnabled = doubleTapToLike,
-                            doubleTapTimeout = doubleTapTimeout
+                            doubleTapTimeout = doubleTapTimeout,
+                            nsfwVisibility = nsfwVisibility,
+                            nsfwHidingStyle = nsfwHidingStyle
                         )
                         HorizontalDivider(
                             modifier = Modifier.padding(horizontal = 16.dp),

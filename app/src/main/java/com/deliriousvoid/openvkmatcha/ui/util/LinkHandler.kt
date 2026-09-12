@@ -3,12 +3,15 @@ package com.deliriousvoid.openvkmatcha.ui.util
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import com.deliriousvoid.openvkmatcha.util.MLog
 import com.deliriousvoid.openvkmatcha.ui.navigation.Routes
 
 object LinkHandler {
     
     private fun isMirroredHost(host: String): Boolean {
-        return host.contains("openvk.org") || 
+        val currentHost = com.deliriousvoid.openvkmatcha.OpenVKMatchaApp.instance.tokenManager.getWebInstanceHost()
+        return host.contains(currentHost) ||
+               host.contains("openvk.org") || 
                host.contains("openvk.uk") || 
                host.contains("openvk.xyz") || 
                host.contains("openvk.su") ||
@@ -218,7 +221,7 @@ object LinkHandler {
         val uriString = "geo:0,0?q=$lat,$lon$label"
         val uri = Uri.parse(uriString)
         
-        android.util.Log.d("LinkHandler", "Opening geo URI: $uriString")
+        MLog.d("LinkHandler", "Opening geo URI: $uriString")
         
         try {
             val intent = Intent(Intent.ACTION_VIEW, uri).apply {
@@ -226,7 +229,7 @@ object LinkHandler {
             }
             context.startActivity(intent)
         } catch (e: Exception) {
-            android.util.Log.e("LinkHandler", "Failed to open geo intent: ${e.message}")
+            MLog.e("LinkHandler", "Failed to open geo intent: ${e.message}")
             // Fallback to browser/google maps URL
             val webUri = Uri.parse("https://www.google.com/maps/search/?api=1&query=$lat,$lon")
             try {

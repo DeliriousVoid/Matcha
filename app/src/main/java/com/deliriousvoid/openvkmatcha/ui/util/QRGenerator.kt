@@ -2,7 +2,7 @@ package com.deliriousvoid.openvkmatcha.ui.util
 
 import android.graphics.Bitmap
 import android.graphics.Color
-import android.util.Log
+import com.deliriousvoid.openvkmatcha.util.MLog
 import androidx.core.graphics.createBitmap
 import androidx.core.graphics.set
 import com.google.zxing.BarcodeFormat
@@ -21,7 +21,7 @@ object QRGenerator {
             }
             bitmap
         } catch (e: Exception) {
-            Log.e("QRGenerator", "Failed to generate QR code", e)
+            MLog.e("QRGenerator", "Failed to generate QR code", e)
             null
         }
     }

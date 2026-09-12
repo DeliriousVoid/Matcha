@@ -2,7 +2,6 @@ package com.deliriousvoid.openvkmatcha.util
 
 import android.content.Context
 import android.content.SharedPreferences
-import android.util.Log
 import java.io.PrintWriter
 import java.io.StringWriter
 
@@ -22,9 +21,9 @@ class CrashHandler(private val context: Context) : Thread.UncaughtExceptionHandl
                 .putString(KEY_STACK_TRACE, stackTrace)
                 .commit()
 
-            Log.e("CrashHandler", "Crash detected and saved: $stackTrace")
+            MLog.e("CrashHandler", "Crash detected and saved: $stackTrace")
         } catch (e: Exception) {
-            Log.e("CrashHandler", "Error saving crash log", e)
+            MLog.e("CrashHandler", "Error saving crash log", e)
         }
 
         defaultHandler?.uncaughtException(thread, throwable)

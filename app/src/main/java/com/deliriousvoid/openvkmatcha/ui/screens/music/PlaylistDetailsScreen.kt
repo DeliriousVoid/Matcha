@@ -107,7 +107,7 @@ fun PlaylistDetailsScreen(
     val context = androidx.compose.ui.platform.LocalContext.current
     
     val isCurrentPlaylistActive = state.tracks.isNotEmpty() && 
-                                  state.tracks.any { it.id == currentTrack?.id }
+                                  state.tracks.any { it.stableId == currentTrack?.stableId }
     val isPlaylistPlaying = isPlaying && isCurrentPlaylistActive
 
     var localShuffle by remember { mutableStateOf(shuffleMode) }

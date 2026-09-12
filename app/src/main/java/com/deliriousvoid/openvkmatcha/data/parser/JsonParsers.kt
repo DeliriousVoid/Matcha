@@ -3,6 +3,7 @@ package com.deliriousvoid.openvkmatcha.data.parser
 import com.deliriousvoid.openvkmatcha.OpenVKMatchaApp
 import com.deliriousvoid.openvkmatcha.R
 import com.deliriousvoid.openvkmatcha.data.model.*
+import com.deliriousvoid.openvkmatcha.util.MLog
 import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
@@ -187,7 +188,7 @@ object JsonParsers {
     }
 
     fun getResponseItems(response: JSONObject): JSONArray {
-        val resp = response.opt("response")
+        val resp = response.opt("response") ?: response
         return when (resp) {
             is JSONArray -> resp
             is JSONObject -> resp.optJSONArray("items") ?: JSONArray()
@@ -313,53 +314,216 @@ object JsonParsers {
     fun parseConversations(response: JSONObject): List<Conversation> {
         val responseObj = getResponseObject(response)
         val items = responseObj.optJSONArray("items") ?: JSONArray()
-        val profiles = responseObj.optJSONArray("profiles") ?: JSONArray()
-        val groups = responseObj.optJSONArray("groups") ?: JSONArray()
-        val profileMap = parseProfileMap(profiles)
-        val groupMap = parseGroupMap(groups)
+        val profiles = parseProfileMap(responseObj.optJSONArray("profiles") ?: JSONArray())
+        val groups = parseGroupMap(responseObj.optJSONArray("groups") ?: JSONArray())
 
-        return (0 until items.length()).map { index ->
-            val item = items.getJSONObject(index)
-            val conversation = item.getJSONObject("conversation")
-            val lastMessageObj = item.optJSONObject("last_message")
-            val peer = conversation.getJSONObject("peer")
-            val peerId = peer.optInt("id")
-            val peerType = peer.optString("type", "user")
-            val author = if (peerType == "chat") {
-                AuthorInfo(peerId, conversation.optJSONObject("chat_settings")?.optStringClean("title") ?: getString(R.string.title_chat), "", false)
-            } else {
-                resolveAuthor(peerId, profileMap, groupMap)
+        return (0 until items.length()).mapNotNull { index ->
+            try {
+                val item = items.getJSONObject(index)
+                val conversation = item.getJSONObject("conversation")
+                val lastMessageObj = item.optJSONObject("last_message")
+                val peerObj = conversation.getJSONObject("peer")
+                val peerId = peerObj.optInt("id")
+                
+                val peer = parsePeer(peerId, profiles, groups, conversation.optJSONObject("chat_settings"))
+                
+                val chatSettings = conversation.optJSONObject("chat_settings")?.let { cs ->
+                    val photoObj = cs.optJSONObject("photo")
+                    val photoUrl = largestPhotoUrl(photoObj?.optJSONArray("sizes"))
+                        ?: photoObj?.optUrl("photo_200")
+                        ?: photoObj?.optUrl("photo_100")
+                        ?: photoObj?.optUrl("photo_50")
+                        ?: cs.optUrl("photo_200")
+                        ?: cs.optUrl("photo_100")
+                        ?: cs.optUrl("photo_50")
+
+                    ChatSettings(
+                        title = cs.optStringClean("title") ?: peer.title,
+                        membersCount = cs.optInt("members_count"),
+                        adminId = cs.optInt("admin_id"),
+                        photo = photoUrl,
+                        pinnedMessage = cs.optJSONObject("pinned_message")?.let { parseMessageItem(it, peerId) },
+                        state = cs.optString("state")
+                    )
+                }
+
+                Conversation(
+                    peer = peer,
+                    lastMessage = lastMessageObj?.optStringClean("text") ?: "",
+                    lastMessageDate = lastMessageObj?.optLong("date", 0) ?: 0,
+                    unreadCount = conversation.optInt("unread_count", 0),
+                    lastMessageId = conversation.optInt("last_message_id"),
+                    inRead = conversation.optInt("in_read"),
+                    outRead = conversation.optInt("out_read"),
+                    chatSettings = chatSettings,
+                    isImportant = conversation.optBool("important", false),
+                    isAnswered = conversation.optBool("answered", false),
+                    isMuted = conversation.optJSONObject("push_settings")?.has("disabled_until") == true
+                )
+            } catch (e: Exception) {
+                null
             }
-
-            Conversation(
-                peerId = peerId,
-                title = author.name,
-                lastMessage = lastMessageObj?.optStringClean("text") ?: "",
-                lastMessageDate = lastMessageObj?.optLong("date", 0) ?: 0,
-                unreadCount = conversation.optInt("unread_count", 0),
-                peerPhoto = author.avatar,
-                isOnline = author.online,
-                isMobileOnline = author.mobileOnline,
-                peerVerified = author.verified,
-            )
         }
     }
 
-    fun parseMessages(response: JSONObject, peerId: Int): List<ChatMessage> {
+    private fun parsePeer(
+        id: Int, 
+        profiles: Map<Int, AuthorInfo>, 
+        groups: Map<Int, AuthorInfo>,
+        chatSettings: JSONObject? = null
+    ): Peer {
+        return when {
+            id >= 2000000000 -> {
+                val photoObj = chatSettings?.optJSONObject("photo")
+                val photoUrl = largestPhotoUrl(photoObj?.optJSONArray("sizes"))
+                    ?: photoObj?.optUrl("photo_200")
+                    ?: photoObj?.optUrl("photo_100")
+                    ?: photoObj?.optUrl("photo_50")
+                    ?: chatSettings?.optUrl("photo_200")
+                    ?: chatSettings?.optUrl("photo_100")
+                    ?: chatSettings?.optUrl("photo_50")
+
+                Peer(
+                    id = id,
+                    type = PeerType.CHAT,
+                    title = chatSettings?.optStringClean("title") ?: getString(R.string.title_chat),
+                    photo = photoUrl ?: "",
+                    membersCount = chatSettings?.optInt("members_count")
+                )
+            }
+            id < 0 -> {
+                val group = groups[id]
+                Peer(
+                    id = id,
+                    type = PeerType.GROUP,
+                    title = group?.name ?: "club${-id}",
+                    photo = group?.avatar ?: "",
+                    verified = group?.verified ?: false
+                )
+            }
+            else -> {
+                val user = profiles[id]
+                Peer(
+                    id = id,
+                    type = PeerType.USER,
+                    title = user?.name ?: "id$id",
+                    photo = user?.avatar ?: "",
+                    online = user?.online ?: false,
+                    mobileOnline = user?.mobileOnline ?: false,
+                    verified = user?.verified ?: false
+                )
+            }
+        }
+    }
+
+    fun parseMessages(response: JSONObject, peerId: Int): ParsedHistory {
         val responseObj = getResponseObject(response)
         val items = responseObj.optJSONArray("items") ?: JSONArray()
-        return (0 until items.length()).map { index ->
-            val msg = items.getJSONObject(index)
-            ChatMessage(
-                id = msg.optInt("id"),
-                peerId = peerId,
-                fromId = msg.optInt("from_id"),
-                text = msg.optStringClean("text") ?: "",
-                date = msg.optLong("date"),
-                isOutgoing = msg.optInt("out", 0) == 1,
-                isRead = msg.optInt("read_state", 1) == 1,
+        val messages = (0 until items.length()).map { index ->
+            parseMessageItem(items.getJSONObject(index), peerId)
+        }
+
+        val authors = mutableMapOf<Int, AuthorInfo>()
+        responseObj.optJSONArray("profiles")?.let { authors.putAll(parseProfileMap(it)) }
+        responseObj.optJSONArray("groups")?.let { authors.putAll(parseGroupMap(it)) }
+
+        return ParsedHistory(messages, authors)
+    }
+
+    private fun parseMessageItem(msg: JSONObject, peerId: Int): ChatMessage {
+        val attachments = mutableListOf<MessageAttachment>()
+        msg.optJSONArray("attachments")?.let { array ->
+            for (i in 0 until array.length()) {
+                parseAttachment(array.getJSONObject(i))?.let { attachments.add(it) }
+            }
+        }
+
+        return ChatMessage(
+            id = msg.optInt("id"),
+            peerId = peerId,
+            fromId = msg.optInt("from_id"),
+            text = msg.optStringClean("text") ?: "",
+            date = msg.optLong("date"),
+            isOutgoing = msg.optInt("out", 0) == 1,
+            isRead = msg.optInt("read_state", 1) == 1,
+            isEdited = msg.has("update_time"),
+            isPinned = msg.optBool("is_pinned", false),
+            isImportant = msg.optBool("important", false),
+            isDeleted = msg.optBool("is_deleted", false),
+            attachments = attachments,
+            replyMessage = msg.optJSONObject("reply_message")?.let { parseMessageItem(it, peerId) },
+            fwdMessages = msg.optJSONArray("fwd_messages")?.let { array ->
+                (0 until array.length()).map { parseMessageItem(array.getJSONObject(it), peerId) }
+            } ?: emptyList(),
+            stickerId = msg.optJSONObject("sticker")?.optInt("id")
+        )
+    }
+
+    private fun parseAttachment(json: JSONObject): MessageAttachment? {
+        val type = json.optString("type")
+        val data = json.optJSONObject(type) ?: return null
+
+        return when (type) {
+            "photo" -> MessageAttachment.Photo(
+                id = data.optInt("id"),
+                ownerId = data.optInt("owner_id"),
+                url = largestPhotoUrl(data.optJSONArray("sizes")) ?: "",
+                width = data.optInt("width"),
+                height = data.optInt("height"),
+                accessKey = data.optString("access_key")
             )
-        }.reversed()
+            "video" -> MessageAttachment.Video(
+                id = data.optInt("id"),
+                ownerId = data.optInt("owner_id"),
+                title = data.optStringClean("title") ?: "",
+                duration = data.optInt("duration"),
+                thumbnailUrl = largestPhotoUrl(data.optJSONArray("image") ?: data.optJSONArray("sizes")),
+                accessKey = data.optString("access_key")
+            )
+            "audio" -> MessageAttachment.Audio(
+                id = data.optInt("id"),
+                ownerId = data.optInt("owner_id"),
+                artist = data.optStringClean("artist") ?: "",
+                title = data.optStringClean("title") ?: "",
+                duration = data.optInt("duration"),
+                url = data.optUrl("url")
+            )
+            "doc" -> MessageAttachment.Doc(
+                id = data.optInt("id"),
+                ownerId = data.optInt("owner_id"),
+                title = data.optStringClean("title") ?: "",
+                size = data.optInt("size"),
+                ext = data.optString("ext"),
+                url = data.optUrl("url"),
+                previewUrl = data.optJSONObject("preview")?.optJSONObject("photo")?.let { largestPhotoUrl(it.optJSONArray("sizes")) },
+                previewGifUrl = data.optJSONObject("preview")?.optJSONObject("video")?.optUrl("src")
+            )
+            "wall" -> MessageAttachment.Wall(
+                id = data.optInt("id"),
+                ownerId = data.optInt("owner_id"),
+                text = data.optStringClean("text") ?: "",
+                date = data.optLong("date")
+            )
+            "sticker" -> MessageAttachment.Sticker(
+                id = data.optInt("id") ?: data.optInt("sticker_id"),
+                productId = data.optInt("product_id"),
+                url = largestPhotoUrl(data.optJSONArray("images")) ?: "",
+                width = data.optInt("width", 256),
+                height = data.optInt("height", 256)
+            )
+            "gift" -> MessageAttachment.Gift(
+                id = data.optInt("id"),
+                url = data.optUrl("thumb_256") ?: "",
+                message = data.optStringClean("message")
+            )
+            "link" -> MessageAttachment.Link(
+                url = data.optString("url"),
+                title = data.optStringClean("title") ?: "",
+                description = data.optStringClean("description"),
+                photoUrl = data.optJSONObject("photo")?.let { largestPhotoUrl(it.optJSONArray("sizes")) }
+            )
+            else -> null
+        }
     }
 
     fun parseAudio(response: JSONObject): List<AudioTrack> {
@@ -431,14 +595,7 @@ object JsonParsers {
         }
     }
 
-    private data class AuthorInfo(
-        val id: Int,
-        val name: String,
-        val avatar: String,
-        val verified: Boolean,
-        val online: Boolean = false,
-        val mobileOnline: Boolean = false,
-    )
+
 
     private fun resolveAuthor(id: Int, profiles: Map<Int, AuthorInfo>, groups: Map<Int, AuthorInfo>): AuthorInfo {
         if (id > 0) {
@@ -560,7 +717,7 @@ object JsonParsers {
             // 6. Special case for gifts
             if (fromId == 0 && type == "sent_gift") fromId = parent?.optInt("id", 0) ?: 0
             
-            android.util.Log.d("MatchaDebug", "Extracted fromId for type $type: $fromId")
+            MLog.d("MatchaDebug", "Extracted fromId for type $type: $fromId")
             
             // Extract IDs for navigation
             var ownerId = 0
@@ -609,7 +766,7 @@ object JsonParsers {
                 }
             }
             
-            android.util.Log.d("MatchaDebug", "Final IDs for type $type: ownerId=$ownerId, itemId=$itemId")
+            MLog.d("MatchaDebug", "Final IDs for type $type: ownerId=$ownerId, itemId=$itemId")
             
             val author = resolveAuthor(fromId, profileMap, groupMap)
             
@@ -892,7 +1049,7 @@ object JsonParsers {
     }
 
     fun parseGiftsInCategory(response: JSONObject): List<SelectableGift> {
-        android.util.Log.d("MatchaParser", "FULL RESPONSE gifts.getGiftsInCategory: $response")
+        MLog.data("MatchaParser", "FULL RESPONSE gifts.getGiftsInCategory", response.toString())
         val items = getResponseItems(response)
         return (0 until items.length()).map { i ->
             val item = items.getJSONObject(i)
@@ -916,7 +1073,7 @@ object JsonParsers {
             }
 
             if (giftId == 0) {
-                android.util.Log.e("MatchaParser", "Failed to parse gift ID from: $item")
+                MLog.e("MatchaParser", "Failed to parse gift ID from: $item")
             }
 
             SelectableGift(

@@ -146,7 +146,8 @@ fun RepostBottomSheet(
                     headlineContent = { Text(matchaStringResource(R.string.copy_link)) },
                     leadingContent = { Icon(Icons.Outlined.ContentCopy, null) },
                     modifier = Modifier.clickable(enabled = !state.isReposting) {
-                        val link = "https://openvk.org/wall${post.ownerId}_${post.id}"
+                        val webInstance = com.deliriousvoid.openvkmatcha.OpenVKMatchaApp.instance.tokenManager.getWebInstance()
+                        val link = "$webInstance/wall${post.ownerId}_${post.id}"
                         clipboardManager.setText(AnnotatedString(link))
                         onDismiss()
                     }

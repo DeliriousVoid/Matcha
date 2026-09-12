@@ -10,6 +10,7 @@ import com.deliriousvoid.openvkmatcha.data.repository.MusicRepository
 import com.deliriousvoid.openvkmatcha.data.repository.ProfileRepository
 import com.deliriousvoid.openvkmatcha.util.AppEvents
 import com.deliriousvoid.openvkmatcha.util.SearchCategory
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -17,6 +18,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 data class GlobalSearchUiState(
     val results: List<Any> = emptyList(),
@@ -74,26 +76,48 @@ class GlobalSearchViewModel(
             
             val offset = if (isRefresh) 0 else _uiState.value.results.size
 
-            val result = when (category) {
-                SearchCategory.PEOPLE -> profileRepository.searchUsers(query, offset = offset, count = pageSize)
-                SearchCategory.GROUPS -> profileRepository.searchGroups(query, offset = offset, count = pageSize)
-                SearchCategory.MUSIC -> musicRepository.searchAudio(query, offset = offset, count = pageSize)
-                SearchCategory.PLAYLISTS -> musicRepository.searchPlaylists(query, offset = offset, count = pageSize)
+            val result = withContext(Dispatchers.IO) {
+                when (category) {
+                    SearchCategory.PEOPLE -> profileRepository.searchUsers(query, offset = offset, count = pageSize)
+                    SearchCategory.GROUPS -> profileRepository.searchGroups(query, offset = offset, count = pageSize)
+                    SearchCategory.MUSIC -> musicRepository.searchAudio(query, offset = offset, count = pageSize)
+                    SearchCategory.MY_MUSIC -> {
+                        val userId = profileRepository.loadCurrentUser().getOrNull()?.id
+                        if (userId != null) {
+                            // For My Music search, we load a large batch (up to 5000) and filter locally
+                            musicRepository.loadMyAudio(userId, offset = 0, count = 5000).map { tracks ->
+                                tracks.filter { 
+                                    it.artist.contains(query, ignoreCase = true) || 
+                                    it.title.contains(query, ignoreCase = true) 
+                                }
+                            }
+                        } else Result.success(emptyList())
+                    }
+                    SearchCategory.DOWNLOADED -> {
+                        val downloadRepository = OpenVKMatchaApp.instance.downloadRepository
+                        Result.success(downloadRepository.getDownloadedTracks().filter {
+                            it.artist.contains(query, ignoreCase = true) || 
+                            it.title.contains(query, ignoreCase = true)
+                        })
+                    }
+                    SearchCategory.PLAYLISTS -> musicRepository.searchPlaylists(query, offset = offset, count = pageSize)
+                }
             }
 
             result.onSuccess { data ->
-                val enrichedData = if (category == SearchCategory.MUSIC) {
+                val enrichedData = if (category == SearchCategory.MUSIC || category == SearchCategory.MY_MUSIC || category == SearchCategory.DOWNLOADED) {
                     val downloadRepository = OpenVKMatchaApp.instance.downloadRepository
                     (data as List<AudioTrack>).map { downloadRepository.enrichTrack(it) }
                 } else data
 
                 _uiState.update { state ->
                     val newList = if (isRefresh) enrichedData else (state.results + enrichedData)
+                    val isLocalSearch = category == SearchCategory.MY_MUSIC || category == SearchCategory.DOWNLOADED
                     state.copy(
                         results = newList,
                         isLoading = false,
                         isLoadingMore = false,
-                        canLoadMore = data.size >= pageSize
+                        canLoadMore = if (isLocalSearch) false else data.size >= pageSize
                     )
                 }
             }.onFailure { e ->
@@ -105,6 +129,43 @@ class GlobalSearchViewModel(
     fun loadMore() {
         if (_uiState.value.isLoading || _uiState.value.isLoadingMore || !_uiState.value.canLoadMore) return
         performSearch(isRefresh = false)
+    }
+
+    fun toggleTrackAdded(track: AudioTrack) {
+        val newState = !track.isAdded
+        // Optimistic update
+        _uiState.update { state ->
+            state.copy(
+                results = state.results.map {
+                    if (it is AudioTrack && it.id == track.id && it.ownerId == track.ownerId) {
+                        it.copy(isAdded = newState)
+                    } else it
+                }
+            )
+        }
+        OpenVKMatchaApp.instance.playerManager.updateTrackAddedStatus(track.id, track.ownerId, newState)
+
+        viewModelScope.launch {
+            val result = if (newState) {
+                musicRepository.addAudio(track.id, track.ownerId)
+            } else {
+                musicRepository.deleteAudio(track.id, track.ownerId)
+            }
+
+            result.onFailure {
+                // Revert on failure
+                _uiState.update { state ->
+                    state.copy(
+                        results = state.results.map {
+                            if (it is AudioTrack && it.id == track.id && it.ownerId == track.ownerId) {
+                                it.copy(isAdded = track.isAdded)
+                            } else it
+                        }
+                    )
+                }
+                OpenVKMatchaApp.instance.playerManager.updateTrackAddedStatus(track.id, track.ownerId, track.isAdded)
+            }
+        }
     }
 
     companion object {

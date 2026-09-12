@@ -17,6 +17,7 @@ import com.deliriousvoid.openvkmatcha.data.repository.AttachmentsRepository
 import com.deliriousvoid.openvkmatcha.OpenVKMatchaApp
 import com.deliriousvoid.openvkmatcha.R
 import com.deliriousvoid.openvkmatcha.util.AppEvents
+import com.deliriousvoid.openvkmatcha.util.MLog
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -294,7 +295,7 @@ class BoardViewModel(
     private suspend fun loadCommentsInternal(vid: Int, refresh: Boolean = false) {
         boardRepository.getComments(groupId, vid, offset = 0)
             .onSuccess { response ->
-                android.util.Log.d("Board", "Loaded ${response.items.size} comments. First item attachments: img=${response.items.firstOrNull()?.imageUrls?.size}, aud=${response.items.firstOrNull()?.audios?.size}")
+                MLog.d("Board", "Loaded ${response.items.size} comments. First item attachments: img=${response.items.firstOrNull()?.imageUrls?.size}, aud=${response.items.firstOrNull()?.audios?.size}")
                 updateUiStateWithComments {
                     it.copy(
                         comments = response.items,
@@ -443,24 +444,24 @@ class BoardViewModel(
             }
 
             val attachmentsParam = if (attachmentStrings.isNotEmpty()) attachmentStrings.joinToString(",") else null
-            android.util.Log.d("Board", "Posting comment: text='$text', fromGroup=${_uiState.value.fromGroup}, attachments=$attachmentsParam")
+            MLog.d("Board", "Posting comment: text='$text', fromGroup=${_uiState.value.fromGroup}, attachments=$attachmentsParam")
 
             val vid = _uiState.value.resolvedVirtualId
             if (vid == null) {
-                android.util.Log.e("Board", "Cannot post: resolvedVirtualId is null")
+                MLog.e("Board", "Cannot post: resolvedVirtualId is null")
                 _uiState.update { it.copy(isSending = false, error = OpenVKMatchaApp.instance.languageManager.getStringOrDefault(R.string.error_topic_id_not_resolved)) }
                 return@launch
             }
 
             boardRepository.createComment(groupId, vid, text, attachmentsParam, _uiState.value.fromGroup, replyToComment = replying?.id)
                 .onSuccess {
-                    android.util.Log.d("Board", "Post success")
+                    MLog.d("Board", "Post success")
                     _uiState.update { it.copy(inputText = "", pendingAttachments = emptyList(), isSending = false, replyingTo = null) }
                     loadComments(refresh = true)
                     viewModelScope.launch { _scrollToBottom.emit(Unit) }
                 }
                 .onFailure { error ->
-                    android.util.Log.e("Board", "Post failure: ${error.message}")
+                    MLog.e("Board", "Post failure: ${error.message}")
                     _uiState.update { it.copy(isSending = false, error = error.message) }
                 }
         }

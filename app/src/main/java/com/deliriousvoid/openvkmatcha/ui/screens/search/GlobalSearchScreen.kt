@@ -39,7 +39,7 @@ fun GlobalSearchScreen(
     onShareTrack: (AudioTrack) -> Unit,
     onAddToQueue: (AudioTrack) -> Unit,
     onPlayNext: (AudioTrack) -> Unit,
-    currentTrackId: Int?,
+    currentTrackStableId: String?,
     downloadedTracks: Set<String>,
     viewModel: GlobalSearchViewModel = viewModel(factory = GlobalSearchViewModel.factory())
 ) {
@@ -90,7 +90,7 @@ fun GlobalSearchScreen(
                                     onShare = { onShareTrack(item) },
                                     onAddToQueue = { onAddToQueue(item) },
                                     onPlayNext = { onPlayNext(item) },
-                                    isSelected = item.id == currentTrackId,
+                                    isSelected = item.stableId == currentTrackStableId,
                                     isDownloaded = downloadedTracks.contains(item.stableId)
                                 )
                             }

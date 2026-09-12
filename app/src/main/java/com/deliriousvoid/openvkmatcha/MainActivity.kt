@@ -48,13 +48,13 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
-import androidx.core.net.toUri
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -370,6 +370,8 @@ class MainActivity : ComponentActivity() {
                             val isQr = (currentRoute?.startsWith("qr_display/") == true) || (currentRoute == Routes.QR_SCANNER)
                             val isTwoFactor = currentRoute?.startsWith("two_factor/") == true
 
+                            val isKeyboardVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
+
                             val rawTopBarState by AppEvents.topBarState.collectAsState()
                             val topBarState = remember(rawTopBarState, currentRoute) {
                                 val state = rawTopBarState
@@ -476,6 +478,7 @@ class MainActivity : ComponentActivity() {
                             }
 
                             val currentTrack by playerViewModel.currentTrack.collectAsState()
+                            val currentIndex by playerViewModel.currentIndex.collectAsState()
                             val isPlaying by playerViewModel.isPlaying.collectAsState()
                             val playbackState by playerViewModel.playbackState.collectAsState()
 
@@ -535,6 +538,7 @@ class MainActivity : ComponentActivity() {
                                     repeatMode = repeatMode,
                                     shuffleMode = shuffleMode,
                                     queue = queue,
+                                    currentIndex = currentIndex,
                                     hidePlayedTracks = hidePlayedTracks,
                                     playerViewModel = playerViewModel,
                                     appTheme = theme,
@@ -572,6 +576,12 @@ class MainActivity : ComponentActivity() {
 
                                                     if (topBarState?.customContent != null) {
                                                         topBarState?.customContent?.invoke()
+                                                    } else if (isChat && topBarState == null) {
+                                                        // Chat transition fallback to prevent jumping
+                                                        val title = navBackStackEntry?.arguments?.getString("title") ?: matchaStringResource(R.string.title_chat)
+                                                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                                            Text(title, style = MaterialTheme.typography.titleMedium, maxLines = 1, modifier = Modifier.basicMarquee())
+                                                        }
                                                     } else if (topBarState?.isSearchActive == true || (isSearchActive && ((isMainScreen && selectedTab == MainTab.Music) || isFriends || isGroups)) || isSearch || isMusicSearch) {
                                                         val placeholderText = when {
                                                             isSearch || isMusicSearch -> matchaStringResource(R.string.search_placeholder_category, globalSearchCategory.title.lowercase())
@@ -627,7 +637,6 @@ class MainActivity : ComponentActivity() {
                                                                 } else selectedTab.title
                                                             }
                                                             isPlaylistDetails -> navBackStackEntry?.arguments?.getString("title") ?: matchaStringResource(R.string.title_playlist)
-                                                            isChat -> navBackStackEntry?.arguments?.getString("title") ?: matchaStringResource(R.string.title_chat)
                                                             isNotifications && !isOfflineMode -> matchaStringResource(R.string.title_notifications)
                                                             isComments -> matchaStringResource(R.string.title_comments)
                                                             currentRoute == Routes.SETTINGS -> matchaStringResource(R.string.title_settings)
@@ -635,6 +644,7 @@ class MainActivity : ComponentActivity() {
                                                             currentRoute == Routes.SETTINGS_APPEARANCE -> matchaStringResource(R.string.title_settings_appearance)
                                                             currentRoute == Routes.SETTINGS_MUSIC -> matchaStringResource(R.string.title_settings_music)
                                                             currentRoute == Routes.SETTINGS_DEVELOPER -> matchaStringResource(R.string.title_settings_developer)
+                                                            currentRoute == Routes.SETTINGS_MATCHA -> matchaStringResource(R.string.settings_category_matcha)
                                                             currentRoute == Routes.SETTINGS_ABOUT_INSTANCE -> matchaStringResource(R.string.title_settings_about_instance)
                                                             isUpload -> matchaStringResource(R.string.title_upload_audio)
                                                             isProfile -> matchaStringResource(R.string.title_profile)
@@ -678,7 +688,7 @@ class MainActivity : ComponentActivity() {
                                                             isPhotos -> navBackStackEntry?.arguments?.getString("title") ?: matchaStringResource(R.string.title_photos)
                                                             else -> ""
                                                         }
-                                                        if (titleStr.isNotEmpty()) Text(titleStr, maxLines = 1, modifier = Modifier.basicMarquee())
+                                                        if (titleStr.isNotEmpty()) Text(titleStr, style = MaterialTheme.typography.titleMedium, maxLines = 1, modifier = Modifier.basicMarquee())
                                                     }
                                                 },
                                                 navigationIcon = {
@@ -689,7 +699,7 @@ class MainActivity : ComponentActivity() {
                                                         Row(verticalAlignment = Alignment.CenterVertically) {
                                                             if (isSearch || isMusicSearch || (isSearchActive && ((isMainScreen && selectedTab == MainTab.Music) || isFriends || isGroups))) {
                                                                 IconButton(
-                                                                    onClick = { 
+                                                                    onClick = {
                                                                         if (isSearch || isMusicSearch) {
                                                                             navController.popBackStack()
                                                                         } else {
@@ -703,7 +713,7 @@ class MainActivity : ComponentActivity() {
                                                                 }
                                                             } else if (((isMainScreen && selectedTab == MainTab.Music) || isFriends || isGroups) && !isSearchActive && !isOfflineMode) {
                                                                 if (isFriends || isGroups || (isMainScreen && selectedTab == MainTab.Music && musicState.mode != MusicMode.Main)) {
-                                                                    IconButton(onClick = { 
+                                                                    IconButton(onClick = {
                                                                         if (isMainScreen && selectedTab == MainTab.Music && musicState.mode != MusicMode.Main) {
                                                                             musicViewModel.setMode(MusicMode.Main)
                                                                         } else {
@@ -756,20 +766,27 @@ class MainActivity : ComponentActivity() {
                                                         topBarState?.actions?.invoke(this)
                                                     } else {
                                                         if (isSearch || isMusicSearch || (isSearchActive && isMainScreen && selectedTab == MainTab.Music)) {
-                                                            Box {
-                                                                IconButton(onClick = { showCategoryMenu = true }) { Icon(Icons.Filled.Tune, matchaStringResource(R.string.desc_search_category)) }
-                                                                DropdownMenu(expanded = showCategoryMenu, onDismissRequest = { showCategoryMenu = false }) {
-                                                                    val availableCategories = if (isMusicSearch || (isMainScreen && selectedTab == MainTab.Music)) {
-                                                                        listOf(SearchCategory.MUSIC, SearchCategory.PLAYLISTS)
-                                                                    } else {
-                                                                        SearchCategory.entries
-                                                                    }
-                                                                    for (cat in availableCategories) {
-                                                                        DropdownMenuItem(
-                                                                            text = { Text(cat.title) },
-                                                                            onClick = { AppEvents.setSearchCategory(cat); showCategoryMenu = false },
-                                                                            trailingIcon = { if (globalSearchCategory == cat) Icon(Icons.Default.Check, null) }
-                                                                        )
+                                                            val availableCategories = if (isMusicSearch || (isMainScreen && selectedTab == MainTab.Music)) {
+                                                                if (musicState.mode == MusicMode.Downloaded) {
+                                                                    emptyList()
+                                                                } else {
+                                                                    listOf(SearchCategory.MUSIC, SearchCategory.MY_MUSIC, SearchCategory.PLAYLISTS)
+                                                                }
+                                                            } else {
+                                                                SearchCategory.entries
+                                                            }
+
+                                                            if (availableCategories.isNotEmpty()) {
+                                                                Box {
+                                                                    IconButton(onClick = { showCategoryMenu = true }) { Icon(Icons.Filled.Tune, matchaStringResource(R.string.desc_search_category)) }
+                                                                    DropdownMenu(expanded = showCategoryMenu, onDismissRequest = { showCategoryMenu = false }) {
+                                                                        for (cat in availableCategories) {
+                                                                            DropdownMenuItem(
+                                                                                text = { Text(cat.title) },
+                                                                                onClick = { AppEvents.setSearchCategory(cat); showCategoryMenu = false },
+                                                                                trailingIcon = { if (globalSearchCategory == cat) Icon(Icons.Default.Check, null) }
+                                                                            )
+                                                                        }
                                                                     }
                                                                 }
                                                             }
@@ -810,20 +827,6 @@ class MainActivity : ComponentActivity() {
                                                                 navController.navigate(Routes.SETTINGS)
                                                             }) { Icon(Icons.Default.Settings, matchaStringResource(R.string.title_settings)) }
                                                         }
-                                                        var showMenu by remember { mutableStateOf(false) }
-                                                        val context = LocalContext.current
-                                                        val baseUrl = OpenVKMatchaApp.instance.api.baseUrl
-                                                        if (isChat) {
-                                                            Box {
-                                                                IconButton(onClick = { showMenu = true }) { Icon(Icons.Default.MoreVert, matchaStringResource(R.string.desc_more)) }
-                                                                DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
-                                                                    val peerId = navBackStackEntry?.arguments?.getInt("peerId") ?: 0
-                                                                    val currentUrl = "$baseUrl/im?sel=$peerId"
-                                                                    DropdownMenuItem(text = { Text(matchaStringResource(R.string.copy_link)) }, onClick = { showMenu = false; clipboardManager.setText(AnnotatedString(currentUrl)) })
-                                                                    DropdownMenuItem(text = { Text(matchaStringResource(R.string.open_in_browser)) }, onClick = { showMenu = false; context.startActivity(Intent(Intent.ACTION_VIEW, currentUrl.toUri())) })
-                                                                }
-                                                            }
-                                                        }
                                                     }
                                                 },
                                                 colors = TopAppBarDefaults.topAppBarColors(
@@ -858,8 +861,8 @@ class MainActivity : ComponentActivity() {
                                     }
                                 },
                                 bottomBar = {
-                                    val shouldShowNavBar = (isMainScreen || isSearch || isMusicSearch || isPlaylistDetails || isListenBrainzPlaylist || isProfile || isFriends || isGroups || isUserMusic || isGifts || isFollowers || isSendGift || isCreatePost || isVideos || isDocuments || isNotes || isNoteDetails || isEvents || isWebView || isTransfer || isTopics || isTopicComments || isEditProfile || isEditGroup || isPhotoAlbums || isPhotos || isUpload) && !isQr && currentRoute != Routes.GRAFFITI
-                                    val shouldShowPlayer = currentRoute != Routes.SPLASH && currentRoute != Routes.LOGIN && !isTwoFactor && currentRoute != Routes.SETTINGS && currentRoute?.startsWith("settings/") != true && currentRoute != Routes.NOTIFICATIONS && currentRoute?.startsWith("comments/") != true && currentRoute?.startsWith("topic_comments/") != true && !isEditProfile && !isEditGroup && !isPhotoAlbums && !isPhotos && !isQr && currentRoute != Routes.GRAFFITI && currentTrack != null
+                                    val shouldShowNavBar = (isMainScreen || isSearch || isMusicSearch || isPlaylistDetails || isListenBrainzPlaylist || isProfile || isFriends || isGroups || isUserMusic || isGifts || isFollowers || isSendGift || isCreatePost || isVideos || isDocuments || isNotes || isNoteDetails || isEvents || isWebView || isTransfer || isTopics || isTopicComments || isEditProfile || isEditGroup || isPhotoAlbums || isPhotos || isUpload) && !isQr && currentRoute != Routes.GRAFFITI && !isKeyboardVisible
+                                    val shouldShowPlayer = currentRoute != Routes.SPLASH && currentRoute != Routes.LOGIN && !isTwoFactor && currentRoute != Routes.SETTINGS && currentRoute?.startsWith("settings/") != true && currentRoute != Routes.NOTIFICATIONS && currentRoute?.startsWith("comments/") != true && currentRoute?.startsWith("topic_comments/") != true && !isEditProfile && !isEditGroup && !isPhotoAlbums && !isPhotos && !isQr && currentRoute != Routes.GRAFFITI && currentTrack != null && !isKeyboardVisible
                                     
                                     Surface(color = MaterialTheme.colorScheme.surface, tonalElevation = 0.dp) {
                                         Column {
@@ -876,6 +879,7 @@ class MainActivity : ComponentActivity() {
                                                     isPlaying = isPlaying,
                                                     isBuffering = isBuffering,
                                                     queue = queue,
+                                                    currentIndex = currentIndex,
                                                     repeatMode = repeatMode,
                                                     artworkCache = artworkCache,
                                                     onPlayPause = { playerViewModel.playPause() },

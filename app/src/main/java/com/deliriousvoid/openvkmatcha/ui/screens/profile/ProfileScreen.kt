@@ -117,6 +117,8 @@ fun ProfileScreen(
     val state by viewModel.uiState.collectAsState()
     val doubleTapToLike by settingsViewModel.doubleTapToLike.collectAsState()
     val doubleTapTimeout by settingsViewModel.doubleTapTimeout.collectAsState()
+    val nsfwVisibility by settingsViewModel.nsfwVisibility.collectAsState()
+    val nsfwHidingStyle by settingsViewModel.nsfwHidingStyle.collectAsState()
     val coroutineScope = rememberCoroutineScope()
     val musicActionsState by musicActionsViewModel.trackStates.collectAsState()
     val downloadedTracks by musicActionsViewModel.downloadedTracks.collectAsState()
@@ -234,6 +236,8 @@ fun ProfileScreen(
                     onGeoClick = { com.deliriousvoid.openvkmatcha.ui.util.LinkHandler.handleGeo(context, it) },
                     doubleTapToLike = doubleTapToLike,
                     doubleTapTimeout = doubleTapTimeout,
+                    nsfwVisibility = nsfwVisibility,
+                    nsfwHidingStyle = nsfwHidingStyle,
                     musicActionsViewModel = musicActionsViewModel,
                     musicActionsState = musicActionsState,
                     playerViewModel = playerViewModel,
@@ -330,6 +334,8 @@ private fun ProfileContent(
     onGeoClick: (com.deliriousvoid.openvkmatcha.data.model.Geo) -> Unit = {},
     doubleTapToLike: Boolean = false,
     doubleTapTimeout: Long = 100L,
+    nsfwVisibility: com.deliriousvoid.openvkmatcha.ui.viewmodel.NsfwVisibility = com.deliriousvoid.openvkmatcha.ui.viewmodel.NsfwVisibility.HIDE,
+    nsfwHidingStyle: com.deliriousvoid.openvkmatcha.ui.viewmodel.NsfwHidingStyle = com.deliriousvoid.openvkmatcha.ui.viewmodel.NsfwHidingStyle.BLUR,
     onReportClick: (UserProfile) -> Unit = {},
     onIgnoreClick: (UserProfile) -> Unit = {},
     onBlacklistClick: (UserProfile) -> Unit = {},
@@ -725,7 +731,9 @@ private fun ProfileContent(
                 onPollVote = onPollVote,
                 onGeoClick = onGeoClick,
                 doubleTapEnabled = doubleTapToLike,
-                doubleTapTimeout = doubleTapTimeout
+                doubleTapTimeout = doubleTapTimeout,
+                nsfwVisibility = nsfwVisibility,
+                nsfwHidingStyle = nsfwHidingStyle
             )
             HorizontalDivider(
                 modifier = Modifier.padding(horizontal = 16.dp),

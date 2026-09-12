@@ -78,4 +78,19 @@ class MarkdownParserTest {
         assertEquals(1, mentions.size)
         assertEquals("1", mentions[0].item)
     }
+
+    @Test
+    fun testUrlsWithSpecialChars() {
+        val text1 = "https://monitoring-css.ru/server/147.45.71.214:27015/"
+        val annotated1 = MarkdownParser.parse(text1, primaryColor)
+        val urls1 = annotated1.getStringAnnotations("URL", 0, text1.length)
+        assertEquals(1, urls1.size)
+        assertEquals(text1, urls1[0].item)
+
+        val text2 = "https://www.youtube.com/@Mazillaz.official"
+        val annotated2 = MarkdownParser.parse(text2, primaryColor)
+        val urls2 = annotated2.getStringAnnotations("URL", 0, text2.length)
+        assertEquals(1, urls2.size)
+        assertEquals(text2, urls2[0].item)
+    }
 }

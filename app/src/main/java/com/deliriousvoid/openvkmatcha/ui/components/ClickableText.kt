@@ -181,15 +181,16 @@ fun ParsedText(
                                         .firstOrNull()
 
                                     if (annotation != null) {
+                                        val webInstance = com.deliriousvoid.openvkmatcha.OpenVKMatchaApp.instance.tokenManager.getWebInstance()
                                         val url = when (annotation.first) {
                                             "URL" -> annotation.second
-                                            "PROFILE" -> "https://openvk.org/${if (annotation.second.startsWith("-")) "club${annotation.second.substring(1)}" else if (annotation.second.all { it.isDigit() }) "id${annotation.second}" else annotation.second}"
-                                            "WALL" -> "https://openvk.org/wall${annotation.second}"
-                                            "MUSIC" -> "https://openvk.org/audios${annotation.second}"
-                                            "PLAYLIST" -> "https://openvk.org/playlist${annotation.second}"
+                                            "PROFILE" -> "$webInstance/${if (annotation.second.startsWith("-")) "club${annotation.second.substring(1)}" else if (annotation.second.all { it.isDigit() }) "id${annotation.second}" else annotation.second}"
+                                            "WALL" -> "$webInstance/wall${annotation.second}"
+                                            "MUSIC" -> "$webInstance/audios${annotation.second}"
+                                            "PLAYLIST" -> "$webInstance/playlist${annotation.second}"
                                             "MENTION" -> {
                                                 val id = annotation.second.toIntOrNull() ?: 0
-                                                if (id > 0) "https://openvk.org/id$id" else "https://openvk.org/club${-id}"
+                                                if (id > 0) "$webInstance/id$id" else "$webInstance/club${-id}"
                                             }
 
                                             else -> null

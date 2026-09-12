@@ -41,21 +41,18 @@ class ExploreViewModel(
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, error = null) }
             
-            val userResult = profileRepository.loadCurrentUser()
-            val balanceResult = OpenVKMatchaApp.instance.api.callMethod("account.getBalance")
-
-            userResult.onSuccess { user ->
-                _uiState.update { it.copy(user = user) }
+            profileRepository.loadExploreData().onSuccess { (user, balance) ->
+                _uiState.update { it.copy(
+                    user = user,
+                    balance = balance,
+                    isLoading = false
+                ) }
             }.onFailure { error ->
-                _uiState.update { it.copy(error = error.message) }
+                _uiState.update { it.copy(
+                    isLoading = false,
+                    error = error.message
+                ) }
             }
-
-            balanceResult.onSuccess { json ->
-                val votes = json.optJSONObject("response")?.optInt("votes", 0) ?: 0
-                _uiState.update { it.copy(balance = votes) }
-            }
-
-            _uiState.update { it.copy(isLoading = false) }
         }
     }
 

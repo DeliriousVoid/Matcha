@@ -3,8 +3,22 @@ package com.deliriousvoid.openvkmatcha.data.repository
 import com.deliriousvoid.openvkmatcha.data.api.OpenVKApi
 import com.deliriousvoid.openvkmatcha.data.parser.JsonParsers
 import com.deliriousvoid.openvkmatcha.data.model.AudioTrack
+import com.deliriousvoid.openvkmatcha.data.model.Playlist
 
 class MusicRepository(val api: OpenVKApi) {
+
+    suspend fun loadMainMusicData(userId: Int, tracksOffset: Int = 0, tracksCount: Int = 50, playlistsCount: Int = 15): Result<Pair<List<AudioTrack>, List<Playlist>>> = api.execute(
+        """
+            var t = API.audio.get({"owner_id": $userId, "offset": $tracksOffset, "count": $tracksCount});
+            var p = API.audio.getPlaylists({"owner_id": $userId, "count": $playlistsCount});
+            return { "tracks": t, "playlists": p };
+        """.trimIndent()
+    ).map { json ->
+        val response = json.getJSONObject("response")
+        val tracks = JsonParsers.parseAudio(response.getJSONObject("tracks"))
+        val playlists = JsonParsers.parsePlaylists(response.getJSONObject("playlists"))
+        Pair(tracks, playlists)
+    }
 
     suspend fun loadMyAudio(userId: Int, offset: Int = 0, count: Int = 50) = api.callMethod(
         "audio.get",

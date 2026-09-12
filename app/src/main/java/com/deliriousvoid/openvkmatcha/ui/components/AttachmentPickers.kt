@@ -119,8 +119,9 @@ fun VideoPickerBottomSheet(
     }
 
     if (showUpload) {
+        val webInstance = com.deliriousvoid.openvkmatcha.OpenVKMatchaApp.instance.tokenManager.getWebInstance()
         WebViewBottomSheet(
-            url = "https://openvk.org/videos/upload",
+            url = "$webInstance/videos/upload",
             onDismiss = { 
                 showUpload = false 
                 viewModel.loadVideos(isRefresh = true)
@@ -262,8 +263,9 @@ fun DocsPickerBottomSheet(
     }
 
     if (showUpload) {
+        val webInstance = com.deliriousvoid.openvkmatcha.OpenVKMatchaApp.instance.tokenManager.getWebInstance()
         WebViewBottomSheet(
-            url = "https://openvk.org/docs/upload",
+            url = "$webInstance/docs/upload",
             onDismiss = { 
                 showUpload = false 
                 viewModel.loadDocs(isRefresh = true)

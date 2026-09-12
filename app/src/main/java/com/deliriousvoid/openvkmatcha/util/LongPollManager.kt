@@ -1,9 +1,11 @@
 package com.deliriousvoid.openvkmatcha.util
 
-import android.util.Log
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.LifecycleOwner
 import com.deliriousvoid.openvkmatcha.OpenVKMatchaApp
 import com.deliriousvoid.openvkmatcha.data.api.OpenVKApi
 import com.deliriousvoid.openvkmatcha.data.repository.NotificationsRepository
+import com.deliriousvoid.openvkmatcha.util.MLog
 import kotlinx.coroutines.*
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -19,7 +21,7 @@ import javax.net.ssl.X509TrustManager
 class LongPollManager(
     private val api: OpenVKApi,
     private val notificationsRepository: NotificationsRepository
-) {
+) : DefaultLifecycleObserver {
     private val TAG = "LongPollManager"
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var isRunning = false
@@ -30,6 +32,7 @@ class LongPollManager(
     private var server: String? = null
     private var key: String? = null
     private var ts: Long = 0
+    private var pts: Int? = null
     private var fastResponseCount = 0
     private val processedEvents = ConcurrentHashMap<Int, Long>()
     private val MAX_PROCESSED_EVENTS = 1000
@@ -57,12 +60,26 @@ class LongPollManager(
         }
     }
 
+    override fun onStart(owner: LifecycleOwner) {
+        MLog.d(TAG, "App in foreground, starting LongPoll if not running")
+        start()
+    }
+
+    override fun onStop(owner: LifecycleOwner) {
+        MLog.d(TAG, "App in background, stopping LongPoll")
+        // We only stop if the background service is NOT running
+        val prefs = OpenVKMatchaApp.instance.getSharedPreferences("settings", android.content.Context.MODE_PRIVATE)
+        if (!prefs.getBoolean("background_notifications", false)) {
+            stop()
+        }
+    }
+
     fun isRunning(): Boolean = isRunning
 
     fun start() {
         if (isRunning) return
         isRunning = true
-        Log.d(TAG, "Starting LongPoll loop")
+        MLog.d(TAG, "Starting LongPoll loop")
         job = scope.launch {
             while (isRunning) {
                 try {
@@ -77,7 +94,7 @@ class LongPollManager(
                 } catch (e: CancellationException) {
                     break
                 } catch (e: Exception) {
-                    Log.e(TAG, "Error in LongPoll loop", e)
+                    MLog.e(TAG, "Error in LongPoll loop", e)
                     delay(3000)
                     server = null // Reset to fetch fresh server
                 }
@@ -86,7 +103,7 @@ class LongPollManager(
     }
 
     fun stop() {
-        Log.d(TAG, "Stopping LongPoll loop")
+        MLog.d(TAG, "Stopping LongPoll loop")
         isRunning = false
         job?.cancel()
         job = null
@@ -106,16 +123,17 @@ class LongPollManager(
             server = srv
             key = response.optString("key")
             ts = response.optLong("ts")
+            pts = if (response.has("pts")) response.optInt("pts") else null
             fastResponseCount = 0
-            Log.d(TAG, "Server obtained: $server, ts: $ts")
+            MLog.d(TAG, "Server obtained: $server, ts: $ts")
         }.onFailure {
-            Log.e(TAG, "Failed to get LongPoll server: ${it.message}")
+            MLog.e(TAG, "Failed to get LongPoll server: ${it.message}")
             delay(10000)
         }
     }
 
     private suspend fun performFirstSync() {
-        Log.d(TAG, "Performing first sync request")
+        MLog.d(TAG, "Performing first sync request")
         val currentServer = server ?: return
         val currentKey = key ?: return
         val url = "$currentServer?key=$currentKey&act=a_check&wait=1&version=3&ts=$ts"
@@ -124,7 +142,7 @@ class LongPollManager(
         try {
             val response = withContext(Dispatchers.IO) { client.newCall(request).execute() }
             val body = response.body?.string() ?: return
-            Log.d(TAG, "First sync response: $body")
+            MLog.data(TAG, "First sync response", body)
             
             if (body.trim() == "[]") return
             
@@ -141,7 +159,7 @@ class LongPollManager(
                 json.optJSONArray("updates")?.let { processUpdates(it) }
             }
         } catch (e: Exception) {
-            Log.e(TAG, "First sync failed", e)
+            MLog.e(TAG, "First sync failed", e)
             server = null
         }
     }
@@ -157,13 +175,15 @@ class LongPollManager(
             ts = currentTime
         }
 
-        val url = if (fastResponseCount > 2) {
-            "$currentServer?key=$currentKey&act=a_check&wait=45&version=3&ts=$ts"
-        } else {
-            "$currentServer?key=$currentKey&act=a_check&wait=45&version=3&ts=$ts&mode=2"
-        }
+        // Mode: 2 (attachments) + 8 (pts) + 32 (pts) + 64 (extra) + 128 (random_id) = 234
+        val urlBuilder = StringBuilder(if (currentServer.startsWith("http")) currentServer else "https://$currentServer")
+            .append("?key=").append(currentKey)
+            .append("&act=a_check&wait=25&version=3&ts=").append(ts)
+            .append("&mode=234")
         
-        val request = Request.Builder().url(url).build()
+        pts?.let { urlBuilder.append("&pts=").append(it) }
+        
+        val request = Request.Builder().url(urlBuilder.toString()).build()
         val requestStartTime = System.currentTimeMillis()
         
         try {
@@ -171,7 +191,7 @@ class LongPollManager(
             val requestDuration = System.currentTimeMillis() - requestStartTime
             
             val body = response.body?.string() ?: throw Exception("Empty body")
-            Log.d(TAG, "Check response (duration=${requestDuration}ms): $body")
+            MLog.data(TAG, "Check response (duration=${requestDuration}ms)", body)
 
             if (requestDuration < 1000) {
                 fastResponseCount++
@@ -196,17 +216,28 @@ class LongPollManager(
                 val code = json.getInt("failed")
                 when (code) {
                     1 -> ts = json.optLong("ts", ts)
-                    2, 3 -> server = null
+                    2 -> server = null // Key expired
+                    3 -> { // Key and TS expired, or server changed
+                        server = null
+                        key = null
+                    }
+                    4 -> { // Key, TS and PTS expired
+                        server = null
+                        pts = null
+                    }
                 }
                 return
             }
 
             ts = json.optLong("ts", ts)
+            if (json.has("pts")) {
+                pts = json.optInt("pts")
+            }
             json.optJSONArray("updates")?.let { processUpdates(it) }
 
         } catch (e: Exception) {
             if (e !is CancellationException) {
-                Log.e(TAG, "Check failed", e)
+                MLog.e(TAG, "Check failed", e)
                 delay(3000)
                 server = null
             }
@@ -239,7 +270,15 @@ class LongPollManager(
                     }
                     61 -> {
                         val peerId = update.getInt(1)
-                        notify { it.onUserTyping(peerId, peerId) }
+                        val userId = if (update.length() > 2) {
+                            when (val raw = update.get(2)) {
+                                is Int -> raw
+                                is String -> raw.split(",").firstOrNull()?.toIntOrNull() ?: peerId
+                                is org.json.JSONArray -> raw.optInt(0, peerId)
+                                else -> peerId
+                            }
+                        } else peerId
+                        notify { it.onUserTyping(peerId, userId) }
                     }
                     80 -> {
                         notify { it.onNotificationsCountUpdated() }
@@ -247,32 +286,38 @@ class LongPollManager(
                     }
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Error processing update at $i", e)
+                MLog.e(TAG, "Error processing update at $i", e)
             }
         }
     }
 
     private fun processNewMessage(update: org.json.JSONArray) {
+        // [4, message_id, flags, peer_id, timestamp, subject, text, attachments, random_id]
+        if (update.length() < 7) return
+        
         val msgId = update.getInt(1)
         val flags = update.getInt(2)
         val peerId = update.getInt(3)
         val timestamp = update.getLong(4)
-        val text = update.getString(5)
+        val text = update.getString(6)
         
         if (processedEvents.containsKey(msgId)) return
         processedEvents[msgId] = timestamp
         if (processedEvents.size > MAX_PROCESSED_EVENTS) processedEvents.clear()
 
+        val attachments = if (update.length() > 7) update.optJSONObject(7) else null
         var fromId = peerId
-        if (update.length() > 9) {
-            fromId = update.optInt(9, peerId)
-        } else if (update.length() > 6) {
-            val extra = update.optJSONObject(6)
-            fromId = extra?.optInt("from", peerId) ?: peerId
+        
+        attachments?.let { 
+            if (it.has("from")) {
+                fromId = it.optString("from").toIntOrNull() ?: peerId
+            }
         }
 
         val isOut = (flags and 2) != 0
-        notify { it.onNewMessage(msgId, peerId, timestamp, text, fromId, isOut) }
+        val finalText = if (text.isEmpty() && attachments != null) "[Вложение]" else text
+        
+        notify { it.onNewMessage(msgId, peerId, timestamp, finalText, fromId, isOut) }
         
         // Flux behavior: refresh notifications on every new message
         scope.launch { AppEvents.emitRefreshNotifications() }
