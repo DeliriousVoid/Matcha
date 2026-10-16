@@ -27,9 +27,14 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.material3.ripple
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -45,10 +50,12 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.input.ImeAction
@@ -62,6 +69,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.media3.common.Player
+import com.deliriousvoid.openvkmatcha.ui.components.AccountQuickSwitchMenu
 import com.deliriousvoid.openvkmatcha.ui.components.FullPlayer
 import com.deliriousvoid.openvkmatcha.ui.components.MiniPlayer
 import com.deliriousvoid.openvkmatcha.ui.components.PipPlayerView
@@ -445,6 +453,10 @@ class MainActivity : ComponentActivity() {
                             val feedViewModel: FeedViewModel = viewModel(factory = FeedViewModel.factory())
                             val profileViewModel: ProfileViewModel = viewModel(factory = ProfileViewModel.factory())
                             val notificationsViewModel: NotificationsViewModel = viewModel(factory = NotificationsViewModel.factory())
+                            val accountsViewModel: AccountsViewModel = viewModel(factory = AccountsViewModel.factory())
+                            val accounts by accountsViewModel.accounts.collectAsState()
+                            val currentAccountId by accountsViewModel.currentAccountId.collectAsState()
+                            var showAccountPopup by remember { mutableStateOf(false) }
 
                             val isOfflineMode by settingsViewModel.offlineMode.collectAsState()
 
@@ -894,6 +906,8 @@ class MainActivity : ComponentActivity() {
                                                     val navigationTabs by settingsViewModel.navigationTabs.collectAsState()
                                                     val navBarLabelsVisible by settingsViewModel.navBarLabelsVisible.collectAsState()
                                                     val visibleTabs = if (isOfflineMode) listOf(MainTab.Music) else navigationTabs
+                                                    val haptic = LocalHapticFeedback.current
+                                                    val rowScope = this
                                                     visibleTabs.forEach { tab ->
                                                         val selected = (isMainScreen && selectedTab == tab) || 
                                                             (tab == MainTab.Music && (isPlaylistDetails || isListenBrainzPlaylist || isUserMusic || isUpload || isMusicSearch)) || 
@@ -903,27 +917,74 @@ class MainActivity : ComponentActivity() {
                                                             (tab == MainTab.Groups && isGroups) ||
                                                             (tab == MainTab.Notes && (isNotes || isNoteDetails))
 
-                                                        NavigationBarItem(
-                                                            selected = selected,
-                                                            onClick = {
-                                                                if (isPlaylistDetails || isListenBrainzPlaylist || isProfile || isFriends || isGroups || isUserMusic || isGifts || isFollowers || isSendGift || isCreatePost || isVideos || isDocuments || isNotes || isNoteDetails || isEvents || isWebView || isTransfer || isTopics || isTopicComments || isSearch || isMusicSearch || isUpload || isEditProfile || isEditGroup || isPhotoAlbums || isPhotos) {
-                                                                    navController.popBackStack(Routes.MAIN, false)
-                                                                }
-                                                                isSearchActive = false
-                                                                AppEvents.setSearchQuery("")
-                                                                if (tab == MainTab.Home) coroutineScope.launch { AppEvents.emitRefreshFeed() }
-                                                                if (tab == MainTab.Profile) coroutineScope.launch { AppEvents.emitRefreshProfile() }
-                                                                selectedTab = tab
-                                                            },
-                                                            icon = { Icon(tab.icon(selected), tab.title) },
-                                                            label = if (navBarLabelsVisible) { { Text(tab.title) } } else null,
-                                                            alwaysShowLabel = navBarLabelsVisible,
-                                                            colors = NavigationBarItemDefaults.colors(
-                                                                selectedIconColor = MaterialTheme.colorScheme.primary,
-                                                                selectedTextColor = MaterialTheme.colorScheme.primary,
-                                                                indicatorColor = Color.Transparent
+                                                        val selectTabAction = {
+                                                            if (isPlaylistDetails || isListenBrainzPlaylist || isProfile || isFriends || isGroups || isUserMusic || isGifts || isFollowers || isSendGift || isCreatePost || isVideos || isDocuments || isNotes || isNoteDetails || isEvents || isWebView || isTransfer || isTopics || isTopicComments || isSearch || isMusicSearch || isUpload || isEditProfile || isEditGroup || isPhotoAlbums || isPhotos) {
+                                                                navController.popBackStack(Routes.MAIN, false)
+                                                            }
+                                                            isSearchActive = false
+                                                            AppEvents.setSearchQuery("")
+                                                            if (tab == MainTab.Home) coroutineScope.launch { AppEvents.emitRefreshFeed() }
+                                                            if (tab == MainTab.Profile) coroutineScope.launch { AppEvents.emitRefreshProfile() }
+                                                            selectedTab = tab
+                                                        }
+
+                                                        val interactionSource = remember { MutableInteractionSource() }
+
+                                                        Box(modifier = Modifier.weight(1f)) {
+                                                            rowScope.NavigationBarItem(
+                                                                selected = selected,
+                                                                onClick = {},
+                                                                icon = {
+                                                                    Box {
+                                                                        Icon(tab.icon(selected), tab.title)
+                                                                        if (tab == MainTab.Profile) {
+                                                                            AccountQuickSwitchMenu(
+                                                                                expanded = showAccountPopup,
+                                                                                onDismissRequest = { showAccountPopup = false },
+                                                                                accounts = accounts,
+                                                                                currentAccountId = currentAccountId,
+                                                                                onSelectAccount = { account ->
+                                                                                    accountsViewModel.switchAccount(account.id) {
+                                                                                        navController.navigate(Routes.MAIN) {
+                                                                                            popUpTo(Routes.MAIN) { inclusive = true }
+                                                                                        }
+                                                                                    }
+                                                                                },
+                                                                                onAddAccount = {
+                                                                                    navController.navigate(Routes.loginRoute(true))
+                                                                                }
+                                                                            )
+                                                                        }
+                                                                    }
+                                                                },
+                                                                label = if (navBarLabelsVisible) { { Text(tab.title) } } else null,
+                                                                alwaysShowLabel = navBarLabelsVisible,
+                                                                colors = NavigationBarItemDefaults.colors(
+                                                                    selectedIconColor = MaterialTheme.colorScheme.primary,
+                                                                    selectedTextColor = MaterialTheme.colorScheme.primary,
+                                                                    indicatorColor = Color.Transparent
+                                                                )
                                                             )
-                                                        )
+
+                                                            Box(
+                                                                modifier = Modifier
+                                                                    .matchParentSize()
+                                                                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                                                                    .clip(RoundedCornerShape(16.dp))
+                                                                    .combinedClickable(
+                                                                        interactionSource = interactionSource,
+                                                                        indication = ripple(color = MaterialTheme.colorScheme.primary, bounded = true),
+                                                                        onClick = selectTabAction,
+                                                                        onLongClick = if (tab == MainTab.Profile) {
+                                                                            {
+                                                                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                                                accountsViewModel.refreshAccounts()
+                                                                                showAccountPopup = true
+                                                                            }
+                                                                        } else null
+                                                                    )
+                                                            )
+                                                        }
                                                     }
                                                 }
                                             }

@@ -60,7 +60,7 @@ class PlaybackService : MediaSessionService() {
             .build()
         player.setAudioAttributes(audioAttributes, true)
         
-        val intent = Intent(this, Class.forName("com.deliriousvoid.openvkmatcha.MainActivity")).apply {
+        val intent = Intent(this, com.deliriousvoid.openvkmatcha.MainActivity::class.java).apply {
             action = "com.deliriousvoid.openvkmatcha.ACTION_OPEN_PLAYER"
             addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_NEW_TASK)
         }
@@ -130,7 +130,7 @@ class PlaybackService : MediaSessionService() {
         AppEvents.setVideoSession(null)
 
         if (activeVideo != null && player != null) {
-            val intent = Intent(this, Class.forName("com.deliriousvoid.openvkmatcha.MainActivity")).apply {
+            val intent = Intent(this, com.deliriousvoid.openvkmatcha.MainActivity::class.java).apply {
                 action = "com.deliriousvoid.openvkmatcha.ACTION_OPEN_VIDEO_PLAYER"
                 addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_NEW_TASK)
             }

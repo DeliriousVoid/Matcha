@@ -383,7 +383,10 @@ sealed interface MessageAttachment {
         val id: Int,
         val ownerId: Int,
         val text: String,
-        val date: Long
+        val date: Long,
+        val authorName: String? = null,
+        val authorAvatar: String? = null,
+        val attachments: List<MessageAttachment> = emptyList()
     ) : MessageAttachment
 
     data class Sticker(
@@ -700,4 +703,18 @@ data class InstanceLinks(
 data class InstanceLink(
     val name: String,
     val url: String
+)
+
+data class StickerPack(
+    val id: Int,
+    val title: String,
+    val iconUrl: String?,
+    val stickers: List<StickerItem> = emptyList()
+)
+
+data class StickerItem(
+    val id: Int,
+    val packId: Int = 0,
+    val url: String,
+    val animationUrl: String? = null
 )

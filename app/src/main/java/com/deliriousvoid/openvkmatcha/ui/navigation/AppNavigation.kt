@@ -23,7 +23,7 @@ import com.deliriousvoid.openvkmatcha.ui.screens.login.LoginScreen
 import com.deliriousvoid.openvkmatcha.ui.screens.login.TwoFactorScreen
 import com.deliriousvoid.openvkmatcha.ui.screens.main.MainScreen
 import com.deliriousvoid.openvkmatcha.ui.screens.map.MapPickerScreen
-import com.deliriousvoid.openvkmatcha.ui.screens.messages.ChatScreen
+import com.deliriousvoid.openvkmatcha.ui.screens.messages.*
 import com.deliriousvoid.openvkmatcha.ui.screens.music.ListenBrainzPlaylistScreen
 import com.deliriousvoid.openvkmatcha.ui.screens.music.MusicScreen
 import com.deliriousvoid.openvkmatcha.ui.screens.music.PlaylistDetailsScreen
@@ -201,6 +201,9 @@ fun AppNavigation(
                 isOfflineMode = isOfflineMode,
                 onOpenChat = { peerId: Int, title: String ->
                     navController.navigate(Routes.chatRoute(peerId, title))
+                },
+                onCreateChat = {
+                    navController.navigate(Routes.createChatRoute())
                 },
                 onOpenPlaylist = { ownerId: Int, playlistId: Int, title: String ->
                     navController.navigate(Routes.playlistRoute(ownerId, playlistId, title))
@@ -669,7 +672,32 @@ fun AppNavigation(
                 peerId = peerId,
                 title = title,
                 onBack = { navController.popBackStack() },
+                onOpenProfile = { id -> navController.navigate(Routes.profileRoute(id)) },
+                onOpenChatInfo = { pId -> navController.navigate(Routes.chatInfoRoute(pId)) },
+                onOpenPost = { ownerId, postId -> navController.navigate(Routes.commentsRoute(ownerId, postId)) }
+            )
+        }
+
+        composable(
+            route = Routes.CHAT_INFO,
+            arguments = listOf(navArgument("peerId") { type = NavType.IntType })
+        ) { backStackEntry ->
+            val peerId = backStackEntry.arguments?.getInt("peerId") ?: 0
+            ChatInfoScreen(
+                peerId = peerId,
+                onBack = { navController.popBackStack() },
                 onOpenProfile = { id -> navController.navigate(Routes.profileRoute(id)) }
+            )
+        }
+
+        composable(Routes.CREATE_CHAT) {
+            CreateChatScreen(
+                onBack = { navController.popBackStack() },
+                onChatCreated = { peerId, title ->
+                    navController.navigate(Routes.chatRoute(peerId, title)) {
+                        popUpTo(Routes.CREATE_CHAT) { inclusive = true }
+                    }
+                }
             )
         }
 

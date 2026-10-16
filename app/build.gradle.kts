@@ -11,8 +11,8 @@ android {
         applicationId = "com.deliriousvoid.openvkmatcha"
         minSdk = 24
         targetSdk = 36
-        versionCode = 18;
-        versionName = "1.3"
+        versionCode = 19;
+        versionName = "1.4-dev"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -35,6 +35,11 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true
+    }
+    testOptions {
+        unitTests {
+            isReturnDefaultValues = true
+        }
     }
 }
 

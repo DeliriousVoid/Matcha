@@ -57,9 +57,11 @@ import kotlinx.coroutines.launch
 fun MessagesScreen(
     onConversationClick: (Int, String) -> Unit,
     modifier: Modifier = Modifier,
+    onCreateChat: () -> Unit = {},
     viewModel: MessagesViewModel = viewModel(factory = MessagesViewModel.factory()),
 ) {
     val state by viewModel.uiState.collectAsState()
+    var selectedConversationForMenu by remember { mutableStateOf<com.deliriousvoid.openvkmatcha.data.model.Conversation?>(null) }
 
     Box(modifier = modifier.fillMaxSize()) {
         when {
@@ -75,17 +77,61 @@ fun MessagesScreen(
             )
             else -> LazyColumn(modifier = Modifier.fillMaxSize()) {
                 items(state.conversations, key = { it.peer.id }) { conversation ->
-                    ConversationItem(
-                        conversation = conversation,
-                        typingStatus = state.typingPeers[conversation.peer.id],
-                        onClick = { onConversationClick(conversation.peer.id, conversation.peer.title) },
-                    )
+                    Box {
+                        ConversationItem(
+                            conversation = conversation,
+                            typingStatus = state.typingPeers[conversation.peer.id],
+                            onClick = { onConversationClick(conversation.peer.id, conversation.peer.title) },
+                            onLongClick = { selectedConversationForMenu = conversation }
+                        )
+                        DropdownMenu(
+                            expanded = selectedConversationForMenu == conversation,
+                            onDismissRequest = { selectedConversationForMenu = null }
+                        ) {
+                            if (conversation.unreadCount > 0) {
+                                DropdownMenuItem(
+                                    text = { Text("Пометить как прочитанное") },
+                                    onClick = {
+                                        selectedConversationForMenu = null
+                                        viewModel.markConversationAsRead(conversation.peer.id)
+                                    }
+                                )
+                            }
+                            if (conversation.peer.type == PeerType.CHAT) {
+                                DropdownMenuItem(
+                                    text = { Text("Выйти из беседы", color = MaterialTheme.colorScheme.error) },
+                                    onClick = {
+                                        selectedConversationForMenu = null
+                                        viewModel.leaveChat(conversation.peer.id)
+                                    }
+                                )
+                            }
+                            DropdownMenuItem(
+                                text = { Text("Удалить чат", color = MaterialTheme.colorScheme.error) },
+                                onClick = {
+                                    selectedConversationForMenu = null
+                                    viewModel.deleteConversation(conversation.peer.id)
+                                }
+                            )
+                        }
+                    }
                     HorizontalDivider(
                         modifier = Modifier.padding(start = 80.dp),
                         color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f),
                     )
                 }
             }
+        }
+
+        FloatingActionButton(
+            onClick = onCreateChat,
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(16.dp),
+            containerColor = MaterialTheme.colorScheme.primaryContainer,
+            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+        ) {
+            Icon(Icons.Default.Add, contentDescription = "Новая беседа")
         }
     }
 }
@@ -97,6 +143,8 @@ fun ChatScreen(
     title: String,
     onBack: () -> Unit,
     onOpenProfile: (Int) -> Unit = {},
+    onOpenChatInfo: (Int) -> Unit = {},
+    onOpenPost: (Int, Int) -> Unit = { _, _ -> },
     viewModel: ChatViewModel = viewModel(factory = ChatViewModel.factory(peerId)),
 ) {
     val state by viewModel.uiState.collectAsState()
@@ -107,15 +155,21 @@ fun ChatScreen(
     var highlightedMessageId by remember { mutableStateOf<Int?>(null) }
     var viewerInitialIndex by remember { mutableIntStateOf(-1) }
     var viewerImages by remember { mutableStateOf<List<String>>(emptyList()) }
+    var showStickerPicker by remember { mutableStateOf(false) }
+    var showDeleteConfirmDialog by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val clipboardManager = LocalClipboardManager.current
     val baseUrl = OpenVKMatchaApp.instance.api.baseUrl
 
-    androidx.activity.compose.BackHandler(enabled = selectedMessages.isNotEmpty()) {
-        selectedMessages = emptySet()
+    androidx.activity.compose.BackHandler(enabled = selectedMessages.isNotEmpty() || showStickerPicker) {
+        if (showStickerPicker) {
+            showStickerPicker = false
+        } else {
+            selectedMessages = emptySet()
+        }
     }
 
-    DisposableEffect(state.isPeerTyping, selectedMessages, title) {
+    DisposableEffect(state.isPeerTyping, selectedMessages, title, state.peer) {
         AppEvents.setTopBarState(TopBarState(
             route = Routes.CHAT,
             navigationIcon = {
@@ -128,14 +182,22 @@ fun ChatScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
                         .clip(RoundedCornerShape(8.dp))
-                        .clickable { onOpenProfile(peerId) }
-                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                        .clickable {
+                            if (peerId >= 2000000000 || state.peer?.type == PeerType.CHAT) {
+                                onOpenChatInfo(peerId)
+                            } else {
+                                onOpenProfile(peerId)
+                            }
+                        }
+                        .padding(horizontal = 4.dp, vertical = 4.dp)
                 ) {
                     val peer = state.peer
-                    if (peer != null) {
-                        if (peer.photo.isNotBlank()) {
+                    val photoUrl = peer?.photo?.takeIf { it.isNotBlank() }
+
+                    Box(contentAlignment = Alignment.Center) {
+                        if (photoUrl != null) {
                             AsyncImage(
-                                model = peer.photo,
+                                model = photoUrl,
                                 contentDescription = null,
                                 modifier = Modifier
                                     .size(36.dp)
@@ -152,8 +214,9 @@ fun ChatScreen(
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(
-                                    imageVector = when (peer.type) {
-                                        PeerType.CHAT -> Icons.Default.Group
+                                    imageVector = when {
+                                        peerId >= 2000000000 || peer?.type == PeerType.CHAT -> Icons.Default.Group
+                                        peerId < 0 || peer?.type == PeerType.GROUP -> Icons.Default.Groups
                                         else -> Icons.Default.Person
                                     },
                                     contentDescription = null,
@@ -162,24 +225,46 @@ fun ChatScreen(
                                 )
                             }
                         }
-                        Spacer(modifier = Modifier.width(10.dp))
+                        if (peer?.type == PeerType.USER) {
+                            OnlineIndicator(
+                                isOnline = peer.online,
+                                isMobile = peer.mobileOnline,
+                                modifier = Modifier.align(Alignment.BottomEnd),
+                                dotSize = 8.dp,
+                                iconSize = 10.dp
+                            )
+                        }
                     }
+
+                    Spacer(modifier = Modifier.width(10.dp))
 
                     Column(horizontalAlignment = Alignment.Start) {
                         Text(
-                            text = title,
+                            text = peer?.title?.takeIf { it.isNotBlank() } ?: title,
                             style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.basicMarquee()
                         )
-                        if (state.isPeerTyping) {
+                        if (state.isPeerTyping || state.typingText != null) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 TypingIndicator(modifier = Modifier.padding(end = 6.dp))
                                 Text(
-                                    text = "печатает...",
+                                    text = state.typingText ?: "печатает...",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        } else {
+                            val statusText = formatPeerStatus(peer)
+                            if (!statusText.isNullOrBlank()) {
+                                Text(
+                                    text = statusText,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = if (peer?.online == true) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                             }
                         }
@@ -188,10 +273,7 @@ fun ChatScreen(
             },
             actions = {
                 if (selectedMessages.isNotEmpty()) {
-                    IconButton(onClick = { 
-                        viewModel.deleteMessages(selectedMessages.toList())
-                        selectedMessages = emptySet()
-                    }) {
+                    IconButton(onClick = { showDeleteConfirmDialog = true }) {
                         Icon(Icons.Default.Delete, null, tint = MaterialTheme.colorScheme.error)
                     }
                 }
@@ -202,6 +284,15 @@ fun ChatScreen(
                         Icon(Icons.Default.MoreVert, matchaStringResource(R.string.desc_more))
                     }
                     DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                        if (peerId >= 2000000000 || state.peer?.type == PeerType.CHAT) {
+                            DropdownMenuItem(
+                                text = { Text("Информация о беседе") },
+                                onClick = {
+                                    showMenu = false
+                                    onOpenChatInfo(peerId)
+                                }
+                            )
+                        }
                         val currentUrl = "$baseUrl/im?sel=$peerId"
                         DropdownMenuItem(
                             text = { Text(matchaStringResource(R.string.copy_link)) },
@@ -339,6 +430,22 @@ fun ChatScreen(
                                 onImageClick = { images, index ->
                                     viewerImages = images
                                     viewerInitialIndex = index
+                                },
+                                onAudioClick = { tracks, index ->
+                                    OpenVKMatchaApp.instance.playerManager.play(tracks, index, com.deliriousvoid.openvkmatcha.data.model.PlaylistSource.Unknown)
+                                },
+                                onVideoClick = { video ->
+                                    val urlStr = video.videoUrl ?: video.playerUrl ?: "$baseUrl/video${video.ownerId}_${video.id}"
+                                    context.startActivity(Intent(Intent.ACTION_VIEW, urlStr.toUri()))
+                                },
+                                onDocumentClick = { doc ->
+                                    val docUrl = doc.url
+                                    if (!docUrl.isNullOrBlank()) {
+                                        context.startActivity(Intent(Intent.ACTION_VIEW, docUrl.toUri()))
+                                    }
+                                },
+                                onWallPostClick = { ownerId, postId ->
+                                    onOpenPost(ownerId, postId)
                                 }
                             )
                         }
@@ -446,8 +553,16 @@ fun ChatScreen(
                         .fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    IconButton(onClick = { /* TODO: Attachments */ }) {
-                        Icon(Icons.Default.Add, null)
+                    IconButton(onClick = {
+                        showStickerPicker = !showStickerPicker
+                        if (showStickerPicker) {
+                            viewModel.loadStickerPacks()
+                        }
+                    }) {
+                        Icon(
+                            imageVector = if (showStickerPicker) Icons.Default.Keyboard else Icons.Default.Mood,
+                            contentDescription = "Стикеры"
+                        )
                     }
 
                     OutlinedTextField(
@@ -467,17 +582,99 @@ fun ChatScreen(
                     )
 
                     IconButton(
-                        onClick = viewModel::sendMessage,
+                        onClick = {
+                            showStickerPicker = false
+                            viewModel.sendMessage()
+                        },
                         enabled = state.inputText.isNotBlank() || state.editingMessage != null,
                         colors = IconButtonDefaults.iconButtonColors(
                             contentColor = MaterialTheme.colorScheme.primary
                         )
                     ) {
-                        if (state.isSending) CircularProgressIndicator(modifier = Modifier.size(24.dp))
-                        else Icon(Icons.AutoMirrored.Filled.Send, null)
+                        Icon(Icons.AutoMirrored.Filled.Send, null)
+                    }
+                }
+
+                AnimatedVisibility(visible = showStickerPicker) {
+                    StickerPickerPanel(
+                        stickerPacks = state.stickerPacks,
+                        recentStickers = state.recentStickers,
+                        isLoading = state.isLoadingStickers,
+                        onStickerSelected = { sticker ->
+                            viewModel.sendSticker(sticker)
+                            showStickerPicker = false
+                        }
+                    )
+                }
+            }
+        }
+    }
+
+    if (showDeleteConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirmDialog = false },
+            title = { Text("Удалить сообщения?") },
+            text = { Text("Выберите параметр удаления для ${selectedMessages.size} сообщений") },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.deleteMessages(selectedMessages.toList(), forAll = true)
+                    selectedMessages = emptySet()
+                    showDeleteConfirmDialog = false
+                }) {
+                    Text("Удалить у всех", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                Row {
+                    TextButton(onClick = {
+                        viewModel.deleteMessages(selectedMessages.toList(), forAll = false)
+                        selectedMessages = emptySet()
+                        showDeleteConfirmDialog = false
+                    }) {
+                        Text("Удалить у себя")
+                    }
+                    TextButton(onClick = { showDeleteConfirmDialog = false }) {
+                        Text("Отмена")
                     }
                 }
             }
+        )
+    }
+}
+
+private fun getPlatformName(platform: Int): String? {
+    return when (platform) {
+        1 -> "мобильная версия"
+        2 -> "iPhone"
+        3 -> "iPad"
+        4 -> "Android"
+        5 -> "Windows Phone"
+        6 -> "Windows 10"
+        7 -> "Web"
+        else -> null
+    }
+}
+
+private fun formatPeerStatus(peer: com.deliriousvoid.openvkmatcha.data.model.Peer?): String? {
+    if (peer == null) return null
+    return when (peer.type) {
+        com.deliriousvoid.openvkmatcha.data.model.PeerType.USER -> {
+            if (peer.online) {
+                val platform = peer.lastSeen?.platform?.let { getPlatformName(it) }
+                if (!platform.isNullOrBlank()) "В сети · $platform"
+                else if (peer.mobileOnline) "В сети · Мобильная версия"
+                else "В сети"
+            } else if (peer.lastSeen != null && peer.lastSeen.time > 0) {
+                val timeStr = com.deliriousvoid.openvkmatcha.ui.util.formatTimeAgo(peer.lastSeen.time)
+                if (timeStr.isNotBlank()) "был(а) в сети $timeStr" else "не в сети"
+            } else {
+                "не в сети"
+            }
+        }
+        com.deliriousvoid.openvkmatcha.data.model.PeerType.GROUP -> "сообщество"
+        com.deliriousvoid.openvkmatcha.data.model.PeerType.CHAT -> {
+            val count = peer.membersCount
+            if (count != null && count > 0) "$count участников" else "беседа"
         }
     }
 }

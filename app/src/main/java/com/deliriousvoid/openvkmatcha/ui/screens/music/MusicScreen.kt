@@ -238,7 +238,7 @@ fun MusicScreen(
                                     if (state.mode == MusicMode.Tracks || state.mode == MusicMode.Downloaded) {
                                         val tracks = if (state.mode == MusicMode.Downloaded) state.downloadedTracks else state.tracks
                                         if (tracks.isEmpty() && !state.isLoading) {
-                                            item { StateView(icon = Icons.Default.MusicNote, message = matchaStringResource(if (state.searchQuery.isBlank()) R.string.music_empty else R.string.music_not_found)) }
+                                            item { StateView(icon = Icons.Default.MusicNote, message = matchaStringResource(if (state.searchQuery.isBlank()) R.string.music_empty else R.string.music_not_found), modifier = Modifier.fillParentMaxSize()) }
                                         } else {
                                             itemsIndexed(tracks, key = { _, track -> "${track.ownerId}_${track.id}" }) { index, track ->
                                                 AudioTrackItem(
@@ -262,7 +262,7 @@ fun MusicScreen(
                                     } else {
                                         val playlists = if (state.mode == MusicMode.Recommendations) state.recommendations else state.playlists
                                         if (playlists.isEmpty() && !state.isLoading) {
-                                            item { StateView(icon = Icons.Default.MusicNote, message = matchaStringResource(R.string.music_playlists_not_found)) }
+                                            item { StateView(icon = Icons.Default.MusicNote, message = matchaStringResource(R.string.music_playlists_not_found), modifier = Modifier.fillParentMaxSize()) }
                                         } else {
                                             itemsIndexed(playlists, key = { _, p -> p.id }) { index, p ->
                                                 PlaylistItem(playlist = p, onClick = { if (state.mode == MusicMode.Recommendations) onOpenListenBrainzPlaylist(p.mbid ?: "", p.title, p.photoUrl) else onOpenPlaylist(p.ownerId, p.id, p.title) })

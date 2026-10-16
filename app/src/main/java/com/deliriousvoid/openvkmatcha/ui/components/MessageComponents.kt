@@ -41,6 +41,10 @@ fun MessageBubble(
     onLongClick: (ChatMessage) -> Unit = {},
     onAuthorClick: (Int) -> Unit = {},
     onImageClick: (List<String>, Int) -> Unit = { _, _ -> },
+    onAudioClick: (List<AudioTrack>, Int) -> Unit = { _, _ -> },
+    onVideoClick: (Video) -> Unit = {},
+    onDocumentClick: (Document) -> Unit = {},
+    onWallPostClick: (Int, Int) -> Unit = { _, _ -> }
 ) {
     val isOut = message.isOutgoing
     val isGroup = message.peerId >= 2000000000
@@ -109,7 +113,12 @@ fun MessageBubble(
                 if (message.attachments.isNotEmpty()) {
                     MessageAttachments(
                         attachments = message.attachments,
-                        onImageClick = onImageClick
+                        isOutgoingBubble = isOut,
+                        onImageClick = onImageClick,
+                        onAudioClick = onAudioClick,
+                        onVideoClick = onVideoClick,
+                        onDocumentClick = onDocumentClick,
+                        onWallPostClick = onWallPostClick
                     )
                 }
 
@@ -140,12 +149,20 @@ fun MessageBubble(
                     )
                     if (isOut) {
                         Spacer(modifier = Modifier.width(4.dp))
-                        Icon(
-                            imageVector = if (message.isRead) Icons.Default.DoneAll else Icons.Default.Done,
-                            contentDescription = null,
-                            tint = if (isOut) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(12.dp)
-                        )
+                        if (message.id < 0) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(12.dp),
+                                strokeWidth = 1.5.dp,
+                                color = if (isOut) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary
+                            )
+                        } else {
+                            Icon(
+                                imageVector = if (message.isRead) Icons.Default.DoneAll else Icons.Default.Done,
+                                contentDescription = null,
+                                tint = if (isOut) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(12.dp)
+                            )
+                        }
                     }
                 }
             }
@@ -196,9 +213,84 @@ fun ReplyPreview(
 }
 
 @Composable
+fun MessageWallPostCard(
+    wall: MessageAttachment.Wall,
+    isOutgoingBubble: Boolean,
+    onWallPostClick: (Int, Int) -> Unit,
+    onImageClick: (List<String>, Int) -> Unit,
+    onAudioClick: (List<AudioTrack>, Int) -> Unit = { _, _ -> },
+    onVideoClick: (Video) -> Unit = {},
+    onDocumentClick: (Document) -> Unit = {}
+) {
+    Surface(
+        color = if (isOutgoingBubble) Color.White.copy(alpha = 0.15f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.08f),
+        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onWallPostClick(wall.ownerId, wall.id) }
+            .padding(vertical = 4.dp)
+    ) {
+        Column(modifier = Modifier.padding(10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(24.dp)
+                        .clip(CircleShape)
+                        .background(if (isOutgoingBubble) Color.White.copy(alpha = 0.2f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Campaign,
+                        contentDescription = null,
+                        modifier = Modifier.size(14.dp),
+                        tint = if (isOutgoingBubble) Color.White else MaterialTheme.colorScheme.primary
+                    )
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = wall.authorName ?: "Запись на стене",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = if (isOutgoingBubble) Color.White else MaterialTheme.colorScheme.primary
+                )
+            }
+
+            if (wall.text.isNotBlank()) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = wall.text,
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 4,
+                    overflow = TextOverflow.Ellipsis,
+                    color = if (isOutgoingBubble) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            if (wall.attachments.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(6.dp))
+                MessageAttachments(
+                    attachments = wall.attachments,
+                    isOutgoingBubble = isOutgoingBubble,
+                    onImageClick = onImageClick,
+                    onAudioClick = onAudioClick,
+                    onVideoClick = onVideoClick,
+                    onDocumentClick = onDocumentClick,
+                    onWallPostClick = onWallPostClick
+                )
+            }
+        }
+    }
+}
+
+@Composable
 fun MessageAttachments(
     attachments: List<MessageAttachment>,
-    onImageClick: (List<String>, Int) -> Unit = { _, _ -> }
+    isOutgoingBubble: Boolean = false,
+    onImageClick: (List<String>, Int) -> Unit = { _, _ -> },
+    onAudioClick: (List<AudioTrack>, Int) -> Unit = { _, _ -> },
+    onVideoClick: (Video) -> Unit = {},
+    onDocumentClick: (Document) -> Unit = {},
+    onWallPostClick: (Int, Int) -> Unit = { _, _ -> }
 ) {
     val photos = attachments.filterIsInstance<MessageAttachment.Photo>()
     val gifDocs = attachments.filterIsInstance<MessageAttachment.Doc>().filter { 
@@ -207,7 +299,7 @@ fun MessageAttachments(
     
     val allImageUrls = photos.map { it.url } + gifDocs.mapNotNull { it.previewUrl ?: it.url }
 
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         if (allImageUrls.isNotEmpty()) {
             PostImageGrid(
                 imageUrls = allImageUrls,
@@ -220,17 +312,22 @@ fun MessageAttachments(
                 is MessageAttachment.Photo -> { /* Handled in grid */ }
                 is MessageAttachment.Doc -> {
                     if (gifDocs.contains(attachment)) return@forEach
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(4.dp)
-                    ) {
-                        Icon(Icons.Default.InsertDriveFile, null, modifier = Modifier.size(24.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Column {
-                            Text(attachment.title, style = MaterialTheme.typography.bodySmall, maxLines = 1)
-                            Text("${attachment.size / 1024} KB", style = MaterialTheme.typography.labelSmall)
-                        }
-                    }
+                    val doc = Document(
+                        id = attachment.id,
+                        ownerId = attachment.ownerId,
+                        title = attachment.title,
+                        size = attachment.size,
+                        ext = attachment.ext,
+                        url = attachment.url,
+                        date = 0,
+                        type = 0,
+                        previewUrl = attachment.previewUrl,
+                        previewGifUrl = attachment.previewGifUrl
+                    )
+                    DocumentItem(
+                        document = doc,
+                        onClick = { onDocumentClick(doc) }
+                    )
                 }
                 is MessageAttachment.Sticker -> {
                     AsyncImage(
@@ -240,10 +337,53 @@ fun MessageAttachments(
                     )
                 }
                 is MessageAttachment.Audio -> {
-                   Row(verticalAlignment = Alignment.CenterVertically) {
-                       Icon(Icons.Default.PlayArrow, null)
-                       Text("${attachment.artist} - ${attachment.title}", style = MaterialTheme.typography.bodySmall)
-                   }
+                    val track = AudioTrack(
+                        id = attachment.id,
+                        ownerId = attachment.ownerId,
+                        artist = attachment.artist,
+                        title = attachment.title,
+                        duration = attachment.duration,
+                        url = attachment.url
+                    )
+                    AudioTrackItem(
+                        track = track,
+                        onClick = { onAudioClick(listOf(track), 0) },
+                        onToggleAdded = {},
+                        onDownload = {},
+                        onShare = {},
+                        onAddToQueue = {},
+                        onPlayNext = {}
+                    )
+                }
+                is MessageAttachment.Video -> {
+                    val video = Video(
+                        id = attachment.id,
+                        ownerId = attachment.ownerId,
+                        title = attachment.title,
+                        duration = attachment.duration,
+                        thumbnailUrl = attachment.thumbnailUrl,
+                        videoUrl = null,
+                        playerUrl = null,
+                        accessKey = attachment.accessKey
+                    )
+                    VideoPlayer(
+                        video = video,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable { onVideoClick(video) }
+                    )
+                }
+                is MessageAttachment.Wall -> {
+                    MessageWallPostCard(
+                        wall = attachment,
+                        isOutgoingBubble = isOutgoingBubble,
+                        onWallPostClick = onWallPostClick,
+                        onImageClick = onImageClick,
+                        onAudioClick = onAudioClick,
+                        onVideoClick = onVideoClick,
+                        onDocumentClick = onDocumentClick
+                    )
                 }
                 else -> { /* Other attachments */ }
             }

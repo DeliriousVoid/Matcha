@@ -1057,17 +1057,19 @@ fun RepostContent(
     }
 }
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun ConversationItem(
     conversation: Conversation,
     typingStatus: String? = null,
     onClick: () -> Unit,
+    onLongClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -1540,7 +1542,7 @@ fun StateView(
     onAction: (() -> Unit)? = null,
 ) {
     Column(
-        modifier = modifier.padding(16.dp),
+        modifier = modifier.fillMaxSize().padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
@@ -2105,6 +2107,12 @@ fun MusicPickerBottomSheet(
                     Box(modifier = Modifier.weight(1f)) {
                         if (state.isLoading && state.tracks.isEmpty()) {
                             LoadingBox(modifier = Modifier.fillMaxSize())
+                        } else if (state.tracks.isEmpty()) {
+                            StateView(
+                                icon = Icons.Default.MusicNote,
+                                message = matchaStringResource(R.string.music_not_found),
+                                modifier = Modifier.fillMaxSize()
+                            )
                         } else {
                             LazyColumn(
                                 state = listState,

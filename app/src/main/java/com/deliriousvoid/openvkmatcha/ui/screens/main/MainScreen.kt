@@ -28,6 +28,7 @@ fun MainScreen(
     selectedTab: MainTab,
     onTabChange: (MainTab) -> Unit = {},
     onOpenChat: (Int, String) -> Unit,
+    onCreateChat: () -> Unit = {},
     onOpenPlaylist: (Int, Int, String) -> Unit,
     onOpenListenBrainzPlaylist: (String, String, String?) -> Unit = { _, _, _ -> },
     onOpenProfile: (Any) -> Unit,
@@ -88,7 +89,10 @@ fun MainScreen(
                         onOpenProfile = { onOpenProfile(it) }
                     )
                 }
-                MainTab.Messages -> MessagesScreen(onConversationClick = onOpenChat)
+                MainTab.Messages -> MessagesScreen(
+                    onConversationClick = onOpenChat,
+                    onCreateChat = onCreateChat
+                )
                 MainTab.Music -> MusicScreen(
                     onOpenPlaylist = onOpenPlaylist,
                     onOpenListenBrainzPlaylist = onOpenListenBrainzPlaylist,

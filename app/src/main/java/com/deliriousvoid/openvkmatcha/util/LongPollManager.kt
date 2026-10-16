@@ -5,7 +5,6 @@ import androidx.lifecycle.LifecycleOwner
 import com.deliriousvoid.openvkmatcha.OpenVKMatchaApp
 import com.deliriousvoid.openvkmatcha.data.api.OpenVKApi
 import com.deliriousvoid.openvkmatcha.data.repository.NotificationsRepository
-import com.deliriousvoid.openvkmatcha.util.MLog
 import kotlinx.coroutines.*
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -33,17 +32,20 @@ class LongPollManager(
     private var key: String? = null
     private var ts: Long = 0
     private var pts: Int? = null
-    private var fastResponseCount = 0
     private val processedEvents = ConcurrentHashMap<Int, Long>()
     private val MAX_PROCESSED_EVENTS = 1000
 
     interface OnLongPollEventListener {
         fun onNewMessage(messageId: Int, peerId: Int, timestamp: Long, text: String, fromId: Int, isOut: Boolean)
-        fun onMessageRead(peerId: Int, localId: Int)
-        fun onMessageEdit(messageId: Int, peerId: Int, newText: String)
-        fun onUserTyping(peerId: Int, userId: Int)
-        fun onUserOnline(userId: Int, isOnline: Boolean)
-        fun onNotificationsCountUpdated()
+        fun onMessageRead(peerId: Int, localId: Int) {}
+        fun onIncomingMessagesRead(peerId: Int, localId: Int) {}
+        fun onOutgoingMessagesRead(peerId: Int, localId: Int) {}
+        fun onMessageEdit(messageId: Int, peerId: Int, newText: String) {}
+        fun onMessageDelete(messageId: Int, peerId: Int) {}
+        fun onUserTyping(peerId: Int, userId: Int) {}
+        fun onUserOnline(userId: Int, isOnline: Boolean) {}
+        fun onChatChanged(peerId: Int) {}
+        fun onNotificationsCountUpdated() {}
     }
 
     private val listeners = mutableListOf<OnLongPollEventListener>()
@@ -67,7 +69,6 @@ class LongPollManager(
 
     override fun onStop(owner: LifecycleOwner) {
         MLog.d(TAG, "App in background, stopping LongPoll")
-        // We only stop if the background service is NOT running
         val prefs = OpenVKMatchaApp.instance.getSharedPreferences("settings", android.content.Context.MODE_PRIVATE)
         if (!prefs.getBoolean("background_notifications", false)) {
             stop()
@@ -96,7 +97,7 @@ class LongPollManager(
                 } catch (e: Exception) {
                     MLog.e(TAG, "Error in LongPoll loop", e)
                     delay(3000)
-                    server = null // Reset to fetch fresh server
+                    server = null
                 }
             }
         }
@@ -114,21 +115,25 @@ class LongPollManager(
 
     private suspend fun fetchServer() {
         notificationsRepository.getLongPollServer().onSuccess { json ->
-            val response = json.optJSONObject("response") ?: return@onSuccess
+            val response = json.optJSONObject("response") ?: json
             var srv = response.optString("server")
-            if (srv != null && !srv.contains("://")) {
+            if (srv.isNotBlank() && !srv.contains("://")) {
                 val scheme = if (api.baseUrl.startsWith("https")) "https://" else "http://"
                 srv = scheme + srv
             }
-            server = srv
-            key = response.optString("key")
-            ts = response.optLong("ts")
-            pts = if (response.has("pts")) response.optInt("pts") else null
-            fastResponseCount = 0
-            MLog.d(TAG, "Server obtained: $server, ts: $ts")
+            if (srv.isNotBlank()) {
+                server = srv
+                key = response.optString("key")
+                ts = response.optLong("ts")
+                pts = if (response.has("pts")) response.optInt("pts") else null
+                MLog.d(TAG, "Server obtained: $server, ts: $ts")
+            } else {
+                MLog.e(TAG, "Empty server in response")
+                delay(5000)
+            }
         }.onFailure {
             MLog.e(TAG, "Failed to get LongPoll server: ${it.message}")
-            delay(10000)
+            delay(5000)
         }
     }
 
@@ -144,11 +149,11 @@ class LongPollManager(
             val body = response.body?.string() ?: return
             MLog.data(TAG, "First sync response", body)
             
-            if (body.trim() == "[]") return
+            if (body.isBlank() || body.trim() == "[]") return
             
             val json = JSONObject(body)
             if (json.has("failed")) {
-                val failCode = json.getInt("failed")
+                val failCode = json.optInt("failed")
                 if (failCode == 1 && json.has("ts")) {
                     ts = json.getLong("ts")
                 } else {
@@ -167,13 +172,6 @@ class LongPollManager(
     private suspend fun performCheck() {
         val currentServer = server ?: return
         val currentKey = key ?: return
-        
-        val currentTime = System.currentTimeMillis() / 1000
-        val timeDiff = currentTime - ts
-        
-        if (Math.abs(timeDiff) > 86400) {
-            ts = currentTime
-        }
 
         // Mode: 2 (attachments) + 8 (pts) + 32 (pts) + 64 (extra) + 128 (random_id) = 234
         val urlBuilder = StringBuilder(if (currentServer.startsWith("http")) currentServer else "https://$currentServer")
@@ -184,52 +182,38 @@ class LongPollManager(
         pts?.let { urlBuilder.append("&pts=").append(it) }
         
         val request = Request.Builder().url(urlBuilder.toString()).build()
-        val requestStartTime = System.currentTimeMillis()
         
         try {
             val response = withContext(Dispatchers.IO) { client.newCall(request).execute() }
-            val requestDuration = System.currentTimeMillis() - requestStartTime
-            
             val body = response.body?.string() ?: throw Exception("Empty body")
-            MLog.data(TAG, "Check response (duration=${requestDuration}ms)", body)
+            MLog.data(TAG, "Check response", body)
 
-            if (requestDuration < 1000) {
-                fastResponseCount++
-                if (fastResponseCount >= 5) {
-                    server = null
-                    return
-                }
-            } else {
-                fastResponseCount = 0
-            }
-
-            if (body.trim() == "[]") {
-                if (requestDuration < 1000) {
-                    ts = currentTime
-                    delay(1000)
-                }
+            if (body.isBlank() || body.trim() == "[]") {
+                delay(1000)
                 return
             }
 
             val json = JSONObject(body)
             if (json.has("failed")) {
-                val code = json.getInt("failed")
+                val code = json.optInt("failed")
+                MLog.w(TAG, "LongPoll returned failed code: $code")
                 when (code) {
-                    1 -> ts = json.optLong("ts", ts)
-                    2 -> server = null // Key expired
-                    3 -> { // Key and TS expired, or server changed
+                    1 -> {
+                        if (json.has("ts")) {
+                            ts = json.getLong("ts")
+                        }
+                    }
+                    2, 3, 4 -> {
                         server = null
                         key = null
-                    }
-                    4 -> { // Key, TS and PTS expired
-                        server = null
-                        pts = null
                     }
                 }
                 return
             }
 
-            ts = json.optLong("ts", ts)
+            if (json.has("ts")) {
+                ts = json.getLong("ts")
+            }
             if (json.has("pts")) {
                 pts = json.optInt("pts")
             }
@@ -244,6 +228,12 @@ class LongPollManager(
         }
     }
 
+    private fun normalizePeerId(rawPeerId: Int, flags: Int = 0, attachments: JSONObject? = null): Int {
+        if (rawPeerId >= 2000000000 || rawPeerId < 0) return rawPeerId
+        val isChat = (flags and 16) != 0 || (attachments != null && attachments.has("from") && attachments.optString("from").toIntOrNull() != rawPeerId)
+        return if (isChat) 2000000000 + rawPeerId else rawPeerId
+    }
+
     private fun processUpdates(updates: org.json.JSONArray) {
         for (i in 0 until updates.length()) {
             try {
@@ -251,15 +241,26 @@ class LongPollManager(
                 val type = update.getInt(0)
                 
                 when (type) {
+                    3 -> {
+                        // [3, message_id, flags, peer_id]
+                        val msgId = update.optInt(1)
+                        val flags = update.optInt(2)
+                        val rawPeerId = update.optInt(3)
+                        val peerId = normalizePeerId(rawPeerId, flags)
+                        notify { it.onMessageRead(peerId, msgId) }
+                    }
                     4 -> processNewMessage(update)
                     5 -> {
                         val msgId = update.getInt(1)
-                        val peerId = update.getInt(3)
-                        val text = update.getString(5)
+                        val flags = update.optInt(2)
+                        val rawPeerId = update.optInt(3)
+                        val peerId = normalizePeerId(rawPeerId, flags)
+                        val text = update.optString(5)
                         notify { it.onMessageEdit(msgId, peerId, text) }
                     }
                     6, 7 -> {
-                        val peerId = update.getInt(1)
+                        val rawPeerId = update.getInt(1)
+                        val peerId = normalizePeerId(rawPeerId)
                         val localId = update.getInt(2)
                         notify { it.onMessageRead(peerId, localId) }
                         scope.launch { AppEvents.emitRefreshNotifications() }
@@ -268,17 +269,34 @@ class LongPollManager(
                         val userId = Math.abs(update.getInt(1))
                         notify { it.onUserOnline(userId, type == 8) }
                     }
-                    61 -> {
-                        val peerId = update.getInt(1)
-                        val userId = if (update.length() > 2) {
-                            when (val raw = update.get(2)) {
-                                is Int -> raw
-                                is String -> raw.split(",").firstOrNull()?.toIntOrNull() ?: peerId
-                                is org.json.JSONArray -> raw.optInt(0, peerId)
-                                else -> peerId
+                    13 -> {
+                        // [13, message_id, flags, peer_id]
+                        val msgId = update.optInt(1)
+                        val rawPeerId = update.optInt(3)
+                        val peerId = normalizePeerId(rawPeerId)
+                        notify { it.onMessageDelete(msgId, peerId) }
+                    }
+                    51, 52 -> {
+                        // [51/52, chat_id, self]
+                        val chatId = update.optInt(1)
+                        val peerId = if (chatId < 2000000000) 2000000000 + chatId else chatId
+                        notify { it.onChatChanged(peerId) }
+                    }
+                    61, 62 -> {
+                        val userID = update.optInt(1)
+                        val rawPeerID = if (type == 62) update.optInt(2) else userID
+                        val peerID = if (type == 62 && rawPeerID < 2000000000) 2000000000 + rawPeerID else rawPeerID
+                        notify { it.onUserTyping(peerID, userID) }
+                    }
+                    63, 64 -> {
+                        val rawPeerID = update.optInt(1)
+                        val peerID = if (rawPeerID < 2000000000) 2000000000 + rawPeerID else rawPeerID
+                        val userIDs = update.optJSONArray(2)
+                        if (userIDs != null) {
+                            for (u in 0 until userIDs.length()) {
+                                notify { it.onUserTyping(peerID, userIDs.optInt(u)) }
                             }
-                        } else peerId
-                        notify { it.onUserTyping(peerId, userId) }
+                        }
                     }
                     80 -> {
                         notify { it.onNotificationsCountUpdated() }
@@ -293,21 +311,22 @@ class LongPollManager(
 
     private fun processNewMessage(update: org.json.JSONArray) {
         // [4, message_id, flags, peer_id, timestamp, subject, text, attachments, random_id]
-        if (update.length() < 7) return
+        if (update.length() < 5) return
         
-        val msgId = update.getInt(1)
-        val flags = update.getInt(2)
-        val peerId = update.getInt(3)
-        val timestamp = update.getLong(4)
-        val text = update.getString(6)
+        val msgId = update.optInt(1)
+        val flags = update.optInt(2)
+        val rawPeerId = update.optInt(3)
+        val timestamp = update.optLong(4)
+        val text = update.optString(6).ifEmpty { update.optString(5) }
         
         if (processedEvents.containsKey(msgId)) return
         processedEvents[msgId] = timestamp
         if (processedEvents.size > MAX_PROCESSED_EVENTS) processedEvents.clear()
 
         val attachments = if (update.length() > 7) update.optJSONObject(7) else null
+        val peerId = normalizePeerId(rawPeerId, flags, attachments)
+
         var fromId = peerId
-        
         attachments?.let { 
             if (it.has("from")) {
                 fromId = it.optString("from").toIntOrNull() ?: peerId
@@ -315,11 +334,9 @@ class LongPollManager(
         }
 
         val isOut = (flags and 2) != 0
-        val finalText = if (text.isEmpty() && attachments != null) "[Вложение]" else text
+        val finalText = if (text.isBlank() && attachments != null) "[Вложение]" else text
         
         notify { it.onNewMessage(msgId, peerId, timestamp, finalText, fromId, isOut) }
-        
-        // Flux behavior: refresh notifications on every new message
         scope.launch { AppEvents.emitRefreshNotifications() }
     }
 

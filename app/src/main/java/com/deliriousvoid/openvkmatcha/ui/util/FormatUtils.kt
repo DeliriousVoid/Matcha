@@ -9,7 +9,8 @@ import com.deliriousvoid.openvkmatcha.R
 
 fun formatTimeAgo(timestamp: Long): String {
     if (timestamp <= 0) return ""
-    val date = Date(timestamp * 1000)
+    val millis = if (timestamp > 10000000000L) timestamp else timestamp * 1000
+    val date = Date(millis)
     val now = Calendar.getInstance()
     val target = Calendar.getInstance().apply { time = date }
 

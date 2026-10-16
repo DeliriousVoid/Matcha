@@ -30,6 +30,8 @@ object Routes {
     const val SETTINGS_THEME_EDITOR = "settings/appearance/theme_editor?id={id}"
     const val SETTINGS_ACCENT_EDITOR = "settings/appearance/accent_editor?id={id}"
     const val CHAT = "chat/{peerId}?title={title}"
+    const val CHAT_INFO = "chat_info/{peerId}"
+    const val CREATE_CHAT = "create_chat"
     const val PLAYLIST_DETAILS = "playlist/{ownerId}/{playlistId}?title={title}"
     const val LISTENBRAINZ_PLAYLIST = "listenbrainz_playlist/{mbid}?title={title}&thumbUrl={thumbUrl}"
     const val PROFILE = "profile/{id}"
@@ -93,6 +95,9 @@ object Routes {
         val encodedTitle = Uri.encode(title)
         return "chat/$peerId?title=$encodedTitle"
     }
+
+    fun chatInfoRoute(peerId: Int): String = "chat_info/$peerId"
+    fun createChatRoute(): String = "create_chat"
 
     fun playlistRoute(ownerId: Int, playlistId: Int, title: String): String {
         val encodedTitle = Uri.encode(title)

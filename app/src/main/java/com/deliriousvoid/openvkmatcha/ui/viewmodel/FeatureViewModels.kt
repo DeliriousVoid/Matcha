@@ -331,6 +331,7 @@ data class MessagesUiState(
 
 class MessagesViewModel(
     private val messagesRepository: MessagesRepository,
+    private val profileRepository: ProfileRepository,
     private val settingsViewModel: SettingsViewModel,
     private val longPollManager: com.deliriousvoid.openvkmatcha.util.LongPollManager,
 ) : ViewModel(), com.deliriousvoid.openvkmatcha.util.LongPollManager.OnLongPollEventListener {
@@ -338,33 +339,49 @@ class MessagesViewModel(
     private val _uiState = MutableStateFlow(MessagesUiState(isLoading = true))
     val uiState: StateFlow<MessagesUiState> = _uiState.asStateFlow()
 
-    private val typingJobs = ConcurrentHashMap<Int, Job>()
+    private var typingJobs = mutableMapOf<Int, Job>()
+    private var typingExpirations = mutableMapOf<Int, MutableMap<Int, Long>>()
+    private var typingUserNames = mutableMapOf<Int, MutableMap<Int, String>>()
 
     init {
-        loadConversations()
         longPollManager.addListener(this)
-        viewModelScope.launch {
-            AppEvents.accountChanged.collect {
-                _uiState.update { it.copy(conversations = emptyList(), isLoading = true) }
-                loadConversations()
-            }
-        }
+        loadConversations()
     }
 
     override fun onCleared() {
+        super.onCleared()
         longPollManager.removeListener(this)
     }
 
-    fun loadConversations() {
+    fun loadConversations(isRefresh: Boolean = false) {
         if (settingsViewModel.offlineMode.value) {
             _uiState.update { it.copy(isLoading = false) }
             return
         }
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = it.conversations.isEmpty(), error = null) }
-            messagesRepository.loadConversations()
-                .onSuccess { conversations ->
-                    _uiState.update { it.copy(conversations = conversations, isLoading = false) }
+            if (isRefresh || _uiState.value.conversations.isEmpty()) {
+                _uiState.update { it.copy(isLoading = true, error = null) }
+            }
+            messagesRepository.loadConversations(offset = 0, count = 50)
+                .onSuccess { fetchedConversations ->
+                    _uiState.update { state ->
+                        val merged = fetchedConversations.map { fetched ->
+                            val local = state.conversations.find { it.peer.id == fetched.peer.id }
+                            if (local != null && local.lastMessageId > fetched.lastMessageId) {
+                                fetched.copy(
+                                    lastMessage = local.lastMessage,
+                                    lastMessageDate = local.lastMessageDate,
+                                    lastMessageId = local.lastMessageId,
+                                    unreadCount = maxOf(local.unreadCount, fetched.unreadCount)
+                                )
+                            } else if (local != null && local.unreadCount > fetched.unreadCount && local.lastMessageId == fetched.lastMessageId) {
+                                fetched.copy(unreadCount = maxOf(local.unreadCount, fetched.unreadCount))
+                            } else {
+                                fetched
+                            }
+                        }
+                        state.copy(conversations = merged, isLoading = false)
+                    }
                 }
                 .onFailure { error ->
                     _uiState.update { it.copy(isLoading = false, error = error.message) }
@@ -372,51 +389,157 @@ class MessagesViewModel(
         }
     }
 
-    // LongPoll implementation
-    override fun onNewMessage(messageId: Int, peerId: Int, timestamp: Long, text: String, fromId: Int, isOut: Boolean) {
-        _uiState.update { state ->
-            val existing = state.conversations.find { it.peer.id == peerId }
-            if (existing != null) {
-                val updated = existing.copy(
-                    lastMessage = text,
-                    lastMessageDate = timestamp,
-                    unreadCount = if (isOut) existing.unreadCount else existing.unreadCount + 1,
-                    lastMessageId = messageId
-                )
-                state.copy(conversations = (listOf(updated) + state.conversations.filter { it.peer.id != peerId }))
-            } else {
-                viewModelScope.launch { loadConversations() }
-                state
+    fun markConversationAsRead(peerId: Int) {
+        viewModelScope.launch {
+            messagesRepository.markAsRead(peerId).onSuccess {
+                _uiState.update { state ->
+                    state.copy(conversations = state.conversations.map {
+                        if (it.peer.id == peerId) it.copy(unreadCount = 0) else it
+                    })
+                }
             }
         }
     }
 
-    override fun onMessageRead(peerId: Int, localId: Int) {
+    fun deleteConversation(peerId: Int) {
+        viewModelScope.launch {
+            messagesRepository.deleteConversation(peerId).onSuccess {
+                _uiState.update { state ->
+                    state.copy(conversations = state.conversations.filter { it.peer.id != peerId })
+                }
+            }
+        }
+    }
+
+    fun leaveChat(peerId: Int) {
+        viewModelScope.launch {
+            messagesRepository.leaveChat(peerId).onSuccess {
+                _uiState.update { state ->
+                    state.copy(conversations = state.conversations.filter { it.peer.id != peerId })
+                }
+            }
+        }
+    }
+
+    private fun isPeerMatch(peerId1: Int, peerId2: Int): Boolean {
+        return peerId1 == peerId2 ||
+               (peerId1 >= 2000000000 && peerId2 == (peerId1 - 2000000000)) ||
+               (peerId2 >= 2000000000 && peerId1 == (peerId2 - 2000000000))
+    }
+
+    // LongPoll Realtime Handlers
+    override fun onNewMessage(messageId: Int, peerId: Int, timestamp: Long, text: String, fromId: Int, isOut: Boolean) {
+        _uiState.update { state ->
+            val preview = if (isOut) "Вы: $text" else text
+            val existingIndex = state.conversations.indexOfFirst { isPeerMatch(it.peer.id, peerId) }
+            if (existingIndex != -1) {
+                val existing = state.conversations[existingIndex]
+                val updated = existing.copy(
+                    lastMessage = preview.ifBlank { "[Вложение]" },
+                    lastMessageDate = if (timestamp > 10000000000L) timestamp / 1000 else timestamp,
+                    lastMessageId = messageId,
+                    unreadCount = if (isOut) existing.unreadCount else existing.unreadCount + 1
+                )
+                val newList = state.conversations.toMutableList()
+                newList.removeAt(existingIndex)
+                newList.add(0, updated)
+                state.copy(conversations = newList)
+            } else {
+                state
+            }
+        }
         loadConversations()
+    }
+
+    override fun onIncomingMessagesRead(peerId: Int, localId: Int) {
+        _uiState.update { state ->
+            state.copy(conversations = state.conversations.map {
+                if (isPeerMatch(it.peer.id, peerId)) it.copy(unreadCount = 0) else it
+            })
+        }
+    }
+
+    override fun onMessageRead(peerId: Int, localId: Int) {
+        onIncomingMessagesRead(peerId, localId)
     }
 
     override fun onMessageEdit(messageId: Int, peerId: Int, newText: String) {
         loadConversations()
     }
 
+    override fun onMessageDelete(messageId: Int, peerId: Int) {
+        loadConversations()
+    }
+
+    override fun onChatChanged(peerId: Int) {
+        loadConversations()
+    }
+
     override fun onUserTyping(peerId: Int, userId: Int) {
-        _uiState.update { it.copy(typingPeers = it.typingPeers + (peerId to "печатает...")) }
-        typingJobs[peerId]?.cancel()
-        typingJobs[peerId] = viewModelScope.launch {
-            delay(5000)
-            _uiState.update { it.copy(typingPeers = it.typingPeers - peerId) }
-            typingJobs.remove(peerId)
+        val targetConversation = _uiState.value.conversations.find { isPeerMatch(it.peer.id, peerId) } ?: return
+        val targetPeerId = targetConversation.peer.id
+
+        val expiration = System.currentTimeMillis() + 4000L
+        val userExpirations = typingExpirations.getOrPut(targetPeerId) { mutableMapOf() }
+        userExpirations[userId] = expiration
+
+        val userNames = typingUserNames.getOrPut(targetPeerId) { mutableMapOf() }
+        if (!userNames.containsKey(userId)) {
+            viewModelScope.launch {
+                profileRepository.loadProfile(userId.toString()).onSuccess { profile ->
+                    userNames[userId] = profile.firstName.ifBlank { profile.fullName }
+                    updateConversationTypingText(targetPeerId)
+                }
+            }
+        }
+
+        updateConversationTypingText(targetPeerId)
+
+        typingJobs[targetPeerId]?.cancel()
+        typingJobs[targetPeerId] = viewModelScope.launch {
+            delay(4000)
+            updateConversationTypingText(targetPeerId)
+        }
+    }
+
+    private fun updateConversationTypingText(peerId: Int) {
+        val expirations = typingExpirations[peerId] ?: return
+        val now = System.currentTimeMillis()
+        val activeUserIds = expirations.filter { it.value > now }.keys.toList()
+        if (activeUserIds.isEmpty()) {
+            typingExpirations.remove(peerId)
+            typingUserNames.remove(peerId)
+            _uiState.update { state -> state.copy(typingPeers = state.typingPeers - peerId) }
+            return
+        }
+
+        val conversation = _uiState.value.conversations.find { isPeerMatch(it.peer.id, peerId) }
+        val isGroupChat = conversation?.peer?.type == com.deliriousvoid.openvkmatcha.data.model.PeerType.CHAT || (conversation?.peer?.id ?: 0) >= 2000000000
+        val firstUserId = activeUserIds.first()
+        val firstName = typingUserNames[peerId]?.get(firstUserId) ?: "Участник"
+        val count = activeUserIds.size
+
+        val text = if (count == 1) {
+            if (isGroupChat) "$firstName печатает..." else "печатает..."
+        } else {
+            "$firstName и ${count - 1} печатают..."
+        }
+
+        _uiState.update { state ->
+            state.copy(typingPeers = state.typingPeers + ((conversation?.peer?.id ?: peerId) to text))
         }
     }
 
     override fun onUserOnline(userId: Int, isOnline: Boolean) {
         _uiState.update { state ->
-            state.copy(conversations = state.conversations.map {
-                if (it.peer.id == userId) it.copy(peer = it.peer.copy(online = isOnline))
-                else it
+            state.copy(conversations = state.conversations.map { conv ->
+                if (conv.peer.id == userId) {
+                    conv.copy(peer = conv.peer.copy(online = isOnline))
+                } else conv
             })
         }
     }
+
     override fun onNotificationsCountUpdated() {}
 
     companion object {
@@ -424,7 +547,7 @@ class MessagesViewModel(
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T {
                 val app = OpenVKMatchaApp.instance
-                return MessagesViewModel(app.messagesRepository, SettingsViewModel(app), app.longPollManager) as T
+                return MessagesViewModel(app.messagesRepository, app.profileRepository, SettingsViewModel(app), app.longPollManager) as T
             }
         }
     }
@@ -447,13 +570,18 @@ data class ChatUiState(
     val replyingTo: ChatMessage? = null,
     val editingMessage: ChatMessage? = null,
     val isPeerTyping: Boolean = false,
+    val typingText: String? = null,
     val peer: com.deliriousvoid.openvkmatcha.data.model.Peer? = null,
     val jumpSourceId: Int? = null,
     val isJumped: Boolean = false,
+    val stickerPacks: List<com.deliriousvoid.openvkmatcha.data.model.StickerPack> = emptyList(),
+    val recentStickers: List<com.deliriousvoid.openvkmatcha.data.model.StickerItem> = emptyList(),
+    val isLoadingStickers: Boolean = false,
 )
 
 class ChatViewModel(
     private val messagesRepository: MessagesRepository,
+    private val profileRepository: ProfileRepository,
     private val longPollManager: com.deliriousvoid.openvkmatcha.util.LongPollManager,
     private val peerId: Int,
 ) : ViewModel(), com.deliriousvoid.openvkmatcha.util.LongPollManager.OnLongPollEventListener {
@@ -464,65 +592,152 @@ class ChatViewModel(
     private val _scrollEvents = MutableSharedFlow<ChatScrollEvent>(extraBufferCapacity = 1)
     val scrollEvents = _scrollEvents.asSharedFlow()
 
-    private var lastTypingTime = 0L
     private var typingJob: Job? = null
+    private var lastTypingActivitySentAt = 0L
 
     init {
-        loadMessages()
-        loadPeerInfo()
         longPollManager.addListener(this)
-        markAsRead()
+        loadPeerInfo()
+        loadMessages(isRefresh = true)
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        longPollManager.removeListener(this)
     }
 
     private fun loadPeerInfo() {
         viewModelScope.launch {
-            messagesRepository.getConversationsById(listOf(peerId))
-                .onSuccess { conversations ->
-                    conversations.firstOrNull()?.let { conv ->
-                        _uiState.update { it.copy(peer = conv.peer) }
+            if (peerId > 0 && peerId < 2000000000) {
+                profileRepository.loadProfile(peerId.toString()).onSuccess { userProfile ->
+                    val peer = com.deliriousvoid.openvkmatcha.data.model.Peer(
+                        id = peerId,
+                        type = com.deliriousvoid.openvkmatcha.data.model.PeerType.USER,
+                        title = userProfile.fullName,
+                        photo = userProfile.photo200.ifBlank { userProfile.photo50 },
+                        online = userProfile.online,
+                        mobileOnline = userProfile.mobileOnline,
+                        verified = userProfile.verified,
+                        lastSeen = userProfile.lastSeen
+                    )
+                    _uiState.update { it.copy(peer = peer) }
+                }.onFailure {
+                    fetchPeerFromConversations()
+                }
+            } else if (peerId < 0) {
+                profileRepository.loadProfile(peerId.toString()).onSuccess { groupProfile ->
+                    val peer = com.deliriousvoid.openvkmatcha.data.model.Peer(
+                        id = peerId,
+                        type = com.deliriousvoid.openvkmatcha.data.model.PeerType.GROUP,
+                        title = groupProfile.fullName,
+                        photo = groupProfile.photo200.ifBlank { groupProfile.photo50 },
+                        verified = groupProfile.verified
+                    )
+                    _uiState.update { it.copy(peer = peer) }
+                }.onFailure {
+                    fetchPeerFromConversations()
+                }
+            } else {
+                fetchPeerFromConversations()
+                messagesRepository.getChatMembers(peerId).onSuccess { json ->
+                    val responseObj = json.optJSONObject("response") ?: json
+                    val items = responseObj.optJSONArray("items")
+                    val settings = responseObj.optJSONObject("chat_settings")
+                    val count = (settings?.optInt("members_count") ?: 0)
+                        .takeIf { it > 0 } ?: (items?.length() ?: 0)
+                    val photoObj = settings?.optJSONObject("photo")
+                    val photoUrl = com.deliriousvoid.openvkmatcha.data.parser.JsonParsers.largestPhotoUrl(photoObj?.optJSONArray("sizes"))
+                        ?: photoObj?.optString("photo_200")
+                        ?: settings?.optString("photo_200", "") ?: ""
+
+                    _uiState.update { state ->
+                        val currentPeer = state.peer ?: com.deliriousvoid.openvkmatcha.data.model.Peer(
+                            id = peerId,
+                            type = com.deliriousvoid.openvkmatcha.data.model.PeerType.CHAT,
+                            title = settings?.optString("title") ?: "",
+                            photo = photoUrl
+                        )
+                        state.copy(
+                            peer = currentPeer.copy(
+                                title = currentPeer.title.ifBlank { settings?.optString("title") ?: "" },
+                                photo = photoUrl.ifBlank { currentPeer.photo },
+                                membersCount = if (count > 0) count else currentPeer.membersCount
+                            )
+                        )
                     }
                 }
+            }
         }
     }
 
-    override fun onCleared() {
-        longPollManager.removeListener(this)
+    private suspend fun fetchPeerFromConversations() {
+        messagesRepository.getConversationsById(listOf(peerId)).onSuccess { list ->
+            val conv = list.firstOrNull()
+            if (conv != null) {
+                _uiState.update { it.copy(peer = conv.peer) }
+            }
+        }
     }
 
     fun updateInput(text: String) {
         _uiState.update { it.copy(inputText = text) }
-        if (text.isNotEmpty()) {
-            val now = System.currentTimeMillis()
-            if (now - lastTypingTime > 4000) {
-                lastTypingTime = now
-                sendTyping()
+        sendTypingActivity()
+    }
+
+    private fun sendTypingActivity() {
+        val now = System.currentTimeMillis()
+        if (now - lastTypingActivitySentAt > 4000) {
+            lastTypingActivitySentAt = now
+            viewModelScope.launch {
+                messagesRepository.setActivity(peerId, "typing")
+            }
+        }
+    }
+
+    private fun sortMessages(list: List<ChatMessage>): List<ChatMessage> {
+        return list.distinctBy { it.id }.sortedWith { a, b ->
+            when {
+                a.id == b.id -> 0
+                a.id > 0 && b.id > 0 -> b.id.compareTo(a.id)
+                else -> b.date.compareTo(a.date)
             }
         }
     }
 
     fun loadMessages(isRefresh: Boolean = true) {
+        if (!isRefresh && _uiState.value.isLoadingMore) return
         viewModelScope.launch {
             if (isRefresh) {
                 _uiState.update { it.copy(isLoading = it.messages.isEmpty(), error = null) }
             } else {
                 _uiState.update { it.copy(isLoadingMore = true) }
             }
-            
+
             val offset = if (isRefresh) 0 else _uiState.value.messages.size
-            messagesRepository.loadHistory(peerId, offset = offset)
-                .onSuccess { history ->
+            messagesRepository.loadHistory(peerId, offset = offset, count = 40)
+                .onSuccess { parsed ->
                     _uiState.update { state ->
-                        val newList = if (isRefresh) history.messages else (state.messages + history.messages).distinctBy { it.id }
+                        val newMessages = if (isRefresh) {
+                            val realMessages = parsed.messages
+                            val pendingMessages = state.messages.filter { pending ->
+                                pending.id < 0 && realMessages.none { it.text == pending.text && it.isOutgoing }
+                            }
+                            sortMessages(realMessages + pendingMessages)
+                        } else {
+                            sortMessages(state.messages + parsed.messages)
+                        }
+                        val combinedAuthors = state.authors + parsed.authors
                         state.copy(
-                            messages = newList,
-                            authors = state.authors + history.authors,
+                            messages = newMessages,
+                            authors = combinedAuthors,
                             isLoading = false,
                             isLoadingMore = false,
-                            hasMore = history.messages.size >= 30
+                            hasMore = parsed.messages.size >= 40
                         )
                     }
                     if (isRefresh) {
                         _scrollEvents.tryEmit(ChatScrollEvent.ScrollToBottom)
+                        messagesRepository.markAsRead(peerId)
                     }
                 }
                 .onFailure { error ->
@@ -533,34 +748,106 @@ class ChatViewModel(
 
     fun sendMessage() {
         val text = _uiState.value.inputText.trim()
-        if (text.isBlank() && _uiState.value.editingMessage == null) return
-
+        val replyingTo = _uiState.value.replyingTo
         val editing = _uiState.value.editingMessage
-        val replying = _uiState.value.replyingTo
+
+        if (editing != null) {
+            if (text.isBlank()) return
+            viewModelScope.launch {
+                _uiState.update { it.copy(isSending = true) }
+                messagesRepository.editMessage(peerId, editing.id, text)
+                    .onSuccess {
+                        _uiState.update { state ->
+                            state.copy(
+                                isSending = false,
+                                inputText = "",
+                                editingMessage = null,
+                                messages = state.messages.map { msg ->
+                                    if (msg.id == editing.id) msg.copy(text = text, isEdited = true) else msg
+                                }
+                            )
+                        }
+                    }
+                    .onFailure { error ->
+                        _uiState.update { it.copy(isSending = false, error = error.message) }
+                    }
+            }
+            return
+        }
+
+        if (text.isBlank()) return
+
+        val tempId = -kotlin.random.Random.nextInt(100000, 999999)
+        val pendingMsg = ChatMessage(
+            id = tempId,
+            peerId = peerId,
+            fromId = 0,
+            text = text,
+            date = System.currentTimeMillis() / 1000,
+            isOutgoing = true,
+            isRead = false,
+            replyMessage = replyingTo
+        )
+
+        _uiState.update { state ->
+            state.copy(
+                inputText = "",
+                replyingTo = null,
+                isSending = true,
+                messages = sortMessages(listOf(pendingMsg) + state.messages)
+            )
+        }
+        _scrollEvents.tryEmit(ChatScrollEvent.ScrollToBottom)
 
         viewModelScope.launch {
-            _uiState.update { it.copy(isSending = true, error = null) }
-            
-            val result = if (editing != null) {
-                messagesRepository.editMessage(peerId, editing.id, text)
-            } else {
-                messagesRepository.sendMessage(peerId, text, replyTo = replying?.id)
-            }
+            messagesRepository.sendMessage(peerId, text = text, replyTo = replyingTo?.id)
+                .onSuccess {
+                    _uiState.update { it.copy(isSending = false) }
+                    loadMessages(isRefresh = true)
+                }
+                .onFailure { error ->
+                    _uiState.update { it.copy(isSending = false, error = error.message) }
+                }
+        }
+    }
 
-            result.onSuccess {
-                _uiState.update { it.copy(inputText = "", isSending = false, replyingTo = null, editingMessage = null) }
-                loadMessages(isRefresh = true)
-            }.onFailure { error ->
-                _uiState.update { it.copy(isSending = false, error = error.message) }
-            }
+    fun sendSticker(sticker: com.deliriousvoid.openvkmatcha.data.model.StickerItem) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isSending = true) }
+            messagesRepository.sendMessage(peerId, text = "", stickerId = sticker.id)
+                .onSuccess {
+                    _uiState.update { it.copy(isSending = false) }
+                    loadMessages(isRefresh = true)
+                }
+                .onFailure { error ->
+                    _uiState.update { it.copy(isSending = false, error = error.message) }
+                }
+        }
+    }
+
+    fun loadStickerPacks() {
+        if (_uiState.value.stickerPacks.isNotEmpty() || _uiState.value.isLoadingStickers) return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoadingStickers = true) }
+            messagesRepository.getStickerPacks()
+                .onSuccess { response ->
+                    val packs = com.deliriousvoid.openvkmatcha.data.parser.JsonParsers.parseStickerPacks(response)
+                    _uiState.update { it.copy(stickerPacks = packs, isLoadingStickers = false) }
+                }
+                .onFailure {
+                    _uiState.update { it.copy(isLoadingStickers = false) }
+                }
         }
     }
 
     fun deleteMessages(messageIds: List<Int>, forAll: Boolean = true) {
         viewModelScope.launch {
-            messagesRepository.deleteMessages(peerId, messageIds, forAll).onSuccess {
-                loadMessages()
-            }
+            messagesRepository.deleteMessages(peerId, messageIds, deleteForAll = forAll)
+                .onSuccess {
+                    _uiState.update { state ->
+                        state.copy(messages = state.messages.filter { !messageIds.contains(it.id) })
+                    }
+                }
         }
     }
 
@@ -581,90 +868,102 @@ class ChatViewModel(
     }
 
     fun jumpToMessage(targetId: Int) {
-        val message = _uiState.value.messages.find { it.id == targetId }
-        if (message != null) {
-            _scrollEvents.tryEmit(ChatScrollEvent.JumpToId(targetId, true))
+        val index = _uiState.value.messages.indexOfFirst { it.id == targetId }
+        if (index != -1) {
+            _scrollEvents.tryEmit(ChatScrollEvent.JumpToId(targetId, isSmooth = true))
         } else {
-            val sourceId = _uiState.value.messages.firstOrNull()?.id
-            _uiState.update { it.copy(jumpSourceId = sourceId) }
-            loadMessagesAround(targetId)
-        }
-    }
-
-    private fun loadMessagesAround(targetId: Int) {
-        viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true, error = null) }
-            messagesRepository.loadHistory(peerId, offset = -20, count = 40, startMessageId = targetId)
-                .onSuccess { history ->
-                    _uiState.update { state ->
-                        state.copy(
-                            messages = history.messages,
-                            authors = state.authors + history.authors,
-                            isLoading = false,
-                            isJumped = true,
-                            hasMore = true
-                        )
+            viewModelScope.launch {
+                _uiState.update { it.copy(isLoading = true, jumpSourceId = _uiState.value.messages.firstOrNull()?.id, isJumped = true) }
+                messagesRepository.loadHistory(peerId, offset = 0, count = 40, startMessageId = targetId)
+                    .onSuccess { parsed ->
+                        _uiState.update { state ->
+                            state.copy(
+                                messages = sortMessages(parsed.messages),
+                                authors = state.authors + parsed.authors,
+                                isLoading = false
+                            )
+                        }
+                        _scrollEvents.tryEmit(ChatScrollEvent.JumpToId(targetId, isSmooth = false))
                     }
-                    _scrollEvents.tryEmit(ChatScrollEvent.JumpToId(targetId, false))
-                }
-                .onFailure { error ->
-                    _uiState.update { it.copy(isLoading = false, error = error.message) }
-                }
+                    .onFailure {
+                        _uiState.update { it.copy(isLoading = false) }
+                    }
+            }
         }
     }
 
     fun returnFromJump() {
-        val sourceId = _uiState.value.jumpSourceId
         _uiState.update { it.copy(isJumped = false, jumpSourceId = null) }
-        if (sourceId != null && _uiState.value.messages.any { it.id == sourceId }) {
-            _scrollEvents.tryEmit(ChatScrollEvent.JumpToId(sourceId, true))
-        } else {
-            loadMessages(isRefresh = true)
-        }
+        loadMessages(isRefresh = true)
     }
 
-    private fun markAsRead() {
-        viewModelScope.launch { messagesRepository.markAsRead(peerId) }
+    private fun isPeerMatch(eventPeerId: Int): Boolean {
+        return eventPeerId == this.peerId ||
+               (this.peerId >= 2000000000 && eventPeerId == (this.peerId - 2000000000)) ||
+               (this.peerId < 2000000000 && eventPeerId == (this.peerId + 2000000000))
     }
 
-    private fun sendTyping() {
-        viewModelScope.launch { messagesRepository.setActivity(peerId) }
-    }
-
-    // LongPoll
+    // LongPoll Realtime Handlers
     override fun onNewMessage(messageId: Int, peerId: Int, timestamp: Long, text: String, fromId: Int, isOut: Boolean) {
-        if (peerId == this.peerId) {
-            val newMessage = com.deliriousvoid.openvkmatcha.data.model.ChatMessage(
+        if (isPeerMatch(peerId)) {
+            val newMsg = ChatMessage(
                 id = messageId,
-                peerId = peerId,
+                peerId = this.peerId,
                 fromId = fromId,
                 text = text,
                 date = timestamp,
                 isOutgoing = isOut,
-                isRead = isOut
+                isRead = false
             )
-            
             _uiState.update { state ->
-                if (state.messages.any { it.id == messageId }) return@update state
-                state.copy(messages = (listOf(newMessage) + state.messages).distinctBy { it.id })
+                val filtered = if (isOut) {
+                    val pendingMatch = state.messages.find { it.id < 0 && (it.text == text || text.isBlank()) }
+                    if (pendingMatch != null) state.messages.filter { it.id != pendingMatch.id } else state.messages
+                } else {
+                    state.messages
+                }
+                state.copy(messages = sortMessages(listOf(newMsg) + filtered))
             }
             _scrollEvents.tryEmit(ChatScrollEvent.ScrollToBottom)
-            markAsRead()
+            loadMessages(isRefresh = true)
+        }
+    }
+
+    override fun onOutgoingMessagesRead(peerId: Int, localId: Int) {
+        if (isPeerMatch(peerId)) {
+            _uiState.update { state ->
+                state.copy(messages = state.messages.map {
+                    if (it.isOutgoing && (localId <= 0 || it.id <= localId)) it.copy(isRead = true) else it
+                })
+            }
+            loadMessages(isRefresh = true)
+        }
+    }
+
+    override fun onIncomingMessagesRead(peerId: Int, localId: Int) {
+        if (isPeerMatch(peerId)) {
+            _uiState.update { state ->
+                state.copy(messages = state.messages.map {
+                    if (!it.isOutgoing && (localId <= 0 || it.id <= localId)) it.copy(isRead = true) else it
+                })
+            }
+            loadMessages(isRefresh = true)
         }
     }
 
     override fun onMessageRead(peerId: Int, localId: Int) {
-        if (peerId == this.peerId) {
+        if (isPeerMatch(peerId)) {
             _uiState.update { state ->
-                state.copy(messages = state.messages.map { 
-                    if (it.id <= localId) it.copy(isRead = true) else it 
+                state.copy(messages = state.messages.map {
+                    if (localId <= 0 || it.id <= localId) it.copy(isRead = true) else it
                 })
             }
+            loadMessages(isRefresh = true)
         }
     }
 
     override fun onMessageEdit(messageId: Int, peerId: Int, newText: String) {
-        if (peerId == this.peerId) {
+        if (isPeerMatch(peerId)) {
             _uiState.update { state ->
                 state.copy(messages = state.messages.map {
                     if (it.id == messageId) it.copy(text = newText, isEdited = true) else it
@@ -673,27 +972,92 @@ class ChatViewModel(
         }
     }
 
-    override fun onUserTyping(peerId: Int, userId: Int) {
-        if (peerId == this.peerId) {
-            typingJob?.cancel()
-            typingJob = viewModelScope.launch {
-                _uiState.update { it.copy(isPeerTyping = true) }
-                delay(5000)
-                _uiState.update { it.copy(isPeerTyping = false) }
+    override fun onMessageDelete(messageId: Int, peerId: Int) {
+        if (isPeerMatch(peerId)) {
+            _uiState.update { state ->
+                state.copy(messages = state.messages.filter { it.id != messageId })
             }
         }
     }
 
-    override fun onUserOnline(userId: Int, isOnline: Boolean) {}
-    override fun onNotificationsCountUpdated() {}
+    override fun onChatChanged(peerId: Int) {
+        if (isPeerMatch(peerId)) {
+            loadPeerInfo()
+        }
+    }
 
+    private var typingExpirations = mutableMapOf<Int, Long>()
+    private var typingUserNames = mutableMapOf<Int, String>()
+
+    override fun onUserTyping(peerId: Int, userId: Int) {
+        if (isPeerMatch(peerId)) {
+            val expiration = System.currentTimeMillis() + 4000L
+            typingExpirations[userId] = expiration
+
+            if (!typingUserNames.containsKey(userId)) {
+                val authorName = _uiState.value.authors[userId]?.name
+                if (!authorName.isNullOrBlank()) {
+                    typingUserNames[userId] = authorName.split(" ").firstOrNull() ?: authorName
+                } else {
+                    viewModelScope.launch {
+                        profileRepository.loadProfile(userId.toString()).onSuccess { profile ->
+                            typingUserNames[userId] = profile.firstName.ifBlank { profile.fullName }
+                            updateChatTypingText()
+                        }
+                    }
+                }
+            }
+
+            updateChatTypingText()
+
+            typingJob?.cancel()
+            typingJob = viewModelScope.launch {
+                delay(4000)
+                updateChatTypingText()
+            }
+        }
+    }
+
+    private fun updateChatTypingText() {
+        val now = System.currentTimeMillis()
+        val activeUserIds = typingExpirations.filter { it.value > now }.keys.toList()
+        if (activeUserIds.isEmpty()) {
+            typingExpirations.clear()
+            typingUserNames.clear()
+            _uiState.update { it.copy(isPeerTyping = false, typingText = null) }
+            return
+        }
+
+        val firstUserId = activeUserIds.first()
+        val firstName = typingUserNames[firstUserId] ?: "Участник"
+        val count = activeUserIds.size
+
+        val isGroupChat = _uiState.value.peer?.type == com.deliriousvoid.openvkmatcha.data.model.PeerType.CHAT || peerId >= 2000000000
+        val text = if (count == 1) {
+            if (isGroupChat) "$firstName печатает..." else "печатает..."
+        } else {
+            "$firstName и ${count - 1} печатают..."
+        }
+
+        _uiState.update { it.copy(isPeerTyping = true, typingText = text) }
+    }
+
+    override fun onUserOnline(userId: Int, isOnline: Boolean) {
+        if (peerId == userId) {
+            _uiState.update { state ->
+                state.copy(peer = state.peer?.copy(online = isOnline))
+            }
+        }
+    }
+
+    override fun onNotificationsCountUpdated() {}
 
     companion object {
         fun factory(peerId: Int): ViewModelProvider.Factory = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T {
                 val app = OpenVKMatchaApp.instance
-                return ChatViewModel(app.messagesRepository, app.longPollManager, peerId) as T
+                return ChatViewModel(app.messagesRepository, app.profileRepository, app.longPollManager, peerId) as T
             }
         }
     }
@@ -2313,7 +2677,9 @@ data class CommentsUiState(
 
 data class RepostUiState(
     val adminGroups: List<UserProfile> = emptyList(),
+    val conversations: List<Conversation> = emptyList(),
     val isLoadingGroups: Boolean = false,
+    val isLoadingConversations: Boolean = false,
     val isReposting: Boolean = false,
     val pendingAttachments: List<PendingAttachment> = emptyList(),
     val error: String? = null,
@@ -2335,6 +2701,36 @@ class RepostViewModel(
                 _uiState.update { it.copy(adminGroups = groups, isLoadingGroups = false) }
             }.onFailure { error ->
                 _uiState.update { it.copy(isLoadingGroups = false, error = error.message) }
+            }
+        }
+    }
+
+    fun loadConversations() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoadingConversations = true) }
+            OpenVKMatchaApp.instance.messagesRepository.loadConversations(offset = 0, count = 50)
+                .onSuccess { conversations ->
+                    _uiState.update { it.copy(conversations = conversations, isLoadingConversations = false) }
+                }
+                .onFailure { error ->
+                    _uiState.update { it.copy(isLoadingConversations = false, error = error.message) }
+                }
+        }
+    }
+
+    fun sendToChat(post: Post, peerId: Int, message: String, onSuccess: () -> Unit) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isReposting = true, error = null) }
+            val wallAttachment = "wall${post.ownerId}_${post.id}"
+            OpenVKMatchaApp.instance.messagesRepository.sendMessage(
+                peerId = peerId,
+                text = message,
+                attachments = wallAttachment
+            ).onSuccess {
+                _uiState.update { it.copy(isReposting = false) }
+                onSuccess()
+            }.onFailure { error ->
+                _uiState.update { it.copy(isReposting = false, error = error.message) }
             }
         }
     }

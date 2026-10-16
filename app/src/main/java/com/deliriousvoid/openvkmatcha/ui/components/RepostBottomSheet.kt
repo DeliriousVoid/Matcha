@@ -53,6 +53,7 @@ fun RepostBottomSheet(
     val opaqueColorScheme = LocalOpaqueColorScheme.current
     var repostText by remember { mutableStateOf("") }
     var showGroupSelector by remember { mutableStateOf(false) }
+    var showChatSelector by remember { mutableStateOf(false) }
     var showMusicPicker by remember { mutableStateOf(false) }
 
     val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
@@ -124,6 +125,15 @@ fun RepostBottomSheet(
                 }
 
                 ListItem(
+                    headlineContent = { Text("В личные сообщения / беседу") },
+                    leadingContent = { Icon(Icons.AutoMirrored.Outlined.Send, null) },
+                    modifier = Modifier.clickable(enabled = !state.isReposting) {
+                        viewModel.loadConversations()
+                        showChatSelector = true
+                    }
+                )
+
+                ListItem(
                     headlineContent = { Text(matchaStringResource(R.string.repost_to_my_wall)) },
                     leadingContent = { Icon(Icons.Filled.Campaign, null) },
                     modifier = Modifier.clickable(enabled = !state.isReposting) {
@@ -154,6 +164,50 @@ fun RepostBottomSheet(
                 )
                 
                 Spacer(modifier = Modifier.height(16.dp))
+            } else if (showChatSelector) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = { showChatSelector = false }) {
+                        Icon(Icons.Default.Close, null)
+                    }
+                    Text(
+                        text = "Выберите получателя",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(start = 8.dp)
+                    )
+                }
+
+                if (state.isLoadingConversations) {
+                    Box(modifier = Modifier.fillMaxWidth().height(200.dp), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator()
+                    }
+                } else {
+                    LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 400.dp)) {
+                        items(state.conversations, key = { it.peer.id }) { conversation ->
+                            ListItem(
+                                headlineContent = { Text(conversation.peer.title) },
+                                leadingContent = {
+                                    AsyncImage(
+                                        model = conversation.peer.photo,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(40.dp).clip(CircleShape),
+                                        contentScale = ContentScale.Crop
+                                    )
+                                },
+                                modifier = Modifier.clickable {
+                                    viewModel.sendToChat(post, conversation.peer.id, repostText) {
+                                        onDismiss()
+                                    }
+                                }
+                            )
+                        }
+                    }
+                }
             } else {
                 Row(
                     modifier = Modifier

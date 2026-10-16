@@ -44,7 +44,7 @@ object JsonParsers {
         return try {
             val htmlCompatible = clean.replace("\r\n", "<br>").replace("\n", "<br>")
             android.text.Html.fromHtml(htmlCompatible, android.text.Html.FROM_HTML_MODE_LEGACY).toString().trim()
-        } catch (_: Exception) {
+        } catch (_: Throwable) {
             clean
         }
     }
@@ -68,8 +68,13 @@ object JsonParsers {
         }
     }
 
-    private fun getString(id: Int) = OpenVKMatchaApp.instance.languageManager.getStringOrDefault(id)
-    private fun getString(id: Int, vararg args: Any) = OpenVKMatchaApp.instance.languageManager.getStringOrDefault(id, *args)
+    private fun getString(id: Int): String {
+        return runCatching { OpenVKMatchaApp.instance.languageManager.getStringOrDefault(id) }.getOrDefault("String_$id")
+    }
+
+    private fun getString(id: Int, vararg args: Any): String {
+        return runCatching { OpenVKMatchaApp.instance.languageManager.getStringOrDefault(id, *args) }.getOrDefault("String_$id")
+    }
 
     fun parseUser(json: JSONObject): UserProfile {
         val counters = json.optJSONObject("counters")
@@ -347,9 +352,16 @@ object JsonParsers {
                     )
                 }
 
+                val lastMessagePreview = parseConversationLastMessagePreview(
+                    lastMessageObj,
+                    isChat = peer.type == PeerType.CHAT,
+                    profiles = profiles,
+                    groups = groups
+                )
+
                 Conversation(
                     peer = peer,
-                    lastMessage = lastMessageObj?.optStringClean("text") ?: "",
+                    lastMessage = lastMessagePreview,
                     lastMessageDate = lastMessageObj?.optLong("date", 0) ?: 0,
                     unreadCount = conversation.optInt("unread_count", 0),
                     lastMessageId = conversation.optInt("last_message_id"),
@@ -366,6 +378,109 @@ object JsonParsers {
         }
     }
 
+    private fun parseConversationLastMessagePreview(
+        msgObj: JSONObject?,
+        isChat: Boolean,
+        profiles: Map<Int, AuthorInfo>,
+        groups: Map<Int, AuthorInfo>
+    ): String {
+        if (msgObj == null) return ""
+        val rawText = msgObj.optStringClean("text")
+            ?.takeIf { it.isNotBlank() }
+            ?: msgObj.optStringClean("body")
+            ?.takeIf { it.isNotBlank() }
+
+        val contentPreview = when {
+            !rawText.isNullOrBlank() -> rawText
+            msgObj.optJSONArray("fwd_messages")?.let { it.length() > 0 } == true -> "[Пересланное сообщение]"
+            msgObj.has("action") -> {
+                val action = msgObj.optJSONObject("action")
+                val actionType = action?.optString("type")
+                when (actionType) {
+                    "chat_photo_update" -> "[Обновлено фото беседы]"
+                    "chat_photo_remove" -> "[Удалено фото беседы]"
+                    "chat_title_update" -> "[Изменено название беседы]"
+                    "chat_invite_user" -> "[Приглашен участник]"
+                    "chat_kick_user" -> "[Исключен участник]"
+                    "chat_pin_message" -> "[Закреплено сообщение]"
+                    "chat_unpin_message" -> "[Откреплено сообщение]"
+                    else -> "[Системное сообщение]"
+                }
+            }
+            else -> {
+                val attachments = msgObj.optJSONArray("attachments")
+                if (attachments != null && attachments.length() > 0) {
+                    val types = mutableListOf<String>()
+                    for (i in 0 until attachments.length()) {
+                        val att = attachments.optJSONObject(i)
+                        val type = att?.optString("type")?.lowercase()
+                        val label = when (type) {
+                            "photo" -> "[Фотография]"
+                            "video" -> "[Видео]"
+                            "audio" -> "[Аудиозапись]"
+                            "doc", "document" -> "[Документ]"
+                            "wall" -> "[Запись]"
+                            "poll" -> "[Опрос]"
+                            "sticker" -> "[Стикер]"
+                            "gift" -> "[Подарок]"
+                            "link" -> "[Ссылка]"
+                            else -> "[Вложение]"
+                        }
+                        types.add(label)
+                    }
+                    types.joinToString(" ")
+                } else {
+                    ""
+                }
+            }
+        }
+
+        val isOut = msgObj.optInt("out", 0) == 1
+        val fromId = msgObj.optInt("from_id", 0)
+
+        return when {
+            isOut -> "Вы: $contentPreview"
+            isChat && fromId != 0 -> {
+                val author = profiles[fromId] ?: groups[fromId] ?: profiles[kotlin.math.abs(fromId)] ?: groups[kotlin.math.abs(fromId)]
+                val authorFirstName = author?.name?.split(" ")?.firstOrNull()
+                if (!authorFirstName.isNullOrBlank()) "$authorFirstName: $contentPreview" else contentPreview
+            }
+            else -> contentPreview
+        }
+    }
+
+    private fun extractChatPhotoUrl(cs: JSONObject?): String {
+        if (cs == null) return ""
+        val photoObj = cs.optJSONObject("photo")
+        if (photoObj != null) {
+            largestPhotoUrl(photoObj.optJSONArray("sizes"))?.let { if (it.isNotBlank()) return it }
+            photoObj.optUrl("photo_200")?.let { if (it.isNotBlank()) return it }
+            photoObj.optUrl("photo_100")?.let { if (it.isNotBlank()) return it }
+            photoObj.optUrl("photo_50")?.let { if (it.isNotBlank()) return it }
+            photoObj.optUrl("photo_max")?.let { if (it.isNotBlank()) return it }
+        }
+        if (cs.has("photo")) {
+            val p = cs.opt("photo")
+            if (p is String && p.isNotBlank() && p != "null") return p
+        }
+        cs.optUrl("photo_200")?.let { if (it.isNotBlank()) return it }
+        cs.optUrl("photo_100")?.let { if (it.isNotBlank()) return it }
+        cs.optUrl("photo_50")?.let { if (it.isNotBlank()) return it }
+        cs.optUrl("photo_max")?.let { if (it.isNotBlank()) return it }
+        return ""
+    }
+
+    private fun extractChatMembersCount(cs: JSONObject?): Int {
+        if (cs == null) return 0
+        return cs.optInt("members_count", 0)
+            .takeIf { it > 0 }
+            ?: cs.optInt("membersCount", 0)
+            .takeIf { it > 0 }
+            ?: cs.optInt("count", 0)
+            .takeIf { it > 0 }
+            ?: cs.optInt("users_count", 0)
+    }
+
     private fun parsePeer(
         id: Int, 
         profiles: Map<Int, AuthorInfo>, 
@@ -374,39 +489,34 @@ object JsonParsers {
     ): Peer {
         return when {
             id >= 2000000000 -> {
-                val photoObj = chatSettings?.optJSONObject("photo")
-                val photoUrl = largestPhotoUrl(photoObj?.optJSONArray("sizes"))
-                    ?: photoObj?.optUrl("photo_200")
-                    ?: photoObj?.optUrl("photo_100")
-                    ?: photoObj?.optUrl("photo_50")
-                    ?: chatSettings?.optUrl("photo_200")
-                    ?: chatSettings?.optUrl("photo_100")
-                    ?: chatSettings?.optUrl("photo_50")
+                val photoUrl = extractChatPhotoUrl(chatSettings)
+                val membersCount = extractChatMembersCount(chatSettings)
 
                 Peer(
                     id = id,
                     type = PeerType.CHAT,
                     title = chatSettings?.optStringClean("title") ?: getString(R.string.title_chat),
-                    photo = photoUrl ?: "",
-                    membersCount = chatSettings?.optInt("members_count")
+                    photo = photoUrl,
+                    membersCount = if (membersCount > 0) membersCount else null
                 )
             }
             id < 0 -> {
-                val group = groups[id]
+                val group = groups[id] ?: groups[kotlin.math.abs(id)] ?: profiles[id] ?: profiles[kotlin.math.abs(id)]
                 Peer(
                     id = id,
                     type = PeerType.GROUP,
-                    title = group?.name ?: "club${-id}",
+                    title = group?.name?.takeIf { it.isNotBlank() } ?: "Сообщество ${kotlin.math.abs(id)}",
                     photo = group?.avatar ?: "",
                     verified = group?.verified ?: false
                 )
             }
             else -> {
-                val user = profiles[id]
+                val user = profiles[id] ?: profiles[kotlin.math.abs(id)] ?: groups[id] ?: groups[-id]
+                val name = user?.name?.takeIf { it.isNotBlank() } ?: "Пользователь $id"
                 Peer(
                     id = id,
                     type = PeerType.USER,
-                    title = user?.name ?: "id$id",
+                    title = name,
                     photo = user?.avatar ?: "",
                     online = user?.online ?: false,
                     mobileOnline = user?.mobileOnline ?: false,
@@ -445,7 +555,7 @@ object JsonParsers {
             text = msg.optStringClean("text") ?: "",
             date = msg.optLong("date"),
             isOutgoing = msg.optInt("out", 0) == 1,
-            isRead = msg.optInt("read_state", 1) == 1,
+            isRead = msg.optInt("read_state", 0) == 1,
             isEdited = msg.has("update_time"),
             isPinned = msg.optBool("is_pinned", false),
             isImportant = msg.optBool("important", false),
@@ -498,12 +608,21 @@ object JsonParsers {
                 previewUrl = data.optJSONObject("preview")?.optJSONObject("photo")?.let { largestPhotoUrl(it.optJSONArray("sizes")) },
                 previewGifUrl = data.optJSONObject("preview")?.optJSONObject("video")?.optUrl("src")
             )
-            "wall" -> MessageAttachment.Wall(
-                id = data.optInt("id"),
-                ownerId = data.optInt("owner_id"),
-                text = data.optStringClean("text") ?: "",
-                date = data.optLong("date")
-            )
+            "wall" -> {
+                val wallAttachments = mutableListOf<MessageAttachment>()
+                data.optJSONArray("attachments")?.let { array ->
+                    for (i in 0 until array.length()) {
+                        parseAttachment(array.getJSONObject(i))?.let { wallAttachments.add(it) }
+                    }
+                }
+                MessageAttachment.Wall(
+                    id = data.optInt("id"),
+                    ownerId = data.optInt("owner_id"),
+                    text = data.optStringClean("text") ?: "",
+                    date = data.optLong("date"),
+                    attachments = wallAttachments
+                )
+            }
             "sticker" -> MessageAttachment.Sticker(
                 id = data.optInt("id") ?: data.optInt("sticker_id"),
                 productId = data.optInt("product_id"),
@@ -600,16 +719,16 @@ object JsonParsers {
     private fun resolveAuthor(id: Int, profiles: Map<Int, AuthorInfo>, groups: Map<Int, AuthorInfo>): AuthorInfo {
         if (id > 0) {
             val profile = profiles[id]
-            // If profile is missing OR it's a "DELETED" stub, check groups
-            if (profile == null || profile.name == "DELETED" || profile.name == "DELETED ") {
-                groups[-id]?.let { return it }
+            if (profile != null && profile.name.isNotBlank() && profile.name != "DELETED" && profile.name != "DELETED ") {
+                return profile
             }
-            if (profile != null) return profile
-            return AuthorInfo(id, "id$id", "", false)
+            groups[-id]?.let { return it }
+            if (profile != null && profile.name.isNotBlank()) return profile
+            return AuthorInfo(id, "Пользователь $id", "", false)
         } else if (id < 0) {
             groups[id]?.let { return it }
             profiles[-id]?.let { return it }
-            return AuthorInfo(id, "club${-id}", "", false)
+            return AuthorInfo(id, "Сообщество ${kotlin.math.abs(id)}", "", false)
         }
         return AuthorInfo(0, "DELETED", "", false)
     }
@@ -621,10 +740,19 @@ object JsonParsers {
             val id = p.optInt("id").let { if (it != 0) it else p.optInt("uid") }
             if (id == 0) continue
             
+            val fn = p.optString("first_name").takeIf { it.isNotBlank() && it.lowercase() != "null" } ?: ""
+            val ln = p.optString("last_name").takeIf { it.isNotBlank() && it.lowercase() != "null" } ?: ""
+            var name = "$fn $ln".trim()
+            if (name.isBlank()) {
+                name = p.optString("name").takeIf { it.isNotBlank() && it.lowercase() != "null" }
+                    ?: p.optString("screen_name").takeIf { it.isNotBlank() && it.lowercase() != "null" }
+                    ?: "Пользователь $id"
+            }
+
             map[id] = AuthorInfo(
                 id = id,
-                name = "${p.optStringClean("first_name") ?: ""} ${p.optStringClean("last_name") ?: ""}".trim(),
-                avatar = p.optUrl("photo_50") ?: p.optUrl("photo_100") ?: p.optUrl("photo_200") ?: "",
+                name = name,
+                avatar = p.optUrl("photo_200") ?: p.optUrl("photo_100") ?: p.optUrl("photo_50") ?: p.optUrl("photo_max") ?: p.optUrl("photo") ?: "",
                 verified = p.optBool("verified", false),
                 online = p.optBool("online", false),
                 mobileOnline = p.optBool("online_mobile", false),
@@ -645,13 +773,19 @@ object JsonParsers {
             }
             if (rawId == 0) continue
             
-            val id = -kotlin.math.abs(rawId)
-            map[id] = AuthorInfo(
-                id = id,
-                name = g.optStringClean("name") ?: "",
-                avatar = g.optUrl("photo_50") ?: g.optUrl("photo_100") ?: g.optUrl("photo_200") ?: "",
+            val absId = kotlin.math.abs(rawId)
+            val name = g.optString("name").takeIf { it.isNotBlank() && it.lowercase() != "null" }
+                ?: g.optString("screen_name").takeIf { it.isNotBlank() && it.lowercase() != "null" }
+                ?: "Сообщество $absId"
+
+            val info = AuthorInfo(
+                id = -absId,
+                name = name,
+                avatar = g.optUrl("photo_200") ?: g.optUrl("photo_100") ?: g.optUrl("photo_50") ?: g.optUrl("photo_max") ?: g.optUrl("photo") ?: "",
                 verified = g.optBool("verified", false),
             )
+            map[-absId] = info
+            map[absId] = info
         }
         return map
     }
@@ -672,50 +806,128 @@ object JsonParsers {
             val item = items.getJSONObject(i)
             val type = item.optString("type")
             val date = item.optLong("date")
-            val feedback = item.optJSONObject("feedback")
             val parent = item.optJSONObject("parent")
+            
+            // Handle feedback whether it's a JSONObject or JSONArray
+            val feedbackObj = item.optJSONObject("feedback")
+            val feedbackArr = item.optJSONArray("feedback")
+            
+            val feedbackItemsList = mutableListOf<JSONObject>()
+            val feedbackIntsList = mutableListOf<Int>()
+            
+            if (feedbackObj != null) {
+                val itemsArr = feedbackObj.optJSONArray("items")
+                if (itemsArr != null) {
+                    for (j in 0 until itemsArr.length()) {
+                        val obj = itemsArr.optJSONObject(j)
+                        if (obj != null) feedbackItemsList.add(obj)
+                        else {
+                            val id = itemsArr.optInt(j, 0)
+                            if (id != 0) feedbackIntsList.add(id)
+                        }
+                    }
+                } else {
+                    feedbackItemsList.add(feedbackObj)
+                }
+            } else if (feedbackArr != null) {
+                for (j in 0 until feedbackArr.length()) {
+                    val obj = feedbackArr.optJSONObject(j)
+                    if (obj != null) feedbackItemsList.add(obj)
+                    else {
+                        val id = feedbackArr.optInt(j, 0)
+                        if (id != 0) feedbackIntsList.add(id)
+                    }
+                }
+            }
             
             // Robust fromId extraction with multiple fallbacks
             var fromId = 0
             
             fun extractFromId(obj: JSONObject?): Int {
                 if (obj == null) return 0
-                return obj.optInt("from_id", 0).takeIf { it != 0 }
-                    ?: obj.optInt("user_id", 0).takeIf { it != 0 }
-                    ?: obj.optInt("author_id", 0).takeIf { it != 0 }
-                    ?: obj.optInt("owner_id", 0).takeIf { it != 0 }
-                    ?: obj.optInt("to_id", 0).takeIf { it != 0 }
-                    ?: 0
+                val fId = obj.optInt("from_id", 0)
+                if (fId != 0) return fId
+                
+                val uId = obj.optInt("user_id", 0)
+                if (uId != 0) return uId
+                
+                val aId = obj.optInt("author_id", 0)
+                if (aId != 0) return aId
+
+                val nestedUser = obj.optJSONObject("user") 
+                    ?: obj.optJSONObject("profile") 
+                    ?: obj.optJSONObject("author") 
+                    ?: obj.optJSONObject("group")
+                if (nestedUser != null) {
+                    val nestedId = extractFromId(nestedUser)
+                    if (nestedId != 0) return nestedId
+                }
+
+                val oId = obj.optInt("owner_id", 0)
+                if (oId != 0 && (profileMap.containsKey(oId) || groupMap.containsKey(oId) || groupMap.containsKey(-kotlin.math.abs(oId)))) {
+                    return oId
+                }
+
+                val dId = obj.optInt("id", 0)
+                if (dId != 0 && (profileMap.containsKey(dId) || groupMap.containsKey(dId) || groupMap.containsKey(-kotlin.math.abs(dId)))) {
+                    return dId
+                }
+
+                return 0
             }
 
-            // 1. Check feedback items (common for grouped notifications)
-            val feedbackItems = feedback?.optJSONArray("items")
-            if (feedbackItems != null && feedbackItems.length() > 0) {
-                val firstItem = feedbackItems.optJSONObject(0)
-                fromId = extractFromId(firstItem)
-                if (fromId == 0) fromId = firstItem.optInt("id", 0) 
+            // 1. Check feedback items list
+            for (obj in feedbackItemsList) {
+                fromId = extractFromId(obj)
+                if (fromId != 0) break
+            }
+
+            // 2. Check feedback integers list
+            if (fromId == 0) {
+                for (id in feedbackIntsList) {
+                    if (profileMap.containsKey(id) || groupMap.containsKey(id) || groupMap.containsKey(-kotlin.math.abs(id))) {
+                        fromId = id
+                        break
+                    }
+                }
+            }
+
+            // 3. Fallback to raw integer ID in feedbackIntsList if no profile/group map entry found
+            if (fromId == 0 && feedbackIntsList.isNotEmpty()) {
+                fromId = feedbackIntsList.first()
             }
             
-            // 2. Check direct fields in feedback or item
-            if (fromId == 0) fromId = extractFromId(feedback)
+            // 4. Check direct fields in item
             if (fromId == 0) fromId = extractFromId(item)
             
-            // 3. Fallback for comments where author might be in feedback.id
+            // 5. Fallback for comments where author might be in feedback.id
             if (fromId == 0 && (type == "comment_post" || type == "comment_photo")) {
-                fromId = feedback?.optInt("id", 0) ?: 0
+                val commentAuthorId = feedbackObj?.optInt("id", 0) ?: 0
+                if (profileMap.containsKey(commentAuthorId) || groupMap.containsKey(commentAuthorId) || groupMap.containsKey(-kotlin.math.abs(commentAuthorId))) {
+                    fromId = commentAuthorId
+                }
             }
 
-            // 4. Check parent extraction
-            if (fromId == 0) fromId = extractFromId(parent)
-            
-            // 5. Check nested post extraction (common in OpenVK for comment actions)
-            if (fromId == 0) {
-                val post = parent?.optJSONObject("post") ?: feedback?.optJSONObject("post")
-                fromId = extractFromId(post)
+            // 6. Fallback for gifts
+            if (fromId == 0 && type == "sent_gift") {
+                val giftFrom = parent?.optInt("id", 0) ?: 0
+                if (profileMap.containsKey(giftFrom) || groupMap.containsKey(giftFrom) || groupMap.containsKey(-kotlin.math.abs(giftFrom))) {
+                    fromId = giftFrom
+                }
             }
-            
-            // 6. Special case for gifts
-            if (fromId == 0 && type == "sent_gift") fromId = parent?.optInt("id", 0) ?: 0
+
+            // 7. Fallback if single profile/group or non-empty profileMap/groupMap in response
+            if (fromId == 0) {
+                if (profileMap.size == 1) {
+                    fromId = profileMap.keys.first()
+                } else if (groupMap.size == 1) {
+                    fromId = groupMap.keys.first()
+                } else if (profileMap.isNotEmpty()) {
+                    fromId = profileMap.keys.first()
+                } else if (groupMap.isNotEmpty()) {
+                    fromId = groupMap.keys.first()
+                }
+            }
             
             MLog.d("MatchaDebug", "Extracted fromId for type $type: $fromId")
             
@@ -747,6 +959,7 @@ object JsonParsers {
                 }
             }
 
+            val feedback = feedbackObj
             // Try resolving post from all possible sources
             resolvePost(parent)
             resolvePost(feedback)
@@ -778,7 +991,7 @@ object JsonParsers {
                 "mention" -> getString(R.string.notif_mention)
                 "comment_post" -> getString(R.string.notif_comment_post)
                 "comment_photo" -> getString(R.string.notif_comment_photo)
-                "copy_post" -> getString(R.string.notif_copy_post)
+                "copy_post", "copy_quote", "repost", "wall_copy" -> getString(R.string.notif_copy_post)
                 "follow" -> getString(R.string.notif_follow)
                 "sent_gift" -> getString(R.string.notif_sent_gift)
                 "wall" -> getString(R.string.notif_wall_post)
@@ -1539,7 +1752,7 @@ object JsonParsers {
         return NotesResponse(list, count)
     }
 
-    private fun largestPhotoUrl(sizes: JSONArray?): String? {
+    fun largestPhotoUrl(sizes: JSONArray?): String? {
         if (sizes == null) return null
         var bestUrl: String? = null
         var bestScore = -1
@@ -1573,5 +1786,38 @@ object JsonParsers {
             }
         }
         return bestUrl
+    }
+
+    fun parseStickerPacks(response: JSONObject): List<StickerPack> {
+        val items = getResponseItems(response)
+        val packs = mutableListOf<StickerPack>()
+        for (i in 0 until items.length()) {
+            val item = items.optJSONObject(i) ?: continue
+            val packId = item.optInt("id", item.optInt("product_id"))
+            val title = item.optStringClean("title") ?: item.optStringClean("name") ?: "Стикерпак"
+            val iconUrl = item.optUrl("icon_256") ?: item.optUrl("icon_128") ?: item.optUrl("photo_256")
+            
+            val stickersArray = item.optJSONArray("stickers")
+            val stickerItems = mutableListOf<StickerItem>()
+            if (stickersArray != null) {
+                for (j in 0 until stickersArray.length()) {
+                    val st = stickersArray.optJSONObject(j) ?: continue
+                    val stickerId = st.optInt("id", st.optInt("sticker_id"))
+                    val imagesArray = st.optJSONArray("images") ?: st.optJSONArray("sizes")
+                    val url = largestPhotoUrl(imagesArray) 
+                        ?: st.optUrl("photo_512")
+                        ?: st.optUrl("photo_256")
+                        ?: st.optUrl("photo_128")
+                        ?: st.optUrl("url")
+                        ?: ""
+                    val animUrl = st.optUrl("animation_url")
+                    if (stickerId != 0 && url.isNotBlank()) {
+                        stickerItems.add(StickerItem(stickerId, packId, url, animUrl))
+                    }
+                }
+            }
+            packs.add(StickerPack(packId, title, iconUrl, stickerItems))
+        }
+        return packs
     }
 }

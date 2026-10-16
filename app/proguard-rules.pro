@@ -10,17 +10,42 @@
 # Disable obfuscation while keeping shrinking and optimization
 -dontobfuscate
 
-# Add any project specific keep rules here:
+# Preserve line numbers for stacktraces
+-keepattributes SourceFile,LineNumberTable
 
-# If your project uses WebView with JS, uncomment the following
-# and specify the fully qualified class name to the JavaScript interface
-#-keepclassmembers class fqcn.of.javascript.interface.for.webview {
-#   public *;
-#}
+# AndroidX Media3 Session, Common & ExoPlayer IPC keep rules
+-keep class androidx.media3.session.** { *; }
+-keep interface androidx.media3.session.** { *; }
+-keepclassmembers class androidx.media3.session.** { *; }
 
-# Uncomment this to preserve the line number information for
-# debugging stack traces.
-#-keepattributes SourceFile,LineNumberTable
+-keep class androidx.media3.common.** { *; }
+-keep interface androidx.media3.common.** { *; }
+
+-keep class androidx.media3.exoplayer.** { *; }
+-keep interface androidx.media3.exoplayer.** { *; }
+
+-keep class androidx.media3.ui.** { *; }
+
+# CameraX
+-keep class androidx.camera.** { *; }
+-keep interface androidx.camera.** { *; }
+
+# MLKit Barcode Scanner
+-keep class com.google.mlkit.** { *; }
+-keep class com.google.android.gms.internal.mlkit_vision_barcode.** { *; }
+
+# Keep Parcelables for Binder IPC
+-keep class * implements android.os.Parcelable {
+    public static final android.os.Parcelable$Creator *;
+}
+
+# App models, playback service & MainActivity
+-keep class com.deliriousvoid.openvkmatcha.data.model.** { *; }
+-keep class com.deliriousvoid.openvkmatcha.playback.** { *; }
+-keep class com.deliriousvoid.openvkmatcha.MainActivity { *; }
+
+# Guava ListenableFuture
+-keep class com.google.common.util.concurrent.ListenableFuture { *; }
 
 # NewPipeExtractor
 -keep class org.schabi.newpipe.extractor.** { *; }
