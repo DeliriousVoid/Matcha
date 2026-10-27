@@ -47,7 +47,15 @@ class FeedRepository(private val api: OpenVKApi) {
         )
     ).map { JsonParsers.parseWall(it).firstOrNull() }
 
-    suspend fun repost(ownerId: Int, postId: Int, message: String, groupId: Int? = null, attachments: String? = null) = api.callMethod(
+    suspend fun repost(
+        ownerId: Int,
+        postId: Int,
+        message: String,
+        groupId: Int? = null,
+        attachments: String? = null,
+        asGroup: Boolean = false,
+        signed: Boolean = false
+    ) = api.callMethod(
         "wall.repost",
         mutableMapOf(
             "object" to "wall${ownerId}_$postId",
@@ -55,6 +63,8 @@ class FeedRepository(private val api: OpenVKApi) {
         ).apply {
             if (groupId != null) put("group_id", groupId.toString())
             if (!attachments.isNullOrBlank()) put("attachments", attachments)
+            if (asGroup) put("as_group", "1")
+            if (signed) put("signed", "1")
         }
     )
 

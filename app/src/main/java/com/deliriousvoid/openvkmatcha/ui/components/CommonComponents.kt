@@ -17,16 +17,22 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
+import androidx.compose.material.icons.automirrored.filled.VolumeOff
+import androidx.compose.material.icons.filled.Done
+import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.Check
@@ -54,6 +60,7 @@ import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.GroupAdd
 import androidx.compose.material.icons.filled.GroupRemove
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
+import androidx.compose.material.icons.outlined.Campaign
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.SentimentVeryDissatisfied
@@ -89,11 +96,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.res.stringResource
 import com.deliriousvoid.openvkmatcha.ui.util.matchaStringResource
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -114,6 +121,9 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.text.AnnotatedString
@@ -139,6 +149,7 @@ import com.deliriousvoid.openvkmatcha.ui.viewmodel.NsfwHidingStyle
 import com.deliriousvoid.openvkmatcha.ui.viewmodel.NsfwVisibility
 import com.deliriousvoid.openvkmatcha.ui.util.LinkHandler
 import androidx.compose.ui.res.painterResource
+import com.deliriousvoid.openvkmatcha.ui.util.formatCompactDate
 import com.deliriousvoid.openvkmatcha.ui.util.formatDuration
 import com.deliriousvoid.openvkmatcha.ui.util.formatTimeAgo
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -755,12 +766,13 @@ fun RepostContent(
                                     imageUrls = post.imageUrls,
                                     onImageClick = { if (!post.isNsfw || isRevealed) viewerInitialIndex = it },
                                     onDoubleTap = if (doubleTapEnabled) { offset -> imageCoords?.let { triggerDoubleTap(it, offset) } } else null,
-                                    modifier = Modifier.onGloballyPositioned { imageCoords = it }
+                                    modifier = Modifier.onGloballyPositioned { imageCoords = it },
+                                    isDialog = false
                                 )
                             }
 
-                            val gifDocs = post.documents.filter { it.ext.lowercase() == "gif" || it.type == 3 }
-                            val otherDocs = post.documents.filterNot { it.ext.lowercase() == "gif" || it.type == 3 }
+                            val gifDocs = post.documents.filter { it.ext.lowercase() == "gif" || it.type == 3 || !it.previewGifUrl.isNullOrBlank() || (it.url != null && it.url.lowercase().contains("gif")) }
+                            val otherDocs = post.documents.filterNot { it in gifDocs }
 
                             if (gifDocs.isNotEmpty()) {
                                 gifDocs.forEach { gif ->
@@ -886,7 +898,7 @@ fun RepostContent(
                             }
 
                             if (viewerInitialIndex != -1) {
-                                val allImageUrls = post.imageUrls + gifDocs.mapNotNull { it.url }
+                                val allImageUrls = post.imageUrls + gifDocs.mapNotNull { if (it.ext.lowercase() == "gif" || (it.url != null && it.url.lowercase().contains("gif"))) it.url ?: it.previewGifUrl else it.previewGifUrl ?: it.url }
                                 ImageViewer(
                                     imageUrls = allImageUrls,
                                     initialIndex = viewerInitialIndex,
@@ -1024,12 +1036,13 @@ fun RepostContent(
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 Icon(
-                                    imageVector = Icons.Filled.Campaign,
+                                    imageVector = Icons.Outlined.Campaign,
                                     contentDescription = null,
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                     modifier = Modifier
                                         .size(20.dp)
-                                        .rotate(-15f),
+                                        .scale(1.2f)
+                                        .offset(y = (-1).dp),
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
@@ -1117,7 +1130,7 @@ fun ConversationItem(
                 Text(
                     text = conversation.peer.title,
                     style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
+                    fontWeight = if (conversation.unreadCount > 0) FontWeight.Bold else FontWeight.SemiBold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f, fill = false),
@@ -1129,12 +1142,15 @@ fun ConversationItem(
                         isVerified = conversation.peer.verified,
                     )
                 }
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = formatTimeAgo(conversation.lastMessageDate),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                if (conversation.isMuted) {
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.VolumeOff,
+                        contentDescription = "Muted",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
             }
             Spacer(modifier = Modifier.height(4.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1149,8 +1165,50 @@ fun ConversationItem(
                         modifier = Modifier.weight(1f),
                     )
                 } else {
+                    val rawPrefix = conversation.lastMessagePrefix ?: when {
+                        conversation.isLastMessageOutgoing && conversation.lastMessage.startsWith("Вы: ") -> "Вы: "
+                        conversation.isLastMessageOutgoing && conversation.lastMessage.startsWith("Вы:") -> "Вы: "
+                        else -> null
+                    }
+
+                    val prefix = rawPrefix?.trim()?.let { if (it.endsWith(":")) "$it " else "$it: " }
+
+                    val body = (if (!prefix.isNullOrEmpty() && conversation.lastMessage.startsWith(prefix)) {
+                        conversation.lastMessage.substring(prefix.length)
+                    } else if (!rawPrefix.isNullOrEmpty() && conversation.lastMessage.startsWith(rawPrefix)) {
+                        conversation.lastMessage.substring(rawPrefix.length)
+                    } else {
+                        conversation.lastMessage
+                    }).ifBlank {
+                        com.deliriousvoid.openvkmatcha.Constants.UNSUPPORTED_MESSAGE_TEXT
+                    }
+
+                    if (!prefix.isNullOrBlank()) {
+                        Text(
+                            text = prefix,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                        )
+                    }
+                    if (!conversation.lastMessageMediaUrl.isNullOrBlank()) {
+                        val isSticker = conversation.lastMessageMediaType == "sticker"
+                        AsyncImage(
+                            model = conversation.lastMessageMediaUrl,
+                            contentDescription = null,
+                            modifier = Modifier
+                                .padding(end = 4.dp)
+                                .size(18.dp)
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(
+                                    if (isSticker) Color.Transparent
+                                    else MaterialTheme.colorScheme.surfaceVariant
+                                ),
+                            contentScale = if (isSticker) ContentScale.Fit else ContentScale.Crop,
+                        )
+                    }
                     Text(
-                        text = conversation.lastMessage,
+                        text = body,
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
@@ -1158,20 +1216,50 @@ fun ConversationItem(
                         modifier = Modifier.weight(1f),
                     )
                 }
+                Spacer(modifier = Modifier.width(6.dp))
+                if (conversation.isLastMessageOutgoing) {
+                    val isRead = conversation.isLastMessageRead
+                    Icon(
+                        imageVector = if (isRead) Icons.Default.DoneAll else Icons.Default.Done,
+                        contentDescription = if (isRead) "Прочитано" else "Отправлено",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier
+                            .size(16.dp)
+                            .padding(end = 2.dp)
+                    )
+                }
                 if (conversation.unreadCount > 0) {
-                    Spacer(modifier = Modifier.width(8.dp))
+                    val badgeBg = if (conversation.isMuted) {
+                        MaterialTheme.colorScheme.surfaceVariant
+                    } else {
+                        MaterialTheme.colorScheme.primary
+                    }
+                    val badgeTextColor = if (conversation.isMuted) {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    } else {
+                        MaterialTheme.colorScheme.onPrimary
+                    }
                     Box(
                         modifier = Modifier
-                            .background(MaterialTheme.colorScheme.primary, CircleShape)
+                            .background(badgeBg, CircleShape)
                             .padding(horizontal = 8.dp, vertical = 2.dp),
                         contentAlignment = Alignment.Center,
                     ) {
                         Text(
                             text = conversation.unreadCount.toString(),
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onPrimary,
+                            color = badgeTextColor,
                         )
                     }
+                    Spacer(modifier = Modifier.width(6.dp))
+                }
+                val compactDate = formatCompactDate(conversation.lastMessageDate)
+                if (compactDate.isNotEmpty()) {
+                    Text(
+                        text = compactDate,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             }
         }
@@ -1282,6 +1370,7 @@ fun AudioTrackItem(
                 modifier = Modifier.basicMarquee(),
             )
         }
+        Spacer(modifier = Modifier.width(8.dp))
         Text(
             text = formatDuration(track.duration),
             style = MaterialTheme.typography.bodySmall,
@@ -1726,84 +1815,125 @@ fun EditPostDialog(
     onDismiss: () -> Unit,
     onConfirm: (String, Boolean, Boolean) -> Unit
 ) {
-    val opaqueColorScheme = LocalOpaqueColorScheme.current
     var text by remember(initialText) { mutableStateOf(initialText) }
     var fromGroup by remember(isGroup) { mutableStateOf(isGroup) }
     var isNsfw by remember(initialIsNsfw) { mutableStateOf(initialIsNsfw) }
 
-    AlertDialog(
+    Dialog(
         onDismissRequest = onDismiss,
-        containerColor = Color.Transparent,
-        title = { },
-        text = {
-            ThemedPopupBackground(modifier = Modifier.fillMaxWidth().clip(AlertDialogDefaults.shape)) {
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    Text(
-                        text = matchaStringResource(R.string.title_edit_post),
-                        style = MaterialTheme.typography.headlineSmall,
-                        modifier = Modifier.padding(16.dp)
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false
+        )
+    ) {
+        ThemedPopupBackground(
+            modifier = Modifier
+                .fillMaxWidth(0.92f)
+                .heightIn(max = LocalConfiguration.current.screenHeightDp.dp * 0.85f)
+                .clip(RoundedCornerShape(28.dp))
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 16.dp)
+            ) {
+                Text(
+                    text = matchaStringResource(R.string.title_edit_post),
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp, vertical = 8.dp)
+                )
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f, fill = false)
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 20.dp)
+                ) {
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    OutlinedTextField(
+                        value = text,
+                        onValueChange = { text = it },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 120.dp, max = 280.dp),
+                        placeholder = { Text(matchaStringResource(R.string.post_text_placeholder)) },
+                        keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+                        shape = RoundedCornerShape(16.dp)
                     )
-                    Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-                        OutlinedTextField(
-                            value = text,
-                            onValueChange = { text = it },
-                            modifier = Modifier.fillMaxWidth(),
-                            placeholder = { Text(matchaStringResource(R.string.post_text_placeholder)) },
-                            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences)
-                        )
-                        
-                        Spacer(modifier = Modifier.height(8.dp))
-                        
-                        if (isGroup) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth().clickable { fromGroup = !fromGroup },
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Checkbox(
-                                    checked = fromGroup,
-                                    onCheckedChange = { fromGroup = it }
-                                )
-                                Text(
-                                    text = matchaStringResource(R.string.post_from_group),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    modifier = Modifier.padding(start = 8.dp)
-                                )
-                            }
-                        }
-                        
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    if (isGroup) {
                         Row(
-                            modifier = Modifier.fillMaxWidth().clickable { isNsfw = !isNsfw },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .clickable { fromGroup = !fromGroup }
+                                .padding(vertical = 6.dp, horizontal = 4.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Checkbox(
-                                checked = isNsfw,
-                                onCheckedChange = { isNsfw = it }
+                                checked = fromGroup,
+                                onCheckedChange = { fromGroup = it }
                             )
                             Text(
-                                text = matchaStringResource(R.string.post_is_nsfw),
+                                text = matchaStringResource(R.string.post_from_group),
                                 style = MaterialTheme.typography.bodyMedium,
                                 modifier = Modifier.padding(start = 8.dp)
                             )
                         }
                     }
+
                     Row(
-                        modifier = Modifier.fillMaxWidth().padding(16.dp),
-                        horizontalArrangement = Arrangement.End
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable { isNsfw = !isNsfw }
+                            .padding(vertical = 6.dp, horizontal = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        TextButton(onClick = onDismiss) {
-                            Text(matchaStringResource(R.string.cancel))
-                        }
-                        TextButton(
-                            onClick = { onConfirm(text, fromGroup, isNsfw) }
-                        ) {
-                            Text(matchaStringResource(R.string.action_save))
-                        }
+                        Checkbox(
+                            checked = isNsfw,
+                            onCheckedChange = { isNsfw = it }
+                        )
+                        Text(
+                            text = matchaStringResource(R.string.post_is_nsfw),
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.padding(start = 8.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TextButton(
+                        onClick = onDismiss,
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text(matchaStringResource(R.string.cancel))
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Button(
+                        onClick = { onConfirm(text, fromGroup, isNsfw) },
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text(matchaStringResource(R.string.action_save))
                     }
                 }
             }
-        },
-        confirmButton = { }
-    )
+        }
+    }
 }
 
 @Composable
@@ -2082,63 +2212,64 @@ fun MusicPickerBottomSheet(
         focusRequester.requestFocus()
     }
 
-    AlertDialog(
+    ModalBottomSheet(
         onDismissRequest = onDismiss,
-        containerColor = Color.Transparent,
-        title = { Text(matchaStringResource(R.string.title_music_picker)) },
-        text = {
-            ThemedPopupBackground(modifier = Modifier.fillMaxWidth().clip(AlertDialogDefaults.shape)) {
-                Column(modifier = Modifier.fillMaxHeight(0.8f).padding(horizontal = 16.dp)) {
-                    Text(
-                        text = matchaStringResource(R.string.title_music_picker),
-                        style = MaterialTheme.typography.titleLarge,
-                        modifier = Modifier.padding(vertical = 16.dp)
-                    )
-                    
-                    OutlinedTextField(
-                        value = state.searchQuery,
-                        onValueChange = { viewModel.updateSearchQuery(it) },
-                        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp).focusRequester(focusRequester),
-                        placeholder = { Text(matchaStringResource(R.string.search_placeholder)) },
-                        leadingIcon = { Icon(Icons.Default.Search, null) },
-                        singleLine = true
-                    )
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = Color.Transparent
+    ) {
+        ThemedPopupBackground {
+            Column(modifier = Modifier.fillMaxHeight(0.8f).padding(horizontal = 16.dp)) {
+                Text(
+                    text = matchaStringResource(R.string.title_music_picker),
+                    style = MaterialTheme.typography.titleLarge,
+                    modifier = Modifier.padding(bottom = 16.dp)
+                )
+                
+                OutlinedTextField(
+                    value = state.searchQuery,
+                    onValueChange = { viewModel.updateSearchQuery(it) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 8.dp)
+                        .focusRequester(focusRequester),
+                    placeholder = { Text(matchaStringResource(R.string.search_placeholder)) },
+                    leadingIcon = { Icon(Icons.Default.Search, null) },
+                    singleLine = true
+                )
 
-                    Box(modifier = Modifier.weight(1f)) {
-                        if (state.isLoading && state.tracks.isEmpty()) {
-                            LoadingBox(modifier = Modifier.fillMaxSize())
-                        } else if (state.tracks.isEmpty()) {
-                            StateView(
-                                icon = Icons.Default.MusicNote,
-                                message = matchaStringResource(R.string.music_not_found),
-                                modifier = Modifier.fillMaxSize()
-                            )
-                        } else {
-                            LazyColumn(
-                                state = listState,
-                                modifier = Modifier.fillMaxSize()
-                            ) {
-                                items(state.tracks) { track ->
-                                    AudioTrackItem(
-                                        track = track,
-                                        onClick = { onTrackSelect(track) },
-                                        onToggleAdded = {},
-                                        onDownload = {},
-                                        onShare = {},
-                                        onAddToQueue = {},
-                                        onPlayNext = {}
-                                    )
-                                    HorizontalDivider(modifier = Modifier.padding(start = 56.dp))
-                                }
-                                if (state.isLoadingMore) {
-                                    item { LoadingBox(modifier = Modifier.padding(16.dp)) }
-                                }
+                Box(modifier = Modifier.weight(1f)) {
+                    if (state.isLoading && state.tracks.isEmpty()) {
+                        LoadingBox(modifier = Modifier.fillMaxSize())
+                    } else if (state.tracks.isEmpty()) {
+                        StateView(
+                            icon = Icons.Default.MusicNote,
+                            message = matchaStringResource(R.string.music_not_found),
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    } else {
+                        LazyColumn(
+                            state = listState,
+                            modifier = Modifier.fillMaxSize()
+                        ) {
+                            items(state.tracks) { track ->
+                                AudioTrackItem(
+                                    track = track,
+                                    onClick = { onTrackSelect(track) },
+                                    onToggleAdded = { onTrackSelect(track) },
+                                    onDownload = {},
+                                    onShare = {},
+                                    onAddToQueue = {},
+                                    onPlayNext = {}
+                                )
+                                HorizontalDivider(modifier = Modifier.padding(start = 56.dp))
+                            }
+                            if (state.isLoadingMore) {
+                                item { LoadingBox(modifier = Modifier.padding(16.dp)) }
                             }
                         }
                     }
                 }
             }
-        },
-        confirmButton = {}
-    )
+        }
+    }
 }

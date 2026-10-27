@@ -29,11 +29,11 @@ object LinkHandler {
         }
 
         return when {
+            path == "id0" -> Routes.chatRoute(0, "")
             path.startsWith("id") && path.substring(2).all { it.isDigit() } -> {
-                val id = if (path == "id0") "0" else path.substring(2)
-                Routes.profileRoute(id)
+                val id = path.substring(2)
+                if (id == "0") Routes.chatRoute(0, "") else Routes.profileRoute(id)
             }
-            path == "id0" -> Routes.profileRoute("0")
             path.startsWith("event") -> {
                 val idStr = path.removePrefix("event").trimStart('/')
                 if (idStr.all { it.isDigit() } && idStr.isNotEmpty()) {
@@ -114,11 +114,13 @@ object LinkHandler {
         }
 
         when {
+            path == "id0" -> onChatClick(0)
             path.startsWith("id") && path.substring(2).all { it.isDigit() } -> {
                 val id = path.substring(2).toIntOrNull()
-                if (id != null) onProfileClick(id) else onExternalClick(normalizedUrl)
+                if (id == 0) onChatClick(0)
+                else if (id != null) onProfileClick(id)
+                else onExternalClick(normalizedUrl)
             }
-            path == "id0" -> onProfileClick(0)
             path.startsWith("event") -> {
                 val idStr = path.removePrefix("event").trimStart('/')
                 val id = idStr.toIntOrNull()

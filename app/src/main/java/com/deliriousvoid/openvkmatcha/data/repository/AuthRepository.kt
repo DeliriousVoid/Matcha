@@ -68,12 +68,14 @@ class AuthRepository(private val api: OpenVKApi) {
         
         LongPollService.stop(app)
         app.onlineManager.stop()
+        app.longPollManager.stop()
         
         val prefs = app.getSharedPreferences("settings", Context.MODE_PRIVATE)
         if (prefs.getBoolean("background_notifications", false)) {
             LongPollService.start(app)
         }
         app.onlineManager.start()
+        app.longPollManager.start()
         
         return true
     }
@@ -83,11 +85,25 @@ class AuthRepository(private val api: OpenVKApi) {
     fun reorderAccounts(accounts: List<AccountManager.Account>) = 
         OpenVKMatchaApp.instance.accountManager.reorderAccounts(accounts)
     
-    fun removeAccount(id: String) = OpenVKMatchaApp.instance.accountManager.removeAccount(id)
+    fun removeAccount(id: String) {
+        val app = OpenVKMatchaApp.instance
+        val isCurrent = app.accountManager.getCurrentAccountId() == id
+        app.accountManager.removeAccount(id)
+        if (isCurrent) {
+            val nextAccount = app.accountManager.getCurrentAccount()
+            if (nextAccount != null) {
+                switchAccount(nextAccount.id)
+            } else {
+                logout()
+            }
+        }
+    }
 
     fun logout() {
         api.logout()
-        LongPollService.stop(OpenVKMatchaApp.instance)
-        OpenVKMatchaApp.instance.onlineManager.stop()
+        val app = OpenVKMatchaApp.instance
+        LongPollService.stop(app)
+        app.onlineManager.stop()
+        app.longPollManager.stop()
     }
 }

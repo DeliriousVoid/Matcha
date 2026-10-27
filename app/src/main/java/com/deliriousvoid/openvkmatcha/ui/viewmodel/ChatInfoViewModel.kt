@@ -43,7 +43,10 @@ data class ChatMaterialItem(
     val docUrl: String? = null,
     val linkUrl: String? = null,
     val title: String = "",
-    val subtitle: String? = null
+    val subtitle: String? = null,
+    val video: com.deliriousvoid.openvkmatcha.data.model.Video? = null,
+    val document: com.deliriousvoid.openvkmatcha.data.model.Document? = null,
+    val audioTrack: com.deliriousvoid.openvkmatcha.data.model.AudioTrack? = null
 )
 
 data class MaterialSectionState(
@@ -60,6 +63,11 @@ data class ChatInfoUiState(
     val avatarUrl: String = "",
     val memberCount: Int = 0,
     val isMuted: Boolean = false,
+    val isUser: Boolean = false,
+    val userProfile: UserProfile? = null,
+    val userGifts: List<com.deliriousvoid.openvkmatcha.data.model.Gift> = emptyList(),
+    val isLoadingGifts: Boolean = false,
+    val blacklistedByMe: Boolean = false,
     val members: List<ChatMemberItem> = emptyList(),
     val selectedSection: ChatMaterialSection = ChatMaterialSection.MEMBERS,
     val materials: Map<ChatMaterialSection, MaterialSectionState> = emptyMap(),
@@ -74,15 +82,81 @@ data class ChatInfoUiState(
 
 class ChatInfoViewModel(
     private val messagesRepository: MessagesRepository,
+    private val profileRepository: com.deliriousvoid.openvkmatcha.data.repository.ProfileRepository,
     val peerId: Int
 ) : ViewModel() {
 
-    private val _uiState = MutableStateFlow(ChatInfoUiState(peerId = peerId))
+    private val isUserPeer = peerId > 0 && peerId < 2000000000
+    private val _uiState = MutableStateFlow(ChatInfoUiState(peerId = peerId, isUser = isUserPeer))
     val uiState: StateFlow<ChatInfoUiState> = _uiState.asStateFlow()
 
     init {
-        loadMembers()
-        checkMuted()
+        if (peerId == 0) {
+            _uiState.update { state ->
+                state.copy(
+                    title = com.deliriousvoid.openvkmatcha.OpenVKMatchaApp.instance.languageManager.getStringOrDefault(com.deliriousvoid.openvkmatcha.R.string.saved_messages, "Сохранённые сообщения"),
+                    avatarUrl = com.deliriousvoid.openvkmatcha.Constants.SAVED_MESSAGES_AVATAR
+                )
+            }
+        } else {
+            initFromCache()
+            if (isUserPeer) {
+                loadUserProfileAndGifts()
+            } else {
+                loadMembers()
+            }
+            checkMuted()
+        }
+    }
+
+    private fun loadUserProfileAndGifts() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoadingGifts = true) }
+            profileRepository.loadProfile(peerId.toString()).onSuccess { userProfile ->
+                _uiState.update { state ->
+                    state.copy(
+                        userProfile = userProfile,
+                        title = userProfile.fullName,
+                        avatarUrl = userProfile.photo200.ifBlank { userProfile.photo50 },
+                        blacklistedByMe = userProfile.blacklistedByMe
+                    )
+                }
+            }
+            profileRepository.getUserGifts(peerId).onSuccess { giftsResponse ->
+                _uiState.update { it.copy(userGifts = giftsResponse.items, isLoadingGifts = false) }
+            }.onFailure {
+                _uiState.update { it.copy(isLoadingGifts = false) }
+            }
+        }
+    }
+
+    fun blockUser(onComplete: (Boolean) -> Unit) {
+        if (_uiState.value.isWorking || !isUserPeer) return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isWorking = true) }
+            profileRepository.banUser(peerId)
+                .onSuccess {
+                    _uiState.update { it.copy(isWorking = false, blacklistedByMe = true) }
+                    onComplete(true)
+                }
+                .onFailure { error ->
+                    _uiState.update { it.copy(isWorking = false, error = error.message) }
+                    onComplete(false)
+                }
+        }
+    }
+
+    private fun initFromCache() {
+        val cachedPeer = messagesRepository.getCachedPeerInfo(peerId)
+        if (cachedPeer != null) {
+            _uiState.update { state ->
+                state.copy(
+                    title = cachedPeer.title.ifEmpty { state.title },
+                    avatarUrl = cachedPeer.photo.ifEmpty { state.avatarUrl },
+                    memberCount = cachedPeer.membersCount ?: state.memberCount
+                )
+            }
+        }
     }
 
     fun selectSection(section: ChatMaterialSection) {
@@ -99,10 +173,18 @@ class ChatInfoViewModel(
         viewModelScope.launch {
             messagesRepository.getPushSettings(peerId).onSuccess { json ->
                 val response = json.optJSONObject("response") ?: json
-                val sound = response.optInt("sound", 1)
-                val disabledUntil = response.optInt("disabled_until", 0)
-                val isMuted = sound == 0 || disabledUntil == -1 || disabledUntil > (System.currentTimeMillis() / 1000)
+                val pushSettings = response.optJSONObject("push_settings") ?: response
+                val soundObj = pushSettings.opt("sound")
+                val sound = when (soundObj) {
+                    is Number -> soundObj.toInt()
+                    is Boolean -> if (soundObj) 1 else 0
+                    is String -> if (soundObj == "0" || soundObj.lowercase() == "false") 0 else 1
+                    else -> 1
+                }
+                val disabledUntil = pushSettings.optLong("disabled_until", 0)
+                val isMuted = sound == 0 || disabledUntil == -1L || disabledUntil > (System.currentTimeMillis() / 1000)
                 _uiState.update { it.copy(isMuted = isMuted) }
+                com.deliriousvoid.openvkmatcha.util.AppEvents.notifyConversationMuted(peerId, isMuted)
             }
         }
     }
@@ -115,6 +197,7 @@ class ChatInfoViewModel(
             messagesRepository.setSilenceMode(peerId, time = if (nextMuted) -1 else 0, sound = if (nextMuted) 0 else 1)
                 .onSuccess {
                     _uiState.update { it.copy(isMuted = nextMuted, isWorking = false) }
+                    com.deliriousvoid.openvkmatcha.util.AppEvents.notifyConversationMuted(peerId, nextMuted)
                 }
                 .onFailure { error ->
                     _uiState.update { it.copy(isWorking = false, error = error.message) }
@@ -138,11 +221,24 @@ class ChatInfoViewModel(
                     )
 
                     _uiState.update { state ->
+                        val updatedTitle = titleFromResponse.ifEmpty { state.title }
+                        val updatedPhoto = photoFromResponse.ifEmpty { state.avatarUrl }
+                        val updatedCount = if (sortedMembers.isNotEmpty()) sortedMembers.size else state.memberCount
+
+                        val peerToSave = com.deliriousvoid.openvkmatcha.data.model.Peer(
+                            id = peerId,
+                            type = if (peerId >= 2000000000) com.deliriousvoid.openvkmatcha.data.model.PeerType.CHAT else com.deliriousvoid.openvkmatcha.data.model.PeerType.USER,
+                            title = updatedTitle,
+                            photo = updatedPhoto,
+                            membersCount = updatedCount
+                        )
+                        messagesRepository.savePeerInfo(peerToSave)
+
                         state.copy(
                             members = sortedMembers,
-                            memberCount = sortedMembers.size,
-                            title = titleFromResponse.ifEmpty { state.title },
-                            avatarUrl = photoFromResponse.ifEmpty { state.avatarUrl },
+                            memberCount = updatedCount,
+                            title = updatedTitle,
+                            avatarUrl = updatedPhoto,
                             isLoadingMembers = false
                         )
                     }
@@ -158,6 +254,7 @@ class ChatInfoViewModel(
         val currentSectionState = _uiState.value.materials[section] ?: MaterialSectionState()
         if (currentSectionState.isLoading) return
         if (!refresh && !currentSectionState.hasLoaded) return
+        if (!refresh && currentSectionState.nextFrom.isNullOrBlank() && currentSectionState.items.isNotEmpty()) return
 
         val startFrom = if (refresh) null else currentSectionState.nextFrom
         viewModelScope.launch {
@@ -202,6 +299,22 @@ class ChatInfoViewModel(
                 .onSuccess {
                     _uiState.update { it.copy(isWorking = false) }
                     loadMembers()
+                    onComplete(true)
+                }
+                .onFailure { error ->
+                    _uiState.update { it.copy(isWorking = false, error = error.message) }
+                    onComplete(false)
+                }
+        }
+    }
+
+    fun leaveChat(onComplete: (Boolean) -> Unit) {
+        if (_uiState.value.isWorking) return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isWorking = true) }
+            messagesRepository.leaveChat(peerId)
+                .onSuccess {
+                    _uiState.update { it.copy(isWorking = false) }
                     onComplete(true)
                 }
                 .onFailure { error ->
@@ -329,29 +442,76 @@ class ChatInfoViewModel(
                     val url = com.deliriousvoid.openvkmatcha.data.parser.JsonParsers.largestPhotoUrl(photo?.optJSONArray("sizes"))
                         ?: photo?.optString("photo_604") ?: photo?.optString("photo_130")
                     if (!url.isNullOrBlank()) {
-                        ChatMaterialItem(id = "photo_${photo?.optInt("id")}", photoUrl = url, title = "Фотография")
+                        val ownerId = photo?.optInt("owner_id") ?: 0
+                        val photoId = photo?.optInt("id") ?: i
+                        ChatMaterialItem(id = "photo_${ownerId}_${photoId}_$i", photoUrl = url, title = "Фотография")
                     } else null
                 }
                 ChatMaterialSection.VIDEOS -> {
-                    val video = attachment.optJSONObject("video")
-                    val title = video?.optString("title") ?: "Видео"
-                    val thumb = com.deliriousvoid.openvkmatcha.data.parser.JsonParsers.largestPhotoUrl(video?.optJSONArray("image"))
-                    val player = video?.optString("player")
-                    ChatMaterialItem(id = "video_${video?.optInt("id")}", videoUrl = player, photoUrl = thumb, title = title)
+                    val videoJson = attachment.optJSONObject("video")
+                    if (videoJson != null) {
+                        val parsedVideo = com.deliriousvoid.openvkmatcha.data.parser.JsonParsers.parseVideo(videoJson)
+                        val title = parsedVideo.title.ifEmpty { "Видео" }
+                        ChatMaterialItem(
+                            id = "video_${parsedVideo.ownerId}_${parsedVideo.id}_$i",
+                            videoUrl = parsedVideo.videoUrl ?: parsedVideo.playerUrl,
+                            photoUrl = parsedVideo.thumbnailUrl,
+                            title = title,
+                            video = parsedVideo
+                        )
+                    } else null
                 }
                 ChatMaterialSection.AUDIO -> {
                     val audio = attachment.optJSONObject("audio")
-                    val title = audio?.optString("title") ?: "Аудиозапись"
-                    val artist = audio?.optString("artist")
-                    val url = audio?.optString("url")
-                    ChatMaterialItem(id = "audio_${audio?.optInt("id")}", audioUrl = url, title = title, subtitle = artist)
+                    if (audio != null) {
+                        val parsedTrack = com.deliriousvoid.openvkmatcha.data.parser.JsonParsers.parseAudioItem(audio)
+                        ChatMaterialItem(
+                            id = "audio_${parsedTrack.ownerId}_${parsedTrack.id}_$i",
+                            audioUrl = parsedTrack.url,
+                            title = parsedTrack.title,
+                            subtitle = parsedTrack.artist,
+                            audioTrack = parsedTrack
+                        )
+                    } else null
                 }
                 ChatMaterialSection.DOCUMENTS -> {
                     val doc = attachment.optJSONObject("doc")
-                    val title = doc?.optString("title") ?: "Документ"
-                    val url = doc?.optString("url")
-                    val ext = doc?.optString("ext")?.uppercase()
-                    ChatMaterialItem(id = "doc_${doc?.optInt("id")}", docUrl = url, title = title, subtitle = ext)
+                    if (doc != null) {
+                        val title = doc.optString("title") ?: "Документ"
+                        val url = doc.optString("url") ?: ""
+                        val ext = doc.optString("ext")?.lowercase() ?: ""
+                        val size = doc.optInt("size", 0)
+                        val ownerId = doc.optInt("owner_id", 0)
+                        val docId = doc.optInt("id", 0)
+
+                        val previewObj = doc.optJSONObject("preview")
+                        val previewPhotoUrl = previewObj?.optJSONObject("photo")?.let {
+                            com.deliriousvoid.openvkmatcha.data.parser.JsonParsers.largestPhotoUrl(it.optJSONArray("sizes"))
+                        } ?: doc.optString("photo_130").takeIf { it.isNotBlank() }
+                        val previewVideoUrl = previewObj?.optJSONObject("video")?.optString("src")?.takeIf { it.isNotBlank() }
+
+                        val docModel = com.deliriousvoid.openvkmatcha.data.model.Document(
+                            id = docId,
+                            ownerId = ownerId,
+                            title = title,
+                            size = size,
+                            ext = ext,
+                            url = url,
+                            date = doc.optLong("date", 0),
+                            type = doc.optInt("type", 0),
+                            previewUrl = previewPhotoUrl,
+                            previewGifUrl = previewVideoUrl ?: if (ext == "gif" || url.lowercase().contains("gif")) url else previewPhotoUrl
+                        )
+
+                        ChatMaterialItem(
+                            id = "doc_${ownerId}_${docId}_$i",
+                            docUrl = url,
+                            photoUrl = previewPhotoUrl,
+                            title = title,
+                            subtitle = ext.uppercase(),
+                            document = docModel
+                        )
+                    } else null
                 }
                 ChatMaterialSection.LINKS -> {
                     val link = attachment.optJSONObject("link")
@@ -373,7 +533,7 @@ class ChatInfoViewModel(
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T {
                 val app = OpenVKMatchaApp.instance
-                return ChatInfoViewModel(app.messagesRepository, peerId) as T
+                return ChatInfoViewModel(app.messagesRepository, app.profileRepository, peerId) as T
             }
         }
     }

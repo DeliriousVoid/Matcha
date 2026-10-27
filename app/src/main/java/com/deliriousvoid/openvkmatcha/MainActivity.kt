@@ -58,9 +58,11 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -75,6 +77,7 @@ import com.deliriousvoid.openvkmatcha.ui.components.MiniPlayer
 import com.deliriousvoid.openvkmatcha.ui.components.PipPlayerView
 import com.deliriousvoid.openvkmatcha.ui.components.VideoPlayer
 import com.deliriousvoid.openvkmatcha.ui.components.CrashDialog
+import com.deliriousvoid.openvkmatcha.ui.components.UpdateDialog
 import com.deliriousvoid.openvkmatcha.ui.navigation.AppNavigation
 import com.deliriousvoid.openvkmatcha.ui.navigation.MainTab
 import com.deliriousvoid.openvkmatcha.ui.navigation.Routes
@@ -254,6 +257,10 @@ class MainActivity : ComponentActivity() {
             val autoHidePlayer by settingsViewModel.autoHidePlayer.collectAsState()
             val backgroundNotifications by settingsViewModel.backgroundNotifications.collectAsState()
 
+            val updateAvailable by settingsViewModel.updateAvailable.collectAsState()
+            val latestRelease by settingsViewModel.latestRelease.collectAsState()
+            var showUpdateDialog by rememberSaveable { mutableStateOf(value = true) }
+
             val notificationPermissionLauncher = rememberLauncherForActivityResult(
                 ActivityResultContracts.RequestPermission()
             ) { /* isGranted handled by system or ignored */ }
@@ -325,6 +332,15 @@ class MainActivity : ComponentActivity() {
                                 CrashHandler.clearCrashState(context)
                             }
                         )
+                    } else if (updateAvailable && latestRelease != null && showUpdateDialog) {
+                        UpdateDialog(
+                            release = latestRelease!!,
+                            onDismiss = { showUpdateDialog = false },
+                            onDownload = {
+                                settingsViewModel.downloadUpdate(latestRelease!!)
+                                showUpdateDialog = false
+                            }
+                        )
                     }
 
                     Box(modifier = Modifier.fillMaxSize()) {
@@ -349,6 +365,7 @@ class MainActivity : ComponentActivity() {
                             val isPlaylistDetails = currentRoute?.startsWith("playlist/") == true
                             val isListenBrainzPlaylist = currentRoute?.startsWith("listenbrainz_playlist/") == true
                             val isChat = currentRoute?.startsWith("chat/") == true
+                            val isChatInfo = currentRoute?.startsWith("chat_info/") == true
                             val isComments = currentRoute?.startsWith("comments/") == true
                             val isNotifications = currentRoute == Routes.NOTIFICATIONS
                             val isUpload = currentRoute == Routes.UPLOAD_AUDIO
@@ -436,6 +453,14 @@ class MainActivity : ComponentActivity() {
                                 }
                             }
 
+                            val shouldOpenFullPlayer by AppEvents.shouldOpenFullPlayer.collectAsState()
+                            LaunchedEffect(shouldOpenFullPlayer) {
+                                if (shouldOpenFullPlayer) {
+                                    showFullPlayer = true
+                                    AppEvents.consumeOpenFullPlayerTrigger()
+                                }
+                            }
+
                             LaunchedEffect(intent.action, openPlayerTrigger, openVideoPlayerTrigger) {
                                 if (((intent.action == ACTION_OPEN_PLAYER) || openPlayerTrigger)) {
                                     showFullPlayer = true
@@ -453,6 +478,7 @@ class MainActivity : ComponentActivity() {
                             val feedViewModel: FeedViewModel = viewModel(factory = FeedViewModel.factory())
                             val profileViewModel: ProfileViewModel = viewModel(factory = ProfileViewModel.factory())
                             val notificationsViewModel: NotificationsViewModel = viewModel(factory = NotificationsViewModel.factory())
+                            val notificationsState by notificationsViewModel.uiState.collectAsState()
                             val accountsViewModel: AccountsViewModel = viewModel(factory = AccountsViewModel.factory())
                             val accounts by accountsViewModel.accounts.collectAsState()
                             val currentAccountId by accountsViewModel.currentAccountId.collectAsState()
@@ -574,6 +600,7 @@ class MainActivity : ComponentActivity() {
 
 
                             Scaffold(
+                                contentWindowInsets = WindowInsets(0, 0, 0, 0),
                                 snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
                                 topBar = {
                                     if (showOuterTopBar) {
@@ -698,6 +725,7 @@ class MainActivity : ComponentActivity() {
                                                                 if (name.isNotEmpty()) matchaStringResource(R.string.title_albums_user, name) else matchaStringResource(R.string.title_albums)
                                                             }
                                                             isPhotos -> navBackStackEntry?.arguments?.getString("title") ?: matchaStringResource(R.string.title_photos)
+                                                            isChatInfo -> "Информация о беседе"
                                                             else -> ""
                                                         }
                                                         if (titleStr.isNotEmpty()) Text(titleStr, style = MaterialTheme.typography.titleMedium, maxLines = 1, modifier = Modifier.basicMarquee())
@@ -823,13 +851,28 @@ class MainActivity : ComponentActivity() {
                                                                         }
                                                                     }
                                                                 } else {
-                                                                    val notificationsState by notificationsViewModel.uiState.collectAsState()
                                                                     val unreadCount = notificationsState.unreadCount
                                                                     IconButton(onClick = { 
                                                                         notificationsViewModel.setArchive(unreadCount == 0)
                                                                         navController.navigate(Routes.NOTIFICATIONS) 
                                                                     }) {
-                                                                        BadgedBox(badge = { if (unreadCount > 0) Badge(containerColor = Color.Red, contentColor = Color.White) { Text(if (unreadCount > 99) "99+" else unreadCount.toString()) } }) {
+                                                                        BadgedBox(
+                                                                            badge = { 
+                                                                                if (unreadCount > 0) {
+                                                                                    Badge(
+                                                                                        containerColor = Color.Red,
+                                                                                        contentColor = Color.White
+                                                                                    ) {
+                                                                                        Text(
+                                                                                            text = if (unreadCount > 99) "99+" else unreadCount.toString(),
+                                                                                            fontSize = 10.sp,
+                                                                                            fontWeight = FontWeight.Bold,
+                                                                                            lineHeight = 10.sp
+                                                                                        )
+                                                                                    }
+                                                                                }
+                                                                            }
+                                                                        ) {
                                                                             Icon(Icons.Default.Notifications, matchaStringResource(R.string.title_notifications))
                                                                         }
                                                                     }
@@ -873,8 +916,8 @@ class MainActivity : ComponentActivity() {
                                     }
                                 },
                                 bottomBar = {
-                                    val shouldShowNavBar = (isMainScreen || isSearch || isMusicSearch || isPlaylistDetails || isListenBrainzPlaylist || isProfile || isFriends || isGroups || isUserMusic || isGifts || isFollowers || isSendGift || isCreatePost || isVideos || isDocuments || isNotes || isNoteDetails || isEvents || isWebView || isTransfer || isTopics || isTopicComments || isEditProfile || isEditGroup || isPhotoAlbums || isPhotos || isUpload) && !isQr && currentRoute != Routes.GRAFFITI && !isKeyboardVisible
-                                    val shouldShowPlayer = currentRoute != Routes.SPLASH && currentRoute != Routes.LOGIN && !isTwoFactor && currentRoute != Routes.SETTINGS && currentRoute?.startsWith("settings/") != true && currentRoute != Routes.NOTIFICATIONS && currentRoute?.startsWith("comments/") != true && currentRoute?.startsWith("topic_comments/") != true && !isEditProfile && !isEditGroup && !isPhotoAlbums && !isPhotos && !isQr && currentRoute != Routes.GRAFFITI && currentTrack != null && !isKeyboardVisible
+                                    val shouldShowNavBar = (isMainScreen || isSearch || isMusicSearch || isPlaylistDetails || isListenBrainzPlaylist || isProfile || isFriends || isGroups || isUserMusic || isGifts || isFollowers || isSendGift || isCreatePost || isVideos || isDocuments || isNotes || isEvents || isWebView || isTransfer || isTopics || isEditProfile || isEditGroup || isPhotoAlbums || isPhotos || isUpload) && !isQr && currentRoute != Routes.GRAFFITI && !isKeyboardVisible
+                                    val shouldShowPlayer = currentRoute != Routes.SPLASH && currentRoute != Routes.LOGIN && !isTwoFactor && currentRoute != Routes.SETTINGS && currentRoute?.startsWith("settings/") != true && currentRoute != Routes.NOTIFICATIONS && currentRoute?.startsWith("comments/") != true && currentRoute?.startsWith("topic_comments/") != true && currentRoute?.startsWith("note/") != true && !isEditProfile && !isEditGroup && !isPhotoAlbums && !isPhotos && !isQr && currentRoute != Routes.GRAFFITI && !isChat && currentRoute?.startsWith("chat_info/") != true && currentTrack != null && !isKeyboardVisible
                                     
                                     Surface(color = MaterialTheme.colorScheme.surface, tonalElevation = 0.dp) {
                                         Column {
@@ -936,7 +979,28 @@ class MainActivity : ComponentActivity() {
                                                                 onClick = {},
                                                                 icon = {
                                                                     Box {
-                                                                        Icon(tab.icon(selected), tab.title)
+                                                                        if (tab == MainTab.Messages && notificationsState.unreadMessagesCount > 0) {
+                                                                            val unreadMessagesCount = notificationsState.unreadMessagesCount
+                                                                            BadgedBox(
+                                                                                badge = {
+                                                                                    Badge(
+                                                                                        containerColor = Color.Red,
+                                                                                        contentColor = Color.White
+                                                                                    ) {
+                                                                                        Text(
+                                                                                            text = if (unreadMessagesCount > 99) "99+" else unreadMessagesCount.toString(),
+                                                                                            fontSize = 10.sp,
+                                                                                            fontWeight = FontWeight.Bold,
+                                                                                            lineHeight = 10.sp
+                                                                                        )
+                                                                                    }
+                                                                                }
+                                                                            ) {
+                                                                                Icon(tab.icon(selected), tab.title)
+                                                                            }
+                                                                        } else {
+                                                                            Icon(tab.icon(selected), tab.title)
+                                                                        }
                                                                         if (tab == MainTab.Profile) {
                                                                             AccountQuickSwitchMenu(
                                                                                 expanded = showAccountPopup,

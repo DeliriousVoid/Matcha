@@ -121,7 +121,16 @@ class AccountManager(context: Context) {
         prefs.edit().putString(KEY_ACCOUNTS, array.toString()).apply()
     }
 
-    fun getCurrentAccountId(): String? = prefs.getString(KEY_CURRENT_ACCOUNT_ID, null)
+    fun getCurrentAccountId(): String? {
+        val id = prefs.getString(KEY_CURRENT_ACCOUNT_ID, null)
+        if (id != null) return id
+        val firstAccount = getAccounts().firstOrNull()
+        if (firstAccount != null) {
+            setCurrentAccountId(firstAccount.id)
+            return firstAccount.id
+        }
+        return null
+    }
 
     fun setCurrentAccountId(id: String?) {
         prefs.edit().putString(KEY_CURRENT_ACCOUNT_ID, id).apply()

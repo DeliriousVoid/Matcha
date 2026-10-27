@@ -672,9 +672,13 @@ fun AppNavigation(
                 peerId = peerId,
                 title = title,
                 onBack = { navController.popBackStack() },
-                onOpenProfile = { id -> navController.navigate(Routes.profileRoute(id)) },
+                onOpenProfile = { target -> navController.navigate(Routes.profileRoute(target)) },
                 onOpenChatInfo = { pId -> navController.navigate(Routes.chatInfoRoute(pId)) },
-                onOpenPost = { ownerId, postId -> navController.navigate(Routes.commentsRoute(ownerId, postId)) }
+                onOpenPost = { ownerId, postId -> navController.navigate(Routes.commentsRoute(ownerId, postId)) },
+                onOpenMusic = { id -> navController.navigate(Routes.userMusicRoute(id, "")) },
+                onOpenPlaylist = { ownerId, playlistId -> navController.navigate(Routes.playlistRoute(ownerId, playlistId, "")) },
+                onOpenChat = { targetPeerId, targetTitle -> navController.navigate(Routes.chatRoute(targetPeerId, targetTitle)) },
+                onSendGift = { targetUserId -> navController.navigate(Routes.sendGiftRoute(targetUserId)) }
             )
         }
 
@@ -686,7 +690,8 @@ fun AppNavigation(
             ChatInfoScreen(
                 peerId = peerId,
                 onBack = { navController.popBackStack() },
-                onOpenProfile = { id -> navController.navigate(Routes.profileRoute(id)) }
+                onOpenProfile = { id -> navController.navigate(Routes.profileRoute(id)) },
+                onSendGift = { id -> navController.navigate(Routes.sendGiftRoute(id)) }
             )
         }
 

@@ -3,6 +3,11 @@ package com.deliriousvoid.openvkmatcha.data.repository
 import com.deliriousvoid.openvkmatcha.data.api.OpenVKApi
 import com.deliriousvoid.openvkmatcha.data.parser.JsonParsers
 
+data class AccountCounters(
+    val notifications: Int = 0,
+    val messages: Int = 0
+)
+
 class NotificationsRepository(private val api: OpenVKApi) {
 
     suspend fun loadNotifications(startFrom: String? = null, count: Int = 30, archived: Boolean = false) = api.callMethod(
@@ -21,7 +26,13 @@ class NotificationsRepository(private val api: OpenVKApi) {
         emptyMap() // Request all counters to be safe
     ).map {
         val response = JsonParsers.getResponseObject(it)
-        response.optInt("notifications", 0)
+        val notifications = response.optInt("notifications", 0)
+        val messages = if (response.has("messages")) {
+            response.optInt("messages", 0)
+        } else {
+            response.optInt("unread_dialogs", 0)
+        }
+        AccountCounters(notifications = notifications, messages = messages)
     }
 
     suspend fun getLongPollServer() = api.callMethod(

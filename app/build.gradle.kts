@@ -11,8 +11,8 @@ android {
         applicationId = "com.deliriousvoid.openvkmatcha"
         minSdk = 24
         targetSdk = 36
-        versionCode = 19;
-        versionName = "1.4-dev"
+        versionCode = 20;
+        versionName = "1.4.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

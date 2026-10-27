@@ -68,10 +68,14 @@ class UpdateRepository(private val context: Context) {
 
     fun isUpdateAvailable(latestTagName: String): Boolean {
         val current = BuildConfig.VERSION_NAME
-        val latest = latestTagName.removePrefix("v").substringBefore("-") // Ignore build metadata
+
+        val regex = Regex("[0-9]+(?:\\.[0-9]+)*")
         
-        val currentParts = current.split(".").mapNotNull { it.toIntOrNull() }
-        val latestParts = latest.split(".").mapNotNull { it.toIntOrNull() }
+        val currentMatch = regex.find(current)?.value ?: return false
+        val latestMatch = regex.find(latestTagName)?.value ?: return false
+        
+        val currentParts = currentMatch.split(".").mapNotNull { it.toIntOrNull() }
+        val latestParts = latestMatch.split(".").mapNotNull { it.toIntOrNull() }
         
         val length = maxOf(currentParts.size, latestParts.size)
         for (i in 0 until length) {
@@ -80,6 +84,16 @@ class UpdateRepository(private val context: Context) {
             if (l > c) return true
             if (c > l) return false
         }
+        
+        // If versions are numerically equal (e.g. "pre-1.4" and "1.4")
+        // we check if the current one is a pre-release and the latest is not.
+        val currentIsPre = current.contains("pre", ignoreCase = true) || current.contains("dev", ignoreCase = true)
+        val latestIsPre = latestTagName.contains("pre", ignoreCase = true) || latestTagName.contains("dev", ignoreCase = true)
+        
+        if (currentIsPre && !latestIsPre) {
+            return true
+        }
+
         return false
     }
 }

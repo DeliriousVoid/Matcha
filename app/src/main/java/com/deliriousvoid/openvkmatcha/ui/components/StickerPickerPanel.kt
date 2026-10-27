@@ -94,7 +94,7 @@ fun StickerPickerPanel(
             HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
 
             // Sticker Grid
-            Box(modifier = Modifier.weight(1f)) {
+            Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
                 if (isLoading && stickerPacks.isEmpty() && recentStickers.isEmpty()) {
                     CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
                 } else {

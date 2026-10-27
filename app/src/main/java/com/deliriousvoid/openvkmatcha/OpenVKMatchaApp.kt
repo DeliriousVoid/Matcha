@@ -118,6 +118,17 @@ class OpenVKMatchaApp : Application(), ImageLoaderFactory {
 
         return ImageLoader.Builder(this)
             .okHttpClient(client)
+            .memoryCache {
+                coil.memory.MemoryCache.Builder(this)
+                    .maxSizePercent(0.25)
+                    .build()
+            }
+            .diskCache {
+                coil.disk.DiskCache.Builder()
+                    .directory(cacheDir.resolve("image_cache"))
+                    .maxSizePercent(0.05)
+                    .build()
+            }
             .components {
                 if (SDK_INT >= 28) {
                     add(ImageDecoderDecoder.Factory())
@@ -149,9 +160,10 @@ class OpenVKMatchaApp : Application(), ImageLoaderFactory {
         themeManager = ThemeManager(this)
         accountManager = AccountManager(this)
         api = OpenVKApi(tokenManager)
+        val chatCacheManager = com.deliriousvoid.openvkmatcha.data.cache.ChatCacheManager(this)
         authRepository = AuthRepository(api)
         feedRepository = FeedRepository(api)
-        messagesRepository = MessagesRepository(api)
+        messagesRepository = MessagesRepository(api, chatCacheManager)
         musicRepository = MusicRepository(api)
         profileRepository = ProfileRepository(api)
         lyricsRepository = LyricsRepository(LyricsApi())

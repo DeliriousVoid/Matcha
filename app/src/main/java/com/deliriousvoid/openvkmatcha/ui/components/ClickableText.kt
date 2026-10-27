@@ -45,11 +45,14 @@ fun ParsedText(
     onProfileClick: (String) -> Unit = {},
     onMusicClick: (Int) -> Unit = {},
     onPlaylistClick: (Int, Int) -> Unit = { _, _ -> },
+    onChatClick: (Int) -> Unit = {},
     onDefaultClick: () -> Unit = {},
+    onDefaultLongClick: () -> Unit = {},
     onDoubleTap: ((androidx.compose.ui.geometry.Offset) -> Unit)? = null,
     modifier: Modifier = Modifier,
     style: TextStyle = MaterialTheme.typography.bodyMedium,
     color: Color = LocalContentColor.current,
+    linkColor: Color = MaterialTheme.colorScheme.primary,
     maxLines: Int = Int.MAX_VALUE,
     overflow: TextOverflow = TextOverflow.Clip,
     onTextLayout: (TextLayoutResult) -> Unit = {}
@@ -68,7 +71,9 @@ fun ParsedText(
     val currentOnProfileClick by rememberUpdatedState(onProfileClick)
     val currentOnMusicClick by rememberUpdatedState(onMusicClick)
     val currentOnPlaylistClick by rememberUpdatedState(onPlaylistClick)
+    val currentOnChatClick by rememberUpdatedState(onChatClick)
     val currentOnDefaultClick by rememberUpdatedState(onDefaultClick)
+    val currentOnDefaultLongClick by rememberUpdatedState(onDefaultLongClick)
     val currentOnDoubleTap by rememberUpdatedState(onDoubleTap)
     val currentOnTextLayout by rememberUpdatedState(onTextLayout)
 
@@ -92,19 +97,33 @@ fun ParsedText(
                 }
             }
             "URL" -> {
-                try {
-                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(item))
-                    context.startActivity(intent)
-                } catch (_: Exception) {
-                    currentOnUrlClick(item)
-                }
+                LinkHandler.handleLink(
+                    context = context,
+                    url = item,
+                    onProfileClick = { prof ->
+                        if (prof is Int) currentOnMentionClick(prof)
+                        else if (prof is String) currentOnProfileClick(prof)
+                        else currentOnProfileClick(prof.toString())
+                    },
+                    onWallClick = currentOnWallClick,
+                    onMusicClick = currentOnMusicClick,
+                    onPlaylistClick = currentOnPlaylistClick,
+                    onChatClick = currentOnChatClick,
+                    onExternalClick = { url ->
+                        try {
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                            context.startActivity(intent)
+                        } catch (_: Exception) {
+                            currentOnUrlClick(url)
+                        }
+                    }
+                )
             }
         }
     }
 
-    val primaryColor = MaterialTheme.colorScheme.primary
-    val annotatedString = remember(text, primaryColor) {
-        MarkdownParser.parse(text, primaryColor)
+    val annotatedString = remember(text, linkColor) {
+        MarkdownParser.parse(text, linkColor)
     }
 
     Box {
@@ -200,6 +219,8 @@ fun ParsedText(
                                             selectedAnnotation = annotation
                                             menuExpanded = true
                                         }
+                                    } else {
+                                        currentOnDefaultLongClick()
                                     }
                                 }
                             }

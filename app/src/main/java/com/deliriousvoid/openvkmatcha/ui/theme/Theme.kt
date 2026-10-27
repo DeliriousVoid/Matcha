@@ -150,15 +150,27 @@ private fun getLightColorScheme(accent: AccentColor, customAccent: CustomAccent?
         AccentColor.MONET -> VkGreen
         AccentColor.CUSTOM -> customAccent?.let { Color(it.primary) } ?: VkGreen
     }
+    val containerColor = when (accent) {
+        AccentColor.BLUE -> Color(0xFFE3F1FF)
+        AccentColor.GREEN -> Color(0xFFE2F3E2)
+        AccentColor.MONET -> primaryColor.copy(alpha = 0.20f).compositeOver(VkSurface)
+        AccentColor.CUSTOM -> customAccent?.let { it.primaryContainer?.let { Color(it) } ?: Color(it.primary).copy(alpha = 0.20f) } ?: Color(0xFFE2F3E2)
+    }
+    val onContainerColor = when (accent) {
+        AccentColor.BLUE -> Color(0xFF002B5C)
+        AccentColor.GREEN -> Color(0xFF0A330E)
+        AccentColor.MONET -> VkOnSurface
+        AccentColor.CUSTOM -> VkOnSurface
+    }
     return lightColorScheme(
         primary = primaryColor,
         onPrimary = VkSurface,
-        primaryContainer = primaryColor.copy(alpha = 0.25f).compositeOver(VkSurface),
-        onPrimaryContainer = primaryColor,
+        primaryContainer = containerColor,
+        onPrimaryContainer = onContainerColor,
         secondary = VkSecondaryText,
         background = VkBackground,
         surface = VkSurface,
-        onBackground = VkOnSurface,
+        surfaceVariant = Color(0xFFECEFF1),
         onSurface = VkOnSurface,
         onSurfaceVariant = VkSecondaryText,
         outline = VkDivider,
@@ -174,20 +186,20 @@ private fun getAmoledColorScheme(accent: AccentColor, customAccent: CustomAccent
         AccentColor.CUSTOM -> customAccent?.let { Color(it.primary) } ?: VkGreen80
     }
     val containerColor = when (accent) {
-        AccentColor.BLUE -> VkBlueDark
-        AccentColor.GREEN -> VkGreenDark
-        AccentColor.MONET -> VkGreenDark
-        AccentColor.CUSTOM -> customAccent?.let { it.primaryContainer?.let { Color(it) } ?: Color(it.primary).copy(alpha = 0.3f) } ?: VkGreenDark
+        AccentColor.BLUE -> Color(0xFF163252)
+        AccentColor.GREEN -> Color(0xFF1B3D2B)
+        AccentColor.MONET -> VkGreenDark.copy(alpha = 0.45f)
+        AccentColor.CUSTOM -> customAccent?.let { it.primaryContainer?.let { Color(it) } ?: Color(it.primary).copy(alpha = 0.35f) } ?: Color(0xFF1B3D2B)
     }
     return darkColorScheme(
         primary = primaryColor,
-        onPrimary = VkOnSurfaceDark,
-        primaryContainer = containerColor.copy(alpha = 0.3f),
-        onPrimaryContainer = primaryColor,
+        onPrimary = Color(0xFF00210B),
+        primaryContainer = containerColor,
+        onPrimaryContainer = VkOnSurfaceDark,
         secondary = VkSecondaryTextDark,
         background = Color.Black,
         surface = Color.Black,
-        onBackground = VkOnSurfaceDark,
+        surfaceVariant = Color(0xFF1E1F22),
         onSurface = VkOnSurfaceDark,
         onSurfaceVariant = VkSecondaryTextDark,
         outline = VkSecondaryTextDark.copy(alpha = 0.3f),

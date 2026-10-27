@@ -1,13 +1,57 @@
 package com.deliriousvoid.openvkmatcha.data.repository
 
 import com.deliriousvoid.openvkmatcha.data.api.OpenVKApi
+import com.deliriousvoid.openvkmatcha.data.cache.ChatCacheManager
 import com.deliriousvoid.openvkmatcha.data.model.Conversation
 import com.deliriousvoid.openvkmatcha.data.model.ParsedHistory
 import com.deliriousvoid.openvkmatcha.data.parser.JsonParsers
 import org.json.JSONObject
 import kotlin.random.Random
 
-class MessagesRepository(private val api: OpenVKApi) {
+class MessagesRepository(
+    private val api: OpenVKApi,
+    private val cacheManager: ChatCacheManager? = null
+) {
+
+    fun getCachedPeerInfo(peerId: Int): com.deliriousvoid.openvkmatcha.data.model.Peer? {
+        return cacheManager?.getCachedPeerInfo(peerId)
+    }
+
+    fun savePeerInfo(peer: com.deliriousvoid.openvkmatcha.data.model.Peer) {
+        cacheManager?.savePeerInfo(peer)
+    }
+
+    fun getCachedHistory(peerId: Int): ParsedHistory? {
+        return cacheManager?.getCachedHistory(peerId)
+    }
+
+    fun updateCachedMessage(peerId: Int, messageId: Int, newText: String) {
+        cacheManager?.updateCachedMessage(peerId, messageId, newText)
+    }
+
+    fun markCachedMessageDeleted(peerId: Int, messageId: Int) {
+        cacheManager?.markCachedMessageDeleted(peerId, messageId)
+    }
+
+    fun saveVisiblePosition(peerId: Int, messageId: Int) {
+        cacheManager?.saveVisiblePosition(peerId, messageId)
+    }
+
+    fun getVisiblePosition(peerId: Int): Int? {
+        return cacheManager?.getVisiblePosition(peerId)
+    }
+
+    fun clearVisiblePosition(peerId: Int) {
+        cacheManager?.clearPosition(peerId)
+    }
+
+    private fun resolvePeerId(peerId: Int): Int {
+        if (peerId == 0) {
+            val currentUserId = com.deliriousvoid.openvkmatcha.OpenVKMatchaApp.instance.accountManager.getCurrentAccount()?.userId?.toIntOrNull() ?: 0
+            if (currentUserId > 0) return currentUserId
+        }
+        return peerId
+    }
 
     suspend fun loadConversations(offset: Int = 0, count: Int = 20): Result<List<Conversation>> {
         val params = mapOf(
@@ -23,8 +67,9 @@ class MessagesRepository(private val api: OpenVKApi) {
 
     suspend fun getConversationsById(peerIds: List<Int>): Result<List<Conversation>> {
         if (peerIds.isEmpty()) return Result.success(emptyList())
+        val resolvedIds = peerIds.map { resolvePeerId(it) }
         val params = mapOf(
-            "peer_ids" to peerIds.joinToString(","),
+            "peer_ids" to resolvedIds.joinToString(","),
             "extended" to "1",
             "fields" to "id,first_name,last_name,screen_name,photo_100,photo_200,online,last_seen,verified"
         )
@@ -40,8 +85,9 @@ class MessagesRepository(private val api: OpenVKApi) {
         startMessageId: Int? = null,
         reverse: Boolean = false
     ): Result<ParsedHistory> {
+        val apiPeerId = resolvePeerId(peerId)
         val params = mutableMapOf(
-            "peer_id" to peerId.toString(),
+            "peer_id" to apiPeerId.toString(),
             "offset" to offset.toString(),
             "count" to count.toString(),
             "extended" to "1"
@@ -53,6 +99,9 @@ class MessagesRepository(private val api: OpenVKApi) {
             params["rev"] = "1"
         }
         return api.callMethod("messages.getHistory", params).map { response ->
+            if (offset == 0 && startMessageId == null) {
+                cacheManager?.saveRawHistory(peerId, response)
+            }
             JsonParsers.parseMessages(response, peerId)
         }
     }
@@ -61,12 +110,14 @@ class MessagesRepository(private val api: OpenVKApi) {
         peerId: Int,
         text: String,
         replyTo: Int? = null,
+        forwardMessages: String? = null,
         stickerId: Int? = null,
         attachments: String? = null
     ): Result<JSONObject> {
+        val apiPeerId = resolvePeerId(peerId)
         val randomId = (System.currentTimeMillis() xor Random.nextLong(1, 1000000)).toString()
         val params = mutableMapOf(
-            "peer_id" to peerId.toString(),
+            "peer_id" to apiPeerId.toString(),
             "random_id" to randomId
         )
         if (text.isNotBlank()) {
@@ -74,6 +125,9 @@ class MessagesRepository(private val api: OpenVKApi) {
         }
         if (replyTo != null) {
             params["reply_to"] = replyTo.toString()
+        }
+        if (!forwardMessages.isNullOrBlank()) {
+            params["forward_messages"] = forwardMessages
         }
         if (stickerId != null) {
             params["sticker_id"] = stickerId.toString()
@@ -143,7 +197,7 @@ class MessagesRepository(private val api: OpenVKApi) {
         api.callMethod(
             "messages.edit",
             mapOf(
-                "peer_id" to peerId.toString(),
+                "peer_id" to resolvePeerId(peerId).toString(),
                 "message_id" to messageId.toString(),
                 "message" to text
             ),
@@ -154,7 +208,7 @@ class MessagesRepository(private val api: OpenVKApi) {
         api.callMethod(
             "messages.delete",
             mapOf(
-                "peer_id" to peerId.toString(),
+                "peer_id" to resolvePeerId(peerId).toString(),
                 "message_ids" to messageIds.joinToString(","),
                 "delete_for_all" to if (deleteForAll) "1" else "0"
             ),
@@ -171,35 +225,39 @@ class MessagesRepository(private val api: OpenVKApi) {
     suspend fun pinMessage(peerId: Int, messageId: Int): Result<JSONObject> =
         api.callMethod(
             "messages.pin",
-            mapOf("peer_id" to peerId.toString(), "message_id" to messageId.toString()),
+            mapOf("peer_id" to resolvePeerId(peerId).toString(), "message_id" to messageId.toString()),
             isPost = true
         )
 
     suspend fun unpinMessage(peerId: Int): Result<JSONObject> =
         api.callMethod(
             "messages.unpin",
-            mapOf("peer_id" to peerId.toString()),
+            mapOf("peer_id" to resolvePeerId(peerId).toString()),
             isPost = true
         )
 
     suspend fun markAsRead(peerId: Int): Result<JSONObject> =
         api.callMethod(
             "messages.markAsRead",
-            mapOf("peer_id" to peerId.toString()),
+            mapOf("peer_id" to resolvePeerId(peerId).toString()),
             isPost = true
         )
 
     suspend fun setActivity(peerId: Int, type: String = "typing"): Result<JSONObject> =
         api.callMethod(
             "messages.setActivity",
-            mapOf("peer_id" to peerId.toString(), "type" to type),
+            mapOf("peer_id" to resolvePeerId(peerId).toString(), "type" to type),
             isPost = true
         )
 
     suspend fun getChatMembers(peerId: Int): Result<JSONObject> =
         api.callMethod(
             "messages.getConversationMembers",
-            mapOf("peer_id" to peerId.toString(), "extended" to "1")
+            mapOf(
+                "peer_id" to resolvePeerId(peerId).toString(),
+                "extended" to "1",
+                "fields" to "id,first_name,last_name,photo_50,photo_200,online,last_seen,sex,verified"
+            )
         )
 
     suspend fun getHistoryAttachments(
@@ -208,8 +266,9 @@ class MessagesRepository(private val api: OpenVKApi) {
         startFrom: String? = null,
         count: Int = 40
     ): Result<JSONObject> {
+        val apiPeerId = resolvePeerId(peerId)
         val params = mutableMapOf(
-            "peer_id" to peerId.toString(),
+            "peer_id" to apiPeerId.toString(),
             "media_type" to mediaType,
             "count" to count.toString(),
             "photo_sizes" to "1"
@@ -276,19 +335,19 @@ class MessagesRepository(private val api: OpenVKApi) {
         api.callMethod("stickers.get", mapOf("count" to "100"))
 
     suspend fun getPushSettings(peerId: Int): Result<JSONObject> =
-        api.callMethod("account.getPushSettings", mapOf("peer_id" to peerId.toString()))
+        api.callMethod("account.getPushSettings", mapOf("peer_id" to resolvePeerId(peerId).toString()))
 
     suspend fun setSilenceMode(peerId: Int, time: Int = -1, sound: Int = 0): Result<JSONObject> =
         api.callMethod(
             "account.setSilenceMode",
-            mapOf("peer_id" to peerId.toString(), "time" to time.toString(), "sound" to sound.toString()),
+            mapOf("peer_id" to resolvePeerId(peerId).toString(), "time" to time.toString(), "sound" to sound.toString()),
             isPost = true
         )
 
     suspend fun deleteConversation(peerId: Int): Result<JSONObject> =
         api.callMethod(
             "messages.deleteConversation",
-            mapOf("peer_id" to peerId.toString()),
+            mapOf("peer_id" to resolvePeerId(peerId).toString()),
             isPost = true
         )
 

@@ -346,6 +346,16 @@ class MessagesViewModel(
     init {
         longPollManager.addListener(this)
         loadConversations()
+        viewModelScope.launch {
+            com.deliriousvoid.openvkmatcha.util.AppEvents.conversationMuteEvents.collect { (peerId, isMuted) ->
+                _uiState.update { state ->
+                    val updated = state.conversations.map { conv ->
+                        if (conv.peer.id == peerId) conv.copy(isMuted = isMuted) else conv
+                    }
+                    state.copy(conversations = updated)
+                }
+            }
+        }
     }
 
     override fun onCleared() {
@@ -364,14 +374,36 @@ class MessagesViewModel(
             }
             messagesRepository.loadConversations(offset = 0, count = 50)
                 .onSuccess { fetchedConversations ->
+                    val currentUserId = com.deliriousvoid.openvkmatcha.OpenVKMatchaApp.instance.accountManager.getCurrentAccount()?.userId?.toIntOrNull() ?: 0
+                    val hasPeer0 = fetchedConversations.any { it.peer.id == 0 || (currentUserId > 0 && it.peer.id == currentUserId) }
+                    val finalFetched = if (!hasPeer0) {
+                        val savedFromApi = messagesRepository.getConversationsById(listOf(0)).getOrNull()?.firstOrNull()
+                        val savedConv = savedFromApi ?: com.deliriousvoid.openvkmatcha.data.model.Conversation(
+                            peer = com.deliriousvoid.openvkmatcha.data.model.Peer(
+                                id = 0,
+                                type = com.deliriousvoid.openvkmatcha.data.model.PeerType.USER,
+                                title = com.deliriousvoid.openvkmatcha.OpenVKMatchaApp.instance.languageManager.getStringOrDefault(com.deliriousvoid.openvkmatcha.R.string.saved_messages, "Сохранённые сообщения"),
+                                photo = com.deliriousvoid.openvkmatcha.Constants.SAVED_MESSAGES_AVATAR
+                            ),
+                            lastMessage = "",
+                            lastMessageDate = 0L,
+                            unreadCount = 0
+                        )
+                        (fetchedConversations + savedConv).sortedByDescending { it.lastMessageDate }
+                    } else {
+                        fetchedConversations
+                    }
                     _uiState.update { state ->
-                        val merged = fetchedConversations.map { fetched ->
+                        val merged = finalFetched.map { fetched ->
                             val local = state.conversations.find { it.peer.id == fetched.peer.id }
                             if (local != null && local.lastMessageId > fetched.lastMessageId) {
                                 fetched.copy(
                                     lastMessage = local.lastMessage,
                                     lastMessageDate = local.lastMessageDate,
                                     lastMessageId = local.lastMessageId,
+                                    lastMessageMediaUrl = local.lastMessageMediaUrl,
+                                    lastMessageMediaType = local.lastMessageMediaType,
+                                    lastMessagePrefix = local.lastMessagePrefix,
                                     unreadCount = maxOf(local.unreadCount, fetched.unreadCount)
                                 )
                             } else if (local != null && local.unreadCount > fetched.unreadCount && local.lastMessageId == fetched.lastMessageId) {
@@ -397,6 +429,7 @@ class MessagesViewModel(
                         if (it.peer.id == peerId) it.copy(unreadCount = 0) else it
                     })
                 }
+                AppEvents.emitRefreshNotifications()
             }
         }
     }
@@ -562,26 +595,34 @@ data class ChatUiState(
     val messages: List<ChatMessage> = emptyList(),
     val authors: Map<Int, com.deliriousvoid.openvkmatcha.data.model.AuthorInfo> = emptyMap(),
     val inputText: String = "",
+    val pendingAttachments: List<com.deliriousvoid.openvkmatcha.data.model.PendingAttachment> = emptyList(),
     val isLoading: Boolean = false,
     val isSending: Boolean = false,
     val isLoadingMore: Boolean = false,
     val hasMore: Boolean = true,
     val error: String? = null,
     val replyingTo: ChatMessage? = null,
+    val forwardedMessages: List<ChatMessage> = emptyList(),
+    val messagesToForward: List<ChatMessage>? = null,
+    val forwardDialogs: List<Conversation> = emptyList(),
+    val isLoadingForwardDialogs: Boolean = false,
     val editingMessage: ChatMessage? = null,
     val isPeerTyping: Boolean = false,
     val typingText: String? = null,
     val peer: com.deliriousvoid.openvkmatcha.data.model.Peer? = null,
+    val isMuted: Boolean = false,
     val jumpSourceId: Int? = null,
     val isJumped: Boolean = false,
     val stickerPacks: List<com.deliriousvoid.openvkmatcha.data.model.StickerPack> = emptyList(),
     val recentStickers: List<com.deliriousvoid.openvkmatcha.data.model.StickerItem> = emptyList(),
     val isLoadingStickers: Boolean = false,
+    val canSendMessages: Boolean = true,
 )
 
 class ChatViewModel(
     private val messagesRepository: MessagesRepository,
     private val profileRepository: ProfileRepository,
+    private val attachmentsRepository: com.deliriousvoid.openvkmatcha.data.repository.AttachmentsRepository,
     private val longPollManager: com.deliriousvoid.openvkmatcha.util.LongPollManager,
     private val peerId: Int,
 ) : ViewModel(), com.deliriousvoid.openvkmatcha.util.LongPollManager.OnLongPollEventListener {
@@ -594,11 +635,47 @@ class ChatViewModel(
 
     private var typingJob: Job? = null
     private var lastTypingActivitySentAt = 0L
+    private var positionSaveJob: Job? = null
 
     init {
         longPollManager.addListener(this)
         loadPeerInfo()
+        initFromCache()
         loadMessages(isRefresh = true)
+        checkPendingForward()
+    }
+
+    private fun initFromCache() {
+        val cachedPeer = messagesRepository.getCachedPeerInfo(peerId)
+        val cached = messagesRepository.getCachedHistory(peerId)
+        val savedPos = messagesRepository.getVisiblePosition(peerId)
+        
+        if (cachedPeer != null) {
+            _uiState.update { it.copy(peer = cachedPeer) }
+        }
+
+        if (cached != null && cached.messages.isNotEmpty()) {
+            val sorted = sortMessages(cached.messages)
+            _uiState.update { state ->
+                state.copy(
+                    messages = sorted,
+                    authors = state.authors + cached.authors,
+                    isLoading = false
+                )
+            }
+            if (savedPos != null) {
+                _scrollEvents.tryEmit(ChatScrollEvent.JumpToId(savedPos, isSmooth = false))
+            }
+        }
+    }
+
+    fun onMessageVisible(messageId: Int) {
+        if (messageId <= 0) return
+        positionSaveJob?.cancel()
+        positionSaveJob = viewModelScope.launch {
+            delay(500)
+            messagesRepository.saveVisiblePosition(peerId, messageId)
+        }
     }
 
     override fun onCleared() {
@@ -608,7 +685,16 @@ class ChatViewModel(
 
     private fun loadPeerInfo() {
         viewModelScope.launch {
-            if (peerId > 0 && peerId < 2000000000) {
+            if (peerId == 0) {
+                val peer = com.deliriousvoid.openvkmatcha.data.model.Peer(
+                    id = 0,
+                    type = com.deliriousvoid.openvkmatcha.data.model.PeerType.USER,
+                    title = com.deliriousvoid.openvkmatcha.OpenVKMatchaApp.instance.languageManager.getStringOrDefault(com.deliriousvoid.openvkmatcha.R.string.saved_messages, "Сохранённые сообщения"),
+                    photo = com.deliriousvoid.openvkmatcha.Constants.SAVED_MESSAGES_AVATAR
+                )
+                _uiState.update { it.copy(peer = peer) }
+                messagesRepository.savePeerInfo(peer)
+            } else if (peerId > 0 && peerId < 2000000000) {
                 profileRepository.loadProfile(peerId.toString()).onSuccess { userProfile ->
                     val peer = com.deliriousvoid.openvkmatcha.data.model.Peer(
                         id = peerId,
@@ -621,6 +707,7 @@ class ChatViewModel(
                         lastSeen = userProfile.lastSeen
                     )
                     _uiState.update { it.copy(peer = peer) }
+                    messagesRepository.savePeerInfo(peer)
                 }.onFailure {
                     fetchPeerFromConversations()
                 }
@@ -634,6 +721,7 @@ class ChatViewModel(
                         verified = groupProfile.verified
                     )
                     _uiState.update { it.copy(peer = peer) }
+                    messagesRepository.savePeerInfo(peer)
                 }.onFailure {
                     fetchPeerFromConversations()
                 }
@@ -657,13 +745,13 @@ class ChatViewModel(
                             title = settings?.optString("title") ?: "",
                             photo = photoUrl
                         )
-                        state.copy(
-                            peer = currentPeer.copy(
-                                title = currentPeer.title.ifBlank { settings?.optString("title") ?: "" },
-                                photo = photoUrl.ifBlank { currentPeer.photo },
-                                membersCount = if (count > 0) count else currentPeer.membersCount
-                            )
+                        val updatedPeer = currentPeer.copy(
+                            title = currentPeer.title.ifBlank { settings?.optString("title") ?: "" },
+                            photo = photoUrl.ifBlank { currentPeer.photo },
+                            membersCount = if (count > 0) count else currentPeer.membersCount
                         )
+                        messagesRepository.savePeerInfo(updatedPeer)
+                        state.copy(peer = updatedPeer)
                     }
                 }
             }
@@ -674,7 +762,18 @@ class ChatViewModel(
         messagesRepository.getConversationsById(listOf(peerId)).onSuccess { list ->
             val conv = list.firstOrNull()
             if (conv != null) {
-                _uiState.update { it.copy(peer = conv.peer) }
+                val canSend = if (conv.peer.type == com.deliriousvoid.openvkmatcha.data.model.PeerType.CHAT) {
+                    val chatState = conv.chatSettings?.state?.lowercase()
+                    chatState != "left" && chatState != "kicked"
+                } else true
+                _uiState.update { state ->
+                    state.copy(
+                        peer = conv.peer,
+                        isMuted = conv.isMuted,
+                        canSendMessages = canSend
+                    )
+                }
+                messagesRepository.savePeerInfo(conv.peer)
             }
         }
     }
@@ -705,51 +804,126 @@ class ChatViewModel(
     }
 
     fun loadMessages(isRefresh: Boolean = true) {
-        if (!isRefresh && _uiState.value.isLoadingMore) return
+        if (!isRefresh && (_uiState.value.isLoadingMore || !_uiState.value.hasMore || _uiState.value.isJumped)) return
+        if (!isRefresh) {
+            _uiState.update { it.copy(isLoadingMore = true) }
+        }
         viewModelScope.launch {
             if (isRefresh) {
                 _uiState.update { it.copy(isLoading = it.messages.isEmpty(), error = null) }
-            } else {
-                _uiState.update { it.copy(isLoadingMore = true) }
             }
 
-            val offset = if (isRefresh) 0 else _uiState.value.messages.size
-            messagesRepository.loadHistory(peerId, offset = offset, count = 40)
-                .onSuccess { parsed ->
-                    _uiState.update { state ->
-                        val newMessages = if (isRefresh) {
-                            val realMessages = parsed.messages
-                            val pendingMessages = state.messages.filter { pending ->
-                                pending.id < 0 && realMessages.none { it.text == pending.text && it.isOutgoing }
+            val isInitial = _uiState.value.messages.isEmpty()
+            val savedPos = if (isInitial) messagesRepository.getVisiblePosition(peerId) else null
+
+            val fetchResult = if (isRefresh && savedPos != null) {
+                messagesRepository.loadHistory(peerId, offset = -20, count = 40, startMessageId = savedPos)
+            } else if (isRefresh) {
+                messagesRepository.loadHistory(peerId, offset = 0, count = 40)
+            } else {
+                val oldestId = _uiState.value.messages.filter { it.id > 0 }.minOfOrNull { it.id }
+                if (oldestId != null) {
+                    messagesRepository.loadHistory(peerId, offset = 1, count = 40, startMessageId = oldestId, reverse = false)
+                } else {
+                    messagesRepository.loadHistory(peerId, offset = _uiState.value.messages.size, count = 40)
+                }
+            }
+
+            fetchResult.onSuccess { parsed ->
+                _uiState.update { state ->
+                    val rawRealMessages = parsed.messages
+                    val realMessages = rawRealMessages.map { real ->
+                        if (real.isOutgoing && (real.attachments.isEmpty() || real.replyMessage == null || real.fwdMessages.isEmpty())) {
+                            val pendingMatch = state.messages.find { pending ->
+                                pending.id < 0 && (
+                                    (pending.text.isNotBlank() && real.text == pending.text) ||
+                                    (pending.text.isBlank() && real.text.isBlank()) ||
+                                    (pending.stickerId != null && real.stickerId == pending.stickerId) ||
+                                    (pending.attachments.isNotEmpty() && real.attachments.isNotEmpty()) ||
+                                    (pending.fwdMessages.isNotEmpty() && real.fwdMessages.isNotEmpty()) ||
+                                    (kotlin.math.abs(real.date - pending.date) < 25)
+                                )
                             }
-                            sortMessages(realMessages + pendingMessages)
-                        } else {
-                            sortMessages(state.messages + parsed.messages)
+                            if (pendingMatch != null) {
+                                real.copy(
+                                    text = if (real.text.isBlank() && pendingMatch.text.isNotBlank()) pendingMatch.text else real.text,
+                                    attachments = if (real.attachments.isEmpty()) pendingMatch.attachments else real.attachments,
+                                    replyMessage = real.replyMessage ?: pendingMatch.replyMessage,
+                                    fwdMessages = if (real.fwdMessages.isEmpty()) pendingMatch.fwdMessages else real.fwdMessages,
+                                    stickerId = real.stickerId ?: pendingMatch.stickerId
+                                )
+                            } else real
+                        } else real
+                    }
+                    val pendingMessages = state.messages.filter { pending ->
+                        if (pending.id >= 0) return@filter false
+                        val isMatched = realMessages.any { real ->
+                            real.isOutgoing && (
+                                (pending.text.isNotBlank() && real.text == pending.text) ||
+                                (pending.stickerId != null && real.stickerId == pending.stickerId) ||
+                                (pending.attachments.isNotEmpty() && real.attachments.isNotEmpty()) ||
+                                (pending.fwdMessages.isNotEmpty() && real.fwdMessages.isNotEmpty()) ||
+                                (kotlin.math.abs(real.date - pending.date) < 25)
+                            )
                         }
-                        val combinedAuthors = state.authors + parsed.authors
-                        state.copy(
-                            messages = newMessages,
-                            authors = combinedAuthors,
-                            isLoading = false,
-                            isLoadingMore = false,
-                            hasMore = parsed.messages.size >= 40
-                        )
+                        !isMatched
                     }
-                    if (isRefresh) {
-                        _scrollEvents.tryEmit(ChatScrollEvent.ScrollToBottom)
-                        messagesRepository.markAsRead(peerId)
+                    val combined = if (isRefresh) {
+                        (realMessages + pendingMessages).distinctBy { it.id }
+                    } else {
+                        (state.messages + realMessages + pendingMessages).distinctBy { it.id }
+                    }
+                    val newMessages = sortMessages(combined)
+                    val combinedAuthors = state.authors + parsed.authors
+                    state.copy(
+                        messages = newMessages,
+                        authors = combinedAuthors,
+                        isLoading = false,
+                        isLoadingMore = false,
+                        hasMore = parsed.messages.size >= 40
+                    )
+                }
+                if (isInitial && savedPos == null) {
+                    _scrollEvents.tryEmit(ChatScrollEvent.ScrollToBottom)
+                }
+                if (isRefresh) {
+                    messagesRepository.markAsRead(peerId).onSuccess {
+                        AppEvents.emitRefreshNotifications()
                     }
                 }
-                .onFailure { error ->
-                    _uiState.update { it.copy(isLoading = false, isLoadingMore = false, error = error.message) }
-                }
+            }.onFailure { error ->
+                _uiState.update { it.copy(isLoading = false, isLoadingMore = false, error = error.message) }
+            }
         }
+    }
+
+    fun addAttachment(uri: android.net.Uri, type: com.deliriousvoid.openvkmatcha.data.model.AttachmentType, name: String = "", size: Long = 0) {
+        if (_uiState.value.pendingAttachments.size >= 10) return
+        _uiState.update { it.copy(pendingAttachments = it.pendingAttachments + com.deliriousvoid.openvkmatcha.data.model.PendingAttachment(uri, type, name, size)) }
+    }
+
+    fun addExistingAttachment(attachmentString: String, type: com.deliriousvoid.openvkmatcha.data.model.AttachmentType, name: String) {
+        if (_uiState.value.pendingAttachments.size >= 10) return
+        _uiState.update {
+            it.copy(pendingAttachments = it.pendingAttachments + com.deliriousvoid.openvkmatcha.data.model.PendingAttachment(
+                type = type,
+                name = name,
+                isExisting = true,
+                attachmentString = attachmentString
+            ))
+        }
+    }
+
+    fun removeAttachment(attachment: com.deliriousvoid.openvkmatcha.data.model.PendingAttachment) {
+        _uiState.update { it.copy(pendingAttachments = it.pendingAttachments - attachment) }
     }
 
     fun sendMessage() {
         val text = _uiState.value.inputText.trim()
         val replyingTo = _uiState.value.replyingTo
+        val forwardedMessages = _uiState.value.forwardedMessages
         val editing = _uiState.value.editingMessage
+        val pendingAttachments = _uiState.value.pendingAttachments
 
         if (editing != null) {
             if (text.isBlank()) return
@@ -757,6 +931,7 @@ class ChatViewModel(
                 _uiState.update { it.copy(isSending = true) }
                 messagesRepository.editMessage(peerId, editing.id, text)
                     .onSuccess {
+                        messagesRepository.updateCachedMessage(peerId, editing.id, text)
                         _uiState.update { state ->
                             state.copy(
                                 isSending = false,
@@ -775,52 +950,176 @@ class ChatViewModel(
             return
         }
 
-        if (text.isBlank()) return
-
-        val tempId = -kotlin.random.Random.nextInt(100000, 999999)
-        val pendingMsg = ChatMessage(
-            id = tempId,
-            peerId = peerId,
-            fromId = 0,
-            text = text,
-            date = System.currentTimeMillis() / 1000,
-            isOutgoing = true,
-            isRead = false,
-            replyMessage = replyingTo
-        )
-
-        _uiState.update { state ->
-            state.copy(
-                inputText = "",
-                replyingTo = null,
-                isSending = true,
-                messages = sortMessages(listOf(pendingMsg) + state.messages)
-            )
-        }
-        _scrollEvents.tryEmit(ChatScrollEvent.ScrollToBottom)
+        if (text.isBlank() && pendingAttachments.isEmpty() && forwardedMessages.isEmpty()) return
 
         viewModelScope.launch {
-            messagesRepository.sendMessage(peerId, text = text, replyTo = replyingTo?.id)
+            val tempId = -System.currentTimeMillis().toInt()
+            val currentUserId = profileRepository.loadCurrentUser().getOrNull()?.id ?: 0
+
+            val previewAttachments = pendingAttachments.mapNotNull { pending ->
+                when (pending.type) {
+                    com.deliriousvoid.openvkmatcha.data.model.AttachmentType.PHOTO -> {
+                        com.deliriousvoid.openvkmatcha.data.model.MessageAttachment.Photo(
+                            id = tempId,
+                            ownerId = currentUserId,
+                            url = pending.uri?.toString() ?: pending.attachmentString ?: "",
+                            width = 1000,
+                            height = 1000
+                        )
+                    }
+                    com.deliriousvoid.openvkmatcha.data.model.AttachmentType.AUDIO -> {
+                        val artistName = pending.name.substringBefore(" - ").takeIf { it != pending.name } ?: "Аудиозапись"
+                        val titleName = if (pending.name.contains(" - ")) pending.name.substringAfter(" - ") else pending.name
+                        com.deliriousvoid.openvkmatcha.data.model.MessageAttachment.Audio(
+                            id = tempId,
+                            ownerId = currentUserId,
+                            artist = artistName,
+                            title = titleName,
+                            duration = 0,
+                            url = pending.uri?.toString()
+                        )
+                    }
+                    com.deliriousvoid.openvkmatcha.data.model.AttachmentType.DOCUMENT -> {
+                        com.deliriousvoid.openvkmatcha.data.model.MessageAttachment.Doc(
+                            id = tempId,
+                            ownerId = currentUserId,
+                            title = pending.name,
+                            size = pending.size.toInt(),
+                            ext = pending.name.substringAfterLast('.', "doc"),
+                            url = pending.uri?.toString()
+                        )
+                    }
+                    else -> null
+                }
+            }
+
+            val pendingMsg = ChatMessage(
+                id = tempId,
+                peerId = peerId,
+                fromId = currentUserId,
+                text = text,
+                date = System.currentTimeMillis() / 1000,
+                isOutgoing = true,
+                isRead = false,
+                attachments = previewAttachments,
+                replyMessage = replyingTo,
+                fwdMessages = forwardedMessages
+            )
+
+            _uiState.update { state ->
+                state.copy(
+                    messages = sortMessages(listOf(pendingMsg) + state.messages),
+                    inputText = "",
+                    pendingAttachments = emptyList(),
+                    replyingTo = null,
+                    forwardedMessages = emptyList(),
+                    isSending = true,
+                    error = null
+                )
+            }
+            _scrollEvents.tryEmit(ChatScrollEvent.ScrollToBottom)
+
+            val attachmentStrings = mutableListOf<String>()
+            var uploadError: String? = null
+
+            for (pending in pendingAttachments) {
+                if (pending.isExisting && pending.attachmentString != null) {
+                    attachmentStrings.add(pending.attachmentString)
+                    continue
+                }
+                attachmentsRepository.uploadAttachment(pending).fold(
+                    onSuccess = { attachmentStrings.add(it) },
+                    onFailure = {
+                        uploadError = OpenVKMatchaApp.instance.languageManager.getStringOrDefault(
+                            com.deliriousvoid.openvkmatcha.R.string.error_upload_attachment,
+                            it.message ?: ""
+                        )
+                    }
+                )
+                if (uploadError != null) break
+            }
+
+            if (uploadError != null) {
+                _uiState.update { state ->
+                    state.copy(
+                        isSending = false,
+                        error = uploadError,
+                        messages = state.messages.filter { it.id != tempId }
+                    )
+                }
+                return@launch
+            }
+
+            val attachmentsParam = if (attachmentStrings.isNotEmpty()) attachmentStrings.joinToString(",") else null
+            val forwardParam = if (forwardedMessages.isNotEmpty()) forwardedMessages.map { it.id }.joinToString(",") else null
+
+            messagesRepository.sendMessage(
+                peerId = peerId,
+                text = text,
+                replyTo = replyingTo?.id,
+                forwardMessages = forwardParam,
+                attachments = attachmentsParam
+            )
                 .onSuccess {
                     _uiState.update { it.copy(isSending = false) }
                     loadMessages(isRefresh = true)
                 }
                 .onFailure { error ->
-                    _uiState.update { it.copy(isSending = false, error = error.message) }
+                    _uiState.update { state ->
+                        state.copy(
+                            isSending = false,
+                            error = error.message,
+                            messages = state.messages.filter { it.id != tempId }
+                        )
+                    }
                 }
         }
     }
 
     fun sendSticker(sticker: com.deliriousvoid.openvkmatcha.data.model.StickerItem) {
         viewModelScope.launch {
-            _uiState.update { it.copy(isSending = true) }
+            val tempId = -System.currentTimeMillis().toInt()
+            val currentUserId = profileRepository.loadCurrentUser().getOrNull()?.id ?: 0
+
+            val stickerAtt = com.deliriousvoid.openvkmatcha.data.model.MessageAttachment.Sticker(
+                id = sticker.id,
+                productId = sticker.packId,
+                url = sticker.url
+            )
+
+            val pendingMsg = ChatMessage(
+                id = tempId,
+                peerId = peerId,
+                fromId = currentUserId,
+                text = "",
+                date = System.currentTimeMillis() / 1000,
+                isOutgoing = true,
+                isRead = false,
+                attachments = listOf(stickerAtt),
+                stickerId = sticker.id
+            )
+
+            _uiState.update { state ->
+                state.copy(
+                    messages = sortMessages(listOf(pendingMsg) + state.messages),
+                    isSending = true
+                )
+            }
+            _scrollEvents.tryEmit(ChatScrollEvent.ScrollToBottom)
+
             messagesRepository.sendMessage(peerId, text = "", stickerId = sticker.id)
                 .onSuccess {
                     _uiState.update { it.copy(isSending = false) }
                     loadMessages(isRefresh = true)
                 }
                 .onFailure { error ->
-                    _uiState.update { it.copy(isSending = false, error = error.message) }
+                    _uiState.update { state ->
+                        state.copy(
+                            isSending = false,
+                            error = error.message,
+                            messages = state.messages.filter { it.id != tempId }
+                        )
+                    }
                 }
         }
     }
@@ -844,19 +1143,74 @@ class ChatViewModel(
         viewModelScope.launch {
             messagesRepository.deleteMessages(peerId, messageIds, deleteForAll = forAll)
                 .onSuccess {
+                    messageIds.forEach { id ->
+                        messagesRepository.markCachedMessageDeleted(peerId, id)
+                    }
                     _uiState.update { state ->
-                        state.copy(messages = state.messages.filter { !messageIds.contains(it.id) })
+                        state.copy(messages = state.messages.map { msg ->
+                            if (messageIds.contains(msg.id)) msg.copy(isDeleted = true) else msg
+                        })
+                    }
+                }
+                .onFailure { e ->
+                    _uiState.update { state ->
+                        state.copy(error = "Не удалось удалить сообщение: ${e.message}")
                     }
                 }
         }
     }
 
     fun startReply(message: ChatMessage) {
-        _uiState.update { it.copy(replyingTo = message, editingMessage = null) }
+        _uiState.update { it.copy(replyingTo = message, forwardedMessages = emptyList(), editingMessage = null) }
     }
 
     fun cancelReply() {
         _uiState.update { it.copy(replyingTo = null) }
+    }
+
+    fun checkPendingForward() {
+        val pending = com.deliriousvoid.openvkmatcha.util.AppEvents.consumePendingForward(peerId)
+        if (!pending.isNullOrEmpty()) {
+            _uiState.update { it.copy(forwardedMessages = pending, replyingTo = null, editingMessage = null) }
+        }
+    }
+
+    fun openForwardPicker(messages: List<ChatMessage>) {
+        if (messages.isEmpty()) return
+        _uiState.update { it.copy(messagesToForward = messages, isLoadingForwardDialogs = true) }
+        viewModelScope.launch {
+            messagesRepository.loadConversations(offset = 0, count = 100).onSuccess { conversations ->
+                _uiState.update { it.copy(forwardDialogs = conversations, isLoadingForwardDialogs = false) }
+            }.onFailure {
+                _uiState.update { it.copy(isLoadingForwardDialogs = false) }
+            }
+        }
+    }
+
+    fun closeForwardPicker() {
+        _uiState.update { it.copy(messagesToForward = null, forwardDialogs = emptyList(), isLoadingForwardDialogs = false) }
+    }
+
+    fun confirmForwardToCurrentChat() {
+        val msgs = _uiState.value.messagesToForward ?: return
+        _uiState.update {
+            it.copy(
+                forwardedMessages = msgs,
+                replyingTo = null,
+                editingMessage = null,
+                messagesToForward = null,
+                forwardDialogs = emptyList(),
+                isLoadingForwardDialogs = false
+            )
+        }
+    }
+
+    fun startForward(messages: List<ChatMessage>) {
+        _uiState.update { it.copy(forwardedMessages = messages, replyingTo = null, editingMessage = null) }
+    }
+
+    fun cancelForward() {
+        _uiState.update { it.copy(forwardedMessages = emptyList()) }
     }
 
     fun startEdit(message: ChatMessage) {
@@ -867,26 +1221,53 @@ class ChatViewModel(
         _uiState.update { it.copy(editingMessage = null, inputText = "") }
     }
 
+    fun pinMessage(messageId: Int) {
+        viewModelScope.launch {
+            messagesRepository.pinMessage(peerId, messageId)
+                .onSuccess {
+                    loadMessages(isRefresh = true)
+                }
+                .onFailure { error ->
+                    _uiState.update { it.copy(error = error.message) }
+                }
+        }
+    }
+
+    fun unpinMessage() {
+        viewModelScope.launch {
+            messagesRepository.unpinMessage(peerId)
+                .onSuccess {
+                    loadMessages(isRefresh = true)
+                }
+                .onFailure { error ->
+                    _uiState.update { it.copy(error = error.message) }
+                }
+        }
+    }
+
     fun jumpToMessage(targetId: Int) {
+        if (targetId <= 0) return
         val index = _uiState.value.messages.indexOfFirst { it.id == targetId }
         if (index != -1) {
             _scrollEvents.tryEmit(ChatScrollEvent.JumpToId(targetId, isSmooth = true))
         } else {
             viewModelScope.launch {
                 _uiState.update { it.copy(isLoading = true, jumpSourceId = _uiState.value.messages.firstOrNull()?.id, isJumped = true) }
-                messagesRepository.loadHistory(peerId, offset = 0, count = 40, startMessageId = targetId)
+                val requestedOffset = -(40 / 2) // -20 offset centered around targetId
+                messagesRepository.loadHistory(peerId, offset = requestedOffset, count = 40, startMessageId = targetId)
                     .onSuccess { parsed ->
                         _uiState.update { state ->
+                            val merged = sortMessages(parsed.messages + state.messages)
                             state.copy(
-                                messages = sortMessages(parsed.messages),
+                                messages = merged,
                                 authors = state.authors + parsed.authors,
                                 isLoading = false
                             )
                         }
                         _scrollEvents.tryEmit(ChatScrollEvent.JumpToId(targetId, isSmooth = false))
                     }
-                    .onFailure {
-                        _uiState.update { it.copy(isLoading = false) }
+                    .onFailure { error ->
+                        _uiState.update { it.copy(isLoading = false, error = error.message) }
                     }
             }
         }
@@ -906,26 +1287,41 @@ class ChatViewModel(
     // LongPoll Realtime Handlers
     override fun onNewMessage(messageId: Int, peerId: Int, timestamp: Long, text: String, fromId: Int, isOut: Boolean) {
         if (isPeerMatch(peerId)) {
-            val newMsg = ChatMessage(
-                id = messageId,
-                peerId = this.peerId,
-                fromId = fromId,
-                text = text,
-                date = timestamp,
-                isOutgoing = isOut,
-                isRead = false
-            )
             _uiState.update { state ->
-                val filtered = if (isOut) {
-                    val pendingMatch = state.messages.find { it.id < 0 && (it.text == text || text.isBlank()) }
-                    if (pendingMatch != null) state.messages.filter { it.id != pendingMatch.id } else state.messages
-                } else {
-                    state.messages
+                val pendingMatch = if (isOut) {
+                    state.messages.find { pending ->
+                        pending.id < 0 && (
+                            (pending.text.isNotBlank() && pending.text == text) ||
+                            (pending.text.isBlank() && text.isBlank()) ||
+                            (kotlin.math.abs(timestamp - pending.date) < 25)
+                        )
+                    }
+                } else null
+
+                val realText = if (text.isBlank() || text == "[Вложение]") (pendingMatch?.text ?: text) else text
+
+                val newMsg = ChatMessage(
+                    id = messageId,
+                    peerId = this.peerId,
+                    fromId = fromId,
+                    text = realText,
+                    date = timestamp,
+                    isOutgoing = isOut,
+                    isRead = false,
+                    attachments = pendingMatch?.attachments ?: emptyList(),
+                    replyMessage = pendingMatch?.replyMessage,
+                    fwdMessages = pendingMatch?.fwdMessages ?: emptyList(),
+                    stickerId = pendingMatch?.stickerId
+                )
+
+                val filtered = state.messages.filter { msg ->
+                    msg.id != messageId && (pendingMatch == null || msg.id != pendingMatch.id)
                 }
                 state.copy(messages = sortMessages(listOf(newMsg) + filtered))
             }
-            _scrollEvents.tryEmit(ChatScrollEvent.ScrollToBottom)
-            loadMessages(isRefresh = true)
+            if (isOut) {
+                _scrollEvents.tryEmit(ChatScrollEvent.ScrollToBottom)
+            }
         }
     }
 
@@ -936,7 +1332,6 @@ class ChatViewModel(
                     if (it.isOutgoing && (localId <= 0 || it.id <= localId)) it.copy(isRead = true) else it
                 })
             }
-            loadMessages(isRefresh = true)
         }
     }
 
@@ -947,7 +1342,6 @@ class ChatViewModel(
                     if (!it.isOutgoing && (localId <= 0 || it.id <= localId)) it.copy(isRead = true) else it
                 })
             }
-            loadMessages(isRefresh = true)
         }
     }
 
@@ -958,12 +1352,12 @@ class ChatViewModel(
                     if (localId <= 0 || it.id <= localId) it.copy(isRead = true) else it
                 })
             }
-            loadMessages(isRefresh = true)
         }
     }
 
     override fun onMessageEdit(messageId: Int, peerId: Int, newText: String) {
         if (isPeerMatch(peerId)) {
+            messagesRepository.updateCachedMessage(this.peerId, messageId, newText)
             _uiState.update { state ->
                 state.copy(messages = state.messages.map {
                     if (it.id == messageId) it.copy(text = newText, isEdited = true) else it
@@ -974,8 +1368,11 @@ class ChatViewModel(
 
     override fun onMessageDelete(messageId: Int, peerId: Int) {
         if (isPeerMatch(peerId)) {
+            messagesRepository.markCachedMessageDeleted(this.peerId, messageId)
             _uiState.update { state ->
-                state.copy(messages = state.messages.filter { it.id != messageId })
+                state.copy(messages = state.messages.map {
+                    if (it.id == messageId) it.copy(isDeleted = true) else it
+                })
             }
         }
     }
@@ -1057,7 +1454,7 @@ class ChatViewModel(
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T {
                 val app = OpenVKMatchaApp.instance
-                return ChatViewModel(app.messagesRepository, app.profileRepository, app.longPollManager, peerId) as T
+                return ChatViewModel(app.messagesRepository, app.profileRepository, app.attachmentsRepository, app.longPollManager, peerId) as T
             }
         }
     }
@@ -2267,6 +2664,7 @@ class PlaylistDetailsViewModel(
 data class NotificationsUiState(
     val notifications: List<Notification> = emptyList(),
     val unreadCount: Int = 0,
+    val unreadMessagesCount: Int = 0,
     val isLoading: Boolean = false,
     val isRefreshing: Boolean = false,
     val isArchive: Boolean = false,
@@ -2379,9 +2777,14 @@ class NotificationsViewModel(
     fun refreshUnreadCount() {
         if (settingsViewModel.offlineMode.value) return
         viewModelScope.launch {
-            repository.getUnreadCount().onSuccess { count ->
-                _uiState.update { it.copy(unreadCount = count) }
-                android.util.Log.d("NotificationsViewModel", "Unread count updated: $count")
+            repository.getUnreadCount().onSuccess { counters ->
+                _uiState.update { 
+                    it.copy(
+                        unreadCount = counters.notifications,
+                        unreadMessagesCount = counters.messages
+                    ) 
+                }
+                android.util.Log.d("NotificationsViewModel", "Unread count updated: notifications=${counters.notifications}, messages=${counters.messages}")
             }.onFailure {
                 android.util.Log.e("NotificationsViewModel", "Failed to get unread count: ${it.message}")
             }
@@ -2681,6 +3084,12 @@ data class RepostUiState(
     val isLoadingGroups: Boolean = false,
     val isLoadingConversations: Boolean = false,
     val isReposting: Boolean = false,
+    val sendingPeerId: Int? = null,
+    val sentPeerIds: Set<Int> = emptySet(),
+    val failedPeerIds: Set<Int> = emptySet(),
+    val sendingGroupId: Int? = null,
+    val sentGroupIds: Set<Int> = emptySet(),
+    val failedGroupIds: Set<Int> = emptySet(),
     val pendingAttachments: List<PendingAttachment> = emptyList(),
     val error: String? = null,
 )
@@ -2694,7 +3103,12 @@ class RepostViewModel(
     private val _uiState = MutableStateFlow(RepostUiState())
     val uiState = _uiState.asStateFlow()
 
+    fun resetState() {
+        _uiState.update { RepostUiState() }
+    }
+
     fun loadAdminGroups() {
+        if (_uiState.value.adminGroups.isNotEmpty()) return
         viewModelScope.launch {
             _uiState.update { it.copy(isLoadingGroups = true) }
             profileRepository.getAdminGroups().onSuccess { groups ->
@@ -2706,6 +3120,7 @@ class RepostViewModel(
     }
 
     fun loadConversations() {
+        if (_uiState.value.conversations.isNotEmpty()) return
         viewModelScope.launch {
             _uiState.update { it.copy(isLoadingConversations = true) }
             OpenVKMatchaApp.instance.messagesRepository.loadConversations(offset = 0, count = 50)
@@ -2718,19 +3133,85 @@ class RepostViewModel(
         }
     }
 
-    fun sendToChat(post: Post, peerId: Int, message: String, onSuccess: () -> Unit) {
+    fun sendToChat(
+        post: Post,
+        peerId: Int,
+        message: String,
+        onSuccess: (() -> Unit)? = null,
+        onError: (() -> Unit)? = null
+    ) {
+        val state = _uiState.value
         viewModelScope.launch {
-            _uiState.update { it.copy(isReposting = true, error = null) }
+            _uiState.update {
+                it.copy(
+                    sendingPeerId = peerId,
+                    failedPeerIds = it.failedPeerIds - peerId,
+                    error = null
+                )
+            }
+
+            val attachmentStrings = mutableListOf<String>()
+            var uploadError: String? = null
+
+            for (pending in state.pendingAttachments) {
+                if (pending.isExisting) {
+                    attachmentStrings.add(pending.attachmentString!!)
+                    continue
+                }
+                attachmentsRepository.uploadAttachment(pending).fold(
+                    onSuccess = { attachmentStrings.add(it) },
+                    onFailure = {
+                        uploadError = OpenVKMatchaApp.instance.languageManager.getStringOrDefault(
+                            com.deliriousvoid.openvkmatcha.R.string.error_upload_attachment,
+                            it.message ?: ""
+                        )
+                        return@fold
+                    }
+                )
+                if (uploadError != null) break
+            }
+
+            if (uploadError != null) {
+                _uiState.update {
+                    it.copy(
+                        sendingPeerId = null,
+                        failedPeerIds = it.failedPeerIds + peerId,
+                        error = uploadError
+                    )
+                }
+                onError?.invoke()
+                return@launch
+            }
+
             val wallAttachment = "wall${post.ownerId}_${post.id}"
+            val allAttachments = if (attachmentStrings.isNotEmpty()) {
+                "$wallAttachment,${attachmentStrings.joinToString(",")}"
+            } else {
+                wallAttachment
+            }
+
             OpenVKMatchaApp.instance.messagesRepository.sendMessage(
                 peerId = peerId,
                 text = message,
-                attachments = wallAttachment
+                attachments = allAttachments
             ).onSuccess {
-                _uiState.update { it.copy(isReposting = false) }
-                onSuccess()
+                _uiState.update {
+                    it.copy(
+                        sendingPeerId = null,
+                        sentPeerIds = it.sentPeerIds + peerId,
+                        failedPeerIds = it.failedPeerIds - peerId
+                    )
+                }
+                onSuccess?.invoke()
             }.onFailure { error ->
-                _uiState.update { it.copy(isReposting = false, error = error.message) }
+                _uiState.update {
+                    it.copy(
+                        sendingPeerId = null,
+                        failedPeerIds = it.failedPeerIds + peerId,
+                        error = error.message
+                    )
+                }
+                onError?.invoke()
             }
         }
     }
@@ -2756,14 +3237,32 @@ class RepostViewModel(
         _uiState.update { it.copy(pendingAttachments = it.pendingAttachments - attachment) }
     }
 
-    fun repost(post: Post, message: String, groupId: Int? = null, onSuccess: () -> Unit) {
+    fun repost(
+        post: Post,
+        message: String,
+        groupId: Int? = null,
+        asGroup: Boolean = false,
+        signed: Boolean = false,
+        onSuccess: (() -> Unit)? = null,
+        onError: (() -> Unit)? = null
+    ) {
         val state = _uiState.value
         viewModelScope.launch {
-            _uiState.update { it.copy(isReposting = true, error = null) }
-            
+            if (groupId != null) {
+                _uiState.update {
+                    it.copy(
+                        sendingGroupId = groupId,
+                        failedGroupIds = it.failedGroupIds - groupId,
+                        error = null
+                    )
+                }
+            } else {
+                _uiState.update { it.copy(isReposting = true, error = null) }
+            }
+
             val attachmentStrings = mutableListOf<String>()
             var uploadError: String? = null
-            
+
             for (pending in state.pendingAttachments) {
                 if (pending.isExisting) {
                     attachmentStrings.add(pending.attachmentString!!)
@@ -2771,8 +3270,11 @@ class RepostViewModel(
                 }
                 attachmentsRepository.uploadAttachment(pending).fold(
                     onSuccess = { attachmentStrings.add(it) },
-                    onFailure = { 
-                        uploadError = OpenVKMatchaApp.instance.languageManager.getStringOrDefault(com.deliriousvoid.openvkmatcha.R.string.error_upload_attachment, it.message ?: "")
+                    onFailure = {
+                        uploadError = OpenVKMatchaApp.instance.languageManager.getStringOrDefault(
+                            com.deliriousvoid.openvkmatcha.R.string.error_upload_attachment,
+                            it.message ?: ""
+                        )
                         return@fold
                     }
                 )
@@ -2780,17 +3282,43 @@ class RepostViewModel(
             }
 
             if (uploadError != null) {
-                _uiState.update { it.copy(isReposting = false, error = uploadError) }
+                _uiState.update {
+                    it.copy(
+                        isReposting = false,
+                        sendingGroupId = null,
+                        failedGroupIds = if (groupId != null) it.failedGroupIds + groupId else it.failedGroupIds,
+                        error = uploadError
+                    )
+                }
+                onError?.invoke()
                 return@launch
             }
 
             val attachmentsParam = if (attachmentStrings.isNotEmpty()) attachmentStrings.joinToString(",") else null
 
-            feedRepository.repost(post.ownerId, post.id, message, groupId, attachmentsParam).onSuccess {
-                _uiState.update { it.copy(isReposting = false, pendingAttachments = emptyList()) }
-                onSuccess()
+            feedRepository.repost(post.ownerId, post.id, message, groupId, attachmentsParam, asGroup, signed).onSuccess {
+                if (groupId != null) {
+                    _uiState.update {
+                        it.copy(
+                            sendingGroupId = null,
+                            sentGroupIds = it.sentGroupIds + groupId,
+                            failedGroupIds = it.failedGroupIds - groupId
+                        )
+                    }
+                } else {
+                    _uiState.update { it.copy(isReposting = false, pendingAttachments = emptyList()) }
+                }
+                onSuccess?.invoke()
             }.onFailure { error ->
-                _uiState.update { it.copy(isReposting = false, error = error.message) }
+                _uiState.update {
+                    it.copy(
+                        isReposting = false,
+                        sendingGroupId = null,
+                        failedGroupIds = if (groupId != null) it.failedGroupIds + groupId else it.failedGroupIds,
+                        error = error.message
+                    )
+                }
+                onError?.invoke()
             }
         }
     }

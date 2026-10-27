@@ -7,6 +7,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.PressInteraction
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ripple
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
@@ -27,7 +28,8 @@ fun PostImageGrid(
     imageUrls: List<String>,
     onImageClick: (Int) -> Unit,
     onDoubleTap: ((Offset) -> Unit)? = null,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    isDialog: Boolean = false
 ) {
     if (imageUrls.isEmpty()) return
 
@@ -41,13 +43,27 @@ fun PostImageGrid(
     ) {
         when (count) {
             1 -> {
-                GridImage(
-                    url = imageUrls[0], 
-                    onClick = { onImageClick(0) }, 
-                    onDoubleTap = onDoubleTap,
-                    modifier = Modifier.fillMaxWidth(),
-                    contentScale = ContentScale.FillWidth
-                )
+                if (isDialog) {
+                    GridImage(
+                        url = imageUrls[0], 
+                        onClick = { onImageClick(0) }, 
+                        onDoubleTap = onDoubleTap,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 140.dp, max = 240.dp),
+                        contentScale = ContentScale.Crop
+                    )
+                } else {
+                    GridImage(
+                        url = imageUrls[0], 
+                        onClick = { onImageClick(0) }, 
+                        onDoubleTap = onDoubleTap,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .wrapContentHeight(),
+                        contentScale = ContentScale.FillWidth
+                    )
+                }
             }
             2 -> {
                 Row(modifier = Modifier.fillMaxWidth().aspectRatio(2f), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -114,6 +130,7 @@ private fun GridImage(
 
     Box(
         modifier = modifier
+            .background(MaterialTheme.colorScheme.surfaceVariant)
             .indication(interactionSource, ripple())
             .pointerInput(onDoubleTap == null) {
                 detectTapGestures(
@@ -134,7 +151,11 @@ private fun GridImage(
         AsyncImage(
             model = url,
             contentDescription = null,
-            modifier = Modifier.fillMaxSize(),
+            modifier = if (contentScale == ContentScale.FillWidth) {
+                Modifier.fillMaxWidth().wrapContentHeight()
+            } else {
+                Modifier.fillMaxSize()
+            },
             contentScale = contentScale
         )
         if (overlayText != null) {

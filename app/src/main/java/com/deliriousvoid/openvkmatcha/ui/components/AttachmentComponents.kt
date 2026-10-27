@@ -29,19 +29,21 @@ fun CommentAttachmentsList(
     getTrackState: (AudioTrack) -> AudioTrack = { it },
     onDocumentDownload: (Document) -> Unit = {},
     onPollVote: (List<Int>) -> Unit = {},
-    onImageClick: (Int) -> Unit = {}
+    onImageClick: (Int) -> Unit = {},
+    isDialog: Boolean = false
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
         if (imageUrls.isNotEmpty()) {
             Spacer(modifier = Modifier.height(8.dp))
             PostImageGrid(
                 imageUrls = imageUrls,
-                onImageClick = onImageClick
+                onImageClick = onImageClick,
+                isDialog = isDialog
             )
         }
 
-        val gifDocs = documents.filter { it.ext.lowercase() == "gif" || it.type == 3 }
-        val otherDocs = documents.filterNot { it.ext.lowercase() == "gif" || it.type == 3 }
+        val gifDocs = documents.filter { it.ext.lowercase() == "gif" || it.type == 3 || !it.previewGifUrl.isNullOrBlank() || (it.url != null && it.url.lowercase().contains("gif")) }
+        val otherDocs = documents.filterNot { it in gifDocs }
 
         if (gifDocs.isNotEmpty()) {
             gifDocs.forEach { gif ->

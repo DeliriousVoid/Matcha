@@ -14,6 +14,7 @@ import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ripple
 import androidx.compose.material3.Text
@@ -37,7 +38,8 @@ import com.deliriousvoid.openvkmatcha.ui.util.formatFileSize
 fun DocumentItem(
     document: Document,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onDownload: (() -> Unit)? = null
 ) {
     Row(
         modifier = modifier
@@ -57,8 +59,14 @@ fun DocumentItem(
                 .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)),
             contentAlignment = Alignment.Center
         ) {
-            val isGif = document.ext.lowercase() == "gif" || document.type == 3
-            val gifModel = document.previewGifUrl ?: if (isGif) document.url else null
+            val isGif = document.ext.lowercase() == "gif" || document.type == 3 || (document.url != null && document.url.lowercase().contains("gif"))
+            val gifModel = if (isGif) {
+                if (document.ext.lowercase() == "gif" || (document.url != null && document.url.lowercase().contains("gif"))) {
+                    document.url ?: document.previewGifUrl
+                } else {
+                    document.previewGifUrl ?: document.url
+                }
+            } else null
             
             if (gifModel != null) {
                 AsyncImage(
@@ -67,19 +75,6 @@ fun DocumentItem(
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Crop
                 )
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(Color.Black.copy(alpha = 0.2f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "GIF",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
             } else if (document.previewUrl != null && isImageExt(document.ext)) {
                 AsyncImage(
                     model = document.previewUrl,
@@ -114,12 +109,23 @@ fun DocumentItem(
             )
         }
 
-        Icon(
-            imageVector = Icons.Default.FileDownload,
-            contentDescription = "Download",
-            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-            modifier = Modifier.size(24.dp)
-        )
+        IconButton(
+            onClick = {
+                if (onDownload != null) {
+                    onDownload()
+                } else {
+                    onClick()
+                }
+            },
+            modifier = Modifier.size(36.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.FileDownload,
+                contentDescription = "Download",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                modifier = Modifier.size(24.dp)
+            )
+        }
     }
 }
 
@@ -158,7 +164,11 @@ fun GifPostItem(
                 )
             }
     ) {
-        val gifModel = document.previewGifUrl ?: document.url
+        val gifModel = if (document.ext.lowercase() == "gif" || (document.url != null && document.url.lowercase().contains("gif"))) {
+            document.url ?: document.previewGifUrl
+        } else {
+            document.previewGifUrl ?: document.url
+        }
         AsyncImage(
             model = gifModel,
             contentDescription = null,

@@ -111,6 +111,8 @@ class LongPollManager(
         server = null
         key = null
         ts = 0
+        pts = null
+        processedEvents.clear()
     }
 
     private suspend fun fetchServer() {
@@ -334,9 +336,8 @@ class LongPollManager(
         }
 
         val isOut = (flags and 2) != 0
-        val finalText = if (text.isBlank() && attachments != null) "[Вложение]" else text
         
-        notify { it.onNewMessage(msgId, peerId, timestamp, finalText, fromId, isOut) }
+        notify { it.onNewMessage(msgId, peerId, timestamp, text, fromId, isOut) }
         scope.launch { AppEvents.emitRefreshNotifications() }
     }
 

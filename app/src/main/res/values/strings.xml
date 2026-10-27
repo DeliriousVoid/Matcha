@@ -85,6 +85,9 @@
     <string name="desc_pinned">Закреплено</string>
     <string name="desc_menu">Меню</string>
     <string name="action_copy_text">Копировать текст</string>
+    <string name="action_copy">Скопировать</string>
+    <string name="action_forward">Переслать</string>
+    <string name="action_reply">Ответить</string>
     <string name="action_unpin">Открепить</string>
     <string name="action_pin">Закрепить</string>
     <string name="action_edit">Изменить</string>
@@ -194,6 +197,7 @@
     <string name="profile_counter_gifts">подарки</string>
     <string name="profile_post_placeholder">Что у вас нового?</string>
     <string name="action_message">Сообщение</string>
+    <string name="saved_messages">Сохранённые сообщения</string>
     <string name="profile_wall_title">Записи на стене</string>
     <string name="profile_info_bdate">День рождения: %1$s</string>
     <string name="profile_info_city">Город: %1$s</string>
@@ -690,4 +694,6 @@
     <string name="settings_matcha_no_updates">У вас установлена последняя версия</string>
     <string name="settings_matcha_error">Ошибка при проверке обновлений</string>
     <string name="settings_matcha_new_version">Доступно обновление: %1$s -> %2$s</string>
+    <string name="update_dialog_title">Доступно обновление</string>
+    <string name="update_dialog_whats_new">Что нового:</string>
 </resources>

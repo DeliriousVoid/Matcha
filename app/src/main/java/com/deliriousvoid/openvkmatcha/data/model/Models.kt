@@ -295,7 +295,13 @@ data class Conversation(
     val isImportant: Boolean = false,
     val isAnswered: Boolean = false,
     val isMuted: Boolean = false,
-)
+    val isLastMessageOutgoing: Boolean = false,
+    val lastMessageMediaUrl: String? = null,
+    val lastMessageMediaType: String? = null,
+    val lastMessagePrefix: String? = null,
+) {
+    val isLastMessageRead: Boolean get() = outRead >= lastMessageId
+}
 
 enum class PeerType {
     USER, GROUP, CHAT
@@ -322,6 +328,12 @@ data class ChatSettings(
     val state: String? = null, // "in", "kicked", "left"
 )
 
+data class MessageAction(
+    val type: String,
+    val memberId: Int? = null,
+    val text: String? = null
+)
+
 data class ChatMessage(
     val id: Int,
     val peerId: Int,
@@ -338,6 +350,7 @@ data class ChatMessage(
     val replyMessage: ChatMessage? = null,
     val fwdMessages: List<ChatMessage> = emptyList(),
     val stickerId: Int? = null,
+    val action: MessageAction? = null,
 )
 
 sealed interface MessageAttachment {

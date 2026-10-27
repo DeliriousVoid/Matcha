@@ -12,11 +12,12 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
+import androidx.compose.material.icons.outlined.Campaign
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
@@ -243,12 +244,13 @@ fun ImageViewer(
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Icon(
-                                        imageVector = Icons.Filled.Campaign,
+                                        imageVector = Icons.Outlined.Campaign,
                                         contentDescription = null,
                                         tint = Color.White,
                                         modifier = Modifier
                                             .size(24.dp)
-                                            .rotate(-15f)
+                                            .scale(1.2f)
+                                            .offset(y = (-1).dp)
                                     )
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Text(

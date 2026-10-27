@@ -32,6 +32,8 @@ import com.deliriousvoid.openvkmatcha.ui.components.ThemedPopupBackground
 import com.deliriousvoid.openvkmatcha.ui.util.matchaStringResource
 import com.deliriousvoid.openvkmatcha.ui.viewmodel.SendGiftViewModel
 
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.DisposableEffect
 import com.deliriousvoid.openvkmatcha.util.AppEvents
 import com.deliriousvoid.openvkmatcha.util.StringUtils
@@ -65,58 +67,65 @@ fun SendGiftScreen(
 
     Scaffold(
     ) { padding ->
-        Column(
+        BoxWithConstraints(
             modifier = Modifier
                 .padding(padding)
                 .fillMaxSize()
-                .padding(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+                .imePadding()
         ) {
-            val selectedFriend = state.friends.find { it.id == state.selectedUserId }
-            
-            // Recipient Section
-            Surface(
-                onClick = { showFriendPicker = true },
-                shape = RoundedCornerShape(12.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Row(
-                    modifier = Modifier.padding(12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    if (selectedFriend != null) {
-                        AsyncImage(
-                            model = selectedFriend.photo200,
-                            contentDescription = null,
-                            modifier = Modifier.size(40.dp).clip(CircleShape),
-                            contentScale = ContentScale.Crop
-                        )
-                    } else {
-                        Box(
-                            modifier = Modifier.size(40.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text("?", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
-                        }
-                    }
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(matchaStringResource(R.string.gift_recipient), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
-                        Text(selectedFriend?.fullName ?: matchaStringResource(R.string.gift_choose_hint), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
-                    }
-                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
-
-            // Large Gift Preview (Center)
-            Box(
+            Column(
                 modifier = Modifier
-                    .weight(1f)
                     .fillMaxWidth()
-                    .padding(vertical = 16.dp),
-                contentAlignment = Alignment.Center
+                    .heightIn(min = maxHeight)
+                    .verticalScroll(rememberScrollState())
+                    .padding(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.SpaceBetween
             ) {
+                val selectedFriend = state.friends.find { it.id == state.selectedUserId }
+                
+                // Recipient Section
+                Surface(
+                    onClick = { showFriendPicker = true },
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (selectedFriend != null) {
+                            AsyncImage(
+                                model = selectedFriend.photo200,
+                                contentDescription = null,
+                                modifier = Modifier.size(40.dp).clip(CircleShape),
+                                contentScale = ContentScale.Crop
+                            )
+                        } else {
+                            Box(
+                                modifier = Modifier.size(40.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text("?", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(matchaStringResource(R.string.gift_recipient), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                            Text(selectedFriend?.fullName ?: matchaStringResource(R.string.gift_choose_hint), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                        }
+                        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+
+                // Large Gift Preview (Center)
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 16.dp),
+                    contentAlignment = Alignment.Center
+                ) {
                 if (state.selectedGift != null) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         AsyncImage(
@@ -230,6 +239,7 @@ fun SendGiftScreen(
             }
         }
     }
+}
 
     if (showFriendPicker) {
         ModalBottomSheet(

@@ -80,6 +80,38 @@ object AppEvents {
     private val _shouldEnterPip = MutableStateFlow(false)
     val shouldEnterPip = _shouldEnterPip.asStateFlow()
 
+    private val _shouldOpenFullPlayer = MutableStateFlow(false)
+    val shouldOpenFullPlayer = _shouldOpenFullPlayer.asStateFlow()
+
+    fun triggerOpenFullPlayer() {
+        _shouldOpenFullPlayer.value = true
+    }
+
+    fun consumeOpenFullPlayerTrigger() {
+        _shouldOpenFullPlayer.value = false
+    }
+
+    private val _conversationMuteEvents = MutableSharedFlow<Pair<Int, Boolean>>(extraBufferCapacity = 10)
+    val conversationMuteEvents = _conversationMuteEvents.asSharedFlow()
+
+    fun notifyConversationMuted(peerId: Int, isMuted: Boolean) {
+        _conversationMuteEvents.tryEmit(peerId to isMuted)
+    }
+
+    private val pendingForwardMessages = mutableMapOf<Int, List<com.deliriousvoid.openvkmatcha.data.model.ChatMessage>>()
+
+    fun setPendingForward(peerId: Int, messages: List<com.deliriousvoid.openvkmatcha.data.model.ChatMessage>) {
+        synchronized(pendingForwardMessages) {
+            pendingForwardMessages[peerId] = messages
+        }
+    }
+
+    fun consumePendingForward(peerId: Int): List<com.deliriousvoid.openvkmatcha.data.model.ChatMessage>? {
+        return synchronized(pendingForwardMessages) {
+            pendingForwardMessages.remove(peerId)
+        }
+    }
+
     private val _customTitle = MutableStateFlow<String?>(null)
     val customTitle = _customTitle.asStateFlow()
 

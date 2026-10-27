@@ -375,8 +375,8 @@ fun CommentsScreen(
 
     if (viewerInitialIndex != -1 && activeCommentForViewer != null) {
         val comment = activeCommentForViewer!!
-        val gifDocs = comment.documents.filter { it.ext.lowercase() == "gif" || it.type == 3 }
-        val allImageUrls = comment.imageUrls + gifDocs.mapNotNull { it.url }
+        val gifDocs = comment.documents.filter { it.ext.lowercase() == "gif" || it.type == 3 || !it.previewGifUrl.isNullOrBlank() || (it.url != null && it.url.lowercase().contains("gif")) }
+        val allImageUrls = comment.imageUrls + gifDocs.mapNotNull { if (it.ext.lowercase() == "gif" || (it.url != null && it.url.lowercase().contains("gif"))) it.url ?: it.previewGifUrl else it.previewGifUrl ?: it.url }
 
         ImageViewer(
             imageUrls = allImageUrls,
@@ -661,8 +661,7 @@ fun CommentInput(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .navigationBarsPadding()
-                .imePadding()
+                .windowInsetsPadding(WindowInsets.navigationBars.union(WindowInsets.ime))
         ) {
             if (isAdmin) {
                 Row(
@@ -777,7 +776,7 @@ fun CommentInput(
                     }
                 }
 
-                TextField(
+                OutlinedTextField(
                     value = textFieldValue,
                     onValueChange = {
                         textFieldValue = it
@@ -787,13 +786,15 @@ fun CommentInput(
                     },
                     modifier = Modifier.weight(1f),
                     placeholder = { Text(matchaStringResource(R.string.comment_placeholder)) },
+                    maxLines = 5,
+                    shape = RoundedCornerShape(24.dp),
                     keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
-                    colors = TextFieldDefaults.colors(
-                        focusedContainerColor = Color.Transparent,
-                        unfocusedContainerColor = Color.Transparent,
-                        disabledContainerColor = Color.Transparent,
-                    ),
-                    maxLines = 5
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = Color.Transparent,
+                        unfocusedBorderColor = Color.Transparent,
+                        focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                    )
                 )
                 
                 if (isSending) {

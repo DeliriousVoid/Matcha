@@ -325,8 +325,8 @@ object JsonParsers {
         return (0 until items.length()).mapNotNull { index ->
             try {
                 val item = items.getJSONObject(index)
-                val conversation = item.getJSONObject("conversation")
-                val lastMessageObj = item.optJSONObject("last_message")
+                val conversation = item.optJSONObject("conversation") ?: item
+                val lastMessageObj = item.optJSONObject("last_message") ?: conversation.optJSONObject("last_message")
                 val peerObj = conversation.getJSONObject("peer")
                 val peerId = peerObj.optInt("id")
                 
@@ -352,12 +352,15 @@ object JsonParsers {
                     )
                 }
 
-                val lastMessagePreview = parseConversationLastMessagePreview(
+                val (lastMessagePrefix, lastMessagePreview) = parseConversationLastMessagePreview(
                     lastMessageObj,
                     isChat = peer.type == PeerType.CHAT,
                     profiles = profiles,
                     groups = groups
                 )
+                val (lastMessageMediaUrl, lastMessageMediaType) = parseConversationLastMessageMedia(lastMessageObj) ?: Pair(null, null)
+
+                val isLastMsgOut = lastMessageObj?.optInt("out", 0) == 1 || lastMessageObj?.optBool("out", false) == true
 
                 Conversation(
                     peer = peer,
@@ -370,7 +373,11 @@ object JsonParsers {
                     chatSettings = chatSettings,
                     isImportant = conversation.optBool("important", false),
                     isAnswered = conversation.optBool("answered", false),
-                    isMuted = conversation.optJSONObject("push_settings")?.has("disabled_until") == true
+                    isMuted = parseIsMuted(item, conversation),
+                    isLastMessageOutgoing = isLastMsgOut,
+                    lastMessageMediaUrl = lastMessageMediaUrl,
+                    lastMessageMediaType = lastMessageMediaType,
+                    lastMessagePrefix = lastMessagePrefix
                 )
             } catch (e: Exception) {
                 null
@@ -378,13 +385,156 @@ object JsonParsers {
         }
     }
 
+    private fun parseConversationLastMessageMedia(msgObj: JSONObject?): Pair<String, String>? {
+        if (msgObj == null) return null
+
+        val directSticker = msgObj.optJSONObject("sticker")
+        if (directSticker != null) {
+            val url = largestPhotoUrl(directSticker.optJSONArray("images") ?: directSticker.optJSONArray("images_with_background"))
+                ?: directSticker.optUrl("photo_256")
+                ?: directSticker.optUrl("photo_128")
+                ?: directSticker.optUrl("photo_512")
+                ?: directSticker.optUrl("photo_64")
+                ?: directSticker.optUrl("url")
+            if (!url.isNullOrBlank()) {
+                return Pair(url, "sticker")
+            }
+        }
+
+        val attachments = msgObj.optJSONArray("attachments")
+        if (attachments != null && attachments.length() > 0) {
+            for (i in 0 until attachments.length()) {
+                val att = attachments.optJSONObject(i) ?: continue
+                val type = att.optString("type").lowercase()
+
+                when (type) {
+                    "sticker" -> {
+                        val sticker = att.optJSONObject("sticker") ?: att
+                        val url = largestPhotoUrl(sticker.optJSONArray("images") ?: sticker.optJSONArray("images_with_background"))
+                            ?: sticker.optUrl("photo_256")
+                            ?: sticker.optUrl("photo_128")
+                            ?: sticker.optUrl("photo_512")
+                            ?: sticker.optUrl("photo_64")
+                            ?: sticker.optUrl("url")
+                        if (!url.isNullOrBlank()) {
+                            return Pair(url, "sticker")
+                        }
+                    }
+                    "photo" -> {
+                        val photo = att.optJSONObject("photo") ?: att
+                        val url = largestPhotoUrl(photo.optJSONArray("sizes"))
+                            ?: photo.optUrl("photo_604")
+                            ?: photo.optUrl("photo_130")
+                            ?: photo.optUrl("photo_75")
+                        if (!url.isNullOrBlank()) {
+                            return Pair(url, "photo")
+                        }
+                    }
+                    "video" -> {
+                        val video = att.optJSONObject("video") ?: att
+                        val url = largestPhotoUrl(video.optJSONArray("image") ?: video.optJSONArray("sizes"))
+                            ?: video.optUrl("photo_300")
+                            ?: video.optUrl("photo_800")
+                            ?: video.optUrl("photo_130")
+                        if (!url.isNullOrBlank()) {
+                            return Pair(url, "video")
+                        }
+                    }
+                    "doc", "document", "graffiti" -> {
+                        val doc = att.optJSONObject("doc") ?: att.optJSONObject("document") ?: att
+                        val previewPhoto = doc.optJSONObject("preview")?.optJSONObject("photo")
+                        val url = largestPhotoUrl(previewPhoto?.optJSONArray("sizes"))
+                            ?: if (type == "graffiti" || doc.optString("ext").lowercase() in listOf("png", "jpg", "jpeg", "gif", "webp")) doc.optUrl("url") else null
+                        if (!url.isNullOrBlank()) {
+                            return Pair(url, "photo")
+                        }
+                    }
+                    "gift" -> {
+                        val gift = att.optJSONObject("gift") ?: att
+                        val url = gift.optUrl("thumb_256")
+                            ?: gift.optUrl("thumb_192")
+                            ?: gift.optUrl("thumb_96")
+                            ?: gift.optUrl("thumb_48")
+                            ?: gift.optUrl("thumb")
+                            ?: gift.optUrl("photo_256")
+                            ?: gift.optUrl("photo")
+                            ?: gift.optUrl("image")
+                        if (!url.isNullOrBlank()) {
+                            return Pair(url, "gift")
+                        }
+                    }
+                }
+            }
+        }
+
+        val fwdArray = msgObj.optJSONArray("fwd_messages")
+        if (fwdArray != null && fwdArray.length() > 0) {
+            val fwdMedia = parseConversationLastMessageMedia(fwdArray.optJSONObject(0))
+            if (fwdMedia != null) return fwdMedia
+        }
+
+        val replyObj = msgObj.optJSONObject("reply_message")
+        if (replyObj != null) {
+            val replyMedia = parseConversationLastMessageMedia(replyObj)
+            if (replyMedia != null) return replyMedia
+        }
+
+        return null
+    }
+
+    private fun parseIsMuted(item: JSONObject, conversation: JSONObject): Boolean {
+        val pushSettings = conversation.optJSONObject("push_settings")
+            ?: item.optJSONObject("push_settings")
+            ?: conversation.optJSONObject("chat_settings")?.optJSONObject("push_settings")
+
+        if (pushSettings != null) {
+            val soundObj = pushSettings.opt("sound")
+            val isSoundDisabled = when (soundObj) {
+                is Boolean -> !soundObj
+                is Number -> soundObj.toInt() == 0
+                is String -> soundObj == "0" || soundObj.lowercase() == "false"
+                else -> false
+            }
+            if (isSoundDisabled) return true
+
+            if (pushSettings.optBool("disabled_forever", false)) return true
+
+            val disabledUntilObj = pushSettings.opt("disabled_until")
+            val disabledUntil = when (disabledUntilObj) {
+                is Number -> disabledUntilObj.toLong()
+                is String -> disabledUntilObj.toLongOrNull() ?: 0L
+                is Boolean -> if (disabledUntilObj) -1L else 0L
+                else -> 0L
+            }
+
+            val nowSec = System.currentTimeMillis() / 1000
+            if (disabledUntil == -1L || disabledUntil > nowSec) {
+                return true
+            }
+
+            val settings = pushSettings.optInt("settings", 0)
+            if (settings != 0 && (settings and 1) != 0) {
+                return true
+            }
+        }
+
+        val directSound = conversation.opt("sound") ?: item.opt("sound")
+        if (directSound is Number && directSound.toInt() == 0) return true
+        if (directSound is Boolean && !directSound) return true
+
+        val directDisabledUntil = conversation.optLong("disabled_until", 0)
+        if (directDisabledUntil == -1L || directDisabledUntil > (System.currentTimeMillis() / 1000)) return true
+
+        return false
+    }
+
     private fun parseConversationLastMessagePreview(
         msgObj: JSONObject?,
         isChat: Boolean,
         profiles: Map<Int, AuthorInfo>,
         groups: Map<Int, AuthorInfo>
-    ): String {
-        if (msgObj == null) return ""
+    ): Pair<String?, String> {
+        if (msgObj == null) return Pair(null, "")
         val rawText = msgObj.optStringClean("text")
             ?.takeIf { it.isNotBlank() }
             ?: msgObj.optStringClean("body")
@@ -415,38 +565,53 @@ object JsonParsers {
                         val att = attachments.optJSONObject(i)
                         val type = att?.optString("type")?.lowercase()
                         val label = when (type) {
-                            "photo" -> "[Фотография]"
-                            "video" -> "[Видео]"
-                            "audio" -> "[Аудиозапись]"
+                            "photo" -> "Фотография"
+                            "video" -> "Видео"
+                            "audio" -> {
+                                val audioData = att?.optJSONObject("audio")
+                                val artist = audioData?.optStringClean("artist") ?: ""
+                                val title = audioData?.optStringClean("title") ?: ""
+                                when {
+                                    artist.isNotBlank() && title.isNotBlank() -> "[♫ $artist - $title]"
+                                    title.isNotBlank() -> "[♫ $title]"
+                                    artist.isNotBlank() -> "[♫ $artist]"
+                                    else -> "[♫ Аудиозапись]"
+                                }
+                            }
                             "doc", "document" -> "[Документ]"
                             "wall" -> "[Запись]"
                             "poll" -> "[Опрос]"
-                            "sticker" -> "[Стикер]"
+                            "sticker" -> "Стикер"
                             "gift" -> "[Подарок]"
                             "link" -> "[Ссылка]"
                             else -> "[Вложение]"
                         }
                         types.add(label)
                     }
-                    types.joinToString(" ")
+                    types.joinToString(" ").ifBlank { com.deliriousvoid.openvkmatcha.Constants.UNSUPPORTED_MESSAGE_TEXT }
                 } else {
-                    ""
+                    com.deliriousvoid.openvkmatcha.Constants.UNSUPPORTED_MESSAGE_TEXT
                 }
             }
         }
 
+        val finalContentPreview = if (contentPreview.isBlank()) com.deliriousvoid.openvkmatcha.Constants.UNSUPPORTED_MESSAGE_TEXT else contentPreview
+
         val isOut = msgObj.optInt("out", 0) == 1
         val fromId = msgObj.optInt("from_id", 0)
 
-        return when {
-            isOut -> "Вы: $contentPreview"
+        val prefix = when {
+            isOut -> "Вы: "
             isChat && fromId != 0 -> {
                 val author = profiles[fromId] ?: groups[fromId] ?: profiles[kotlin.math.abs(fromId)] ?: groups[kotlin.math.abs(fromId)]
                 val authorFirstName = author?.name?.split(" ")?.firstOrNull()
-                if (!authorFirstName.isNullOrBlank()) "$authorFirstName: $contentPreview" else contentPreview
+                if (!authorFirstName.isNullOrBlank()) "$authorFirstName: " else null
             }
-            else -> contentPreview
+            else -> null
         }
+
+        val fullText = if (prefix != null) "$prefix$finalContentPreview" else finalContentPreview
+        return Pair(prefix, fullText)
     }
 
     private fun extractChatPhotoUrl(cs: JSONObject?): String {
@@ -510,6 +675,14 @@ object JsonParsers {
                     verified = group?.verified ?: false
                 )
             }
+            id == 0 || (com.deliriousvoid.openvkmatcha.OpenVKMatchaApp.instance.accountManager.getCurrentAccount()?.userId?.toIntOrNull()?.let { it > 0 && id == it } == true) -> {
+                Peer(
+                    id = id,
+                    type = PeerType.USER,
+                    title = OpenVKMatchaApp.instance.languageManager.getStringOrDefault(R.string.saved_messages, "Сохранённые сообщения"),
+                    photo = com.deliriousvoid.openvkmatcha.Constants.SAVED_MESSAGES_AVATAR
+                )
+            }
             else -> {
                 val user = profiles[id] ?: profiles[kotlin.math.abs(id)] ?: groups[id] ?: groups[-id]
                 val name = user?.name?.takeIf { it.isNotBlank() } ?: "Пользователь $id"
@@ -548,6 +721,52 @@ object JsonParsers {
             }
         }
 
+        val directStickerObj = msg.optJSONObject("sticker")
+        if (directStickerObj != null && attachments.none { it is MessageAttachment.Sticker }) {
+            val stickerId = directStickerObj.optInt("id", directStickerObj.optInt("sticker_id"))
+            val productId = directStickerObj.optInt("product_id")
+            val images = directStickerObj.optJSONArray("images") ?: directStickerObj.optJSONArray("images_with_background")
+            val url = largestPhotoUrl(images)
+                ?: directStickerObj.optUrl("photo_512")
+                ?: directStickerObj.optUrl("photo_256")
+                ?: directStickerObj.optUrl("photo_128")
+                ?: directStickerObj.optUrl("photo_64")
+                ?: directStickerObj.optUrl("url")
+                ?: ""
+            if (url.isNotBlank()) {
+                attachments.add(
+                    MessageAttachment.Sticker(
+                        id = stickerId,
+                        productId = productId,
+                        url = url,
+                        width = directStickerObj.optInt("width", 256),
+                        height = directStickerObj.optInt("height", 256)
+                    )
+                )
+            }
+        }
+
+        val actionObj = msg.optJSONObject("action")
+        val actionType = actionObj?.optStringClean("type") ?: msg.optStringClean("action")
+        val action = if (!actionType.isNullOrBlank()) {
+            val memberId = if (actionObj?.has("member_id") == true) {
+                actionObj.optInt("member_id")
+            } else if (msg.has("action_mid")) {
+                msg.optInt("action_mid")
+            } else null
+
+            val text = actionObj?.optStringClean("text")
+                ?: actionObj?.optStringClean("message")
+                ?: msg.optStringClean("action_text")
+                ?: msg.optStringClean("action_email")
+
+            com.deliriousvoid.openvkmatcha.data.model.MessageAction(
+                type = actionType,
+                memberId = memberId?.takeIf { it != 0 },
+                text = text
+            )
+        } else null
+
         return ChatMessage(
             id = msg.optInt("id"),
             peerId = peerId,
@@ -556,16 +775,22 @@ object JsonParsers {
             date = msg.optLong("date"),
             isOutgoing = msg.optInt("out", 0) == 1,
             isRead = msg.optInt("read_state", 0) == 1,
-            isEdited = msg.has("update_time"),
+            isEdited = (msg.has("update_time") && !msg.isNull("update_time") && msg.optLong("update_time", 0L) > 0L) ||
+                       (msg.has("edit_date") && !msg.isNull("edit_date") && msg.optLong("edit_date", 0L) > 0L) ||
+                       msg.optBoolean("is_edited", false) ||
+                       msg.optInt("is_edited", 0) == 1 ||
+                       msg.optBoolean("edited", false) ||
+                       msg.optInt("edited", 0) == 1,
             isPinned = msg.optBool("is_pinned", false),
             isImportant = msg.optBool("important", false),
-            isDeleted = msg.optBool("is_deleted", false),
+            isDeleted = msg.optBool("is_deleted", false) || msg.optInt("deleted", 0) == 1,
             attachments = attachments,
             replyMessage = msg.optJSONObject("reply_message")?.let { parseMessageItem(it, peerId) },
             fwdMessages = msg.optJSONArray("fwd_messages")?.let { array ->
                 (0 until array.length()).map { parseMessageItem(array.getJSONObject(it), peerId) }
             } ?: emptyList(),
-            stickerId = msg.optJSONObject("sticker")?.optInt("id")
+            stickerId = msg.optJSONObject("sticker")?.optInt("id"),
+            action = action,
         )
     }
 
@@ -626,15 +851,37 @@ object JsonParsers {
             "sticker" -> MessageAttachment.Sticker(
                 id = data.optInt("id") ?: data.optInt("sticker_id"),
                 productId = data.optInt("product_id"),
-                url = largestPhotoUrl(data.optJSONArray("images")) ?: "",
+                url = largestPhotoUrl(data.optJSONArray("images"))
+                    ?: largestPhotoUrl(data.optJSONArray("images_with_background"))
+                    ?: data.optUrl("photo_512")
+                    ?: data.optUrl("photo_256")
+                    ?: data.optUrl("photo_128")
+                    ?: data.optUrl("photo_64")
+                    ?: data.optUrl("url")
+                    ?: "",
                 width = data.optInt("width", 256),
                 height = data.optInt("height", 256)
             )
-            "gift" -> MessageAttachment.Gift(
-                id = data.optInt("id"),
-                url = data.optUrl("thumb_256") ?: "",
-                message = data.optStringClean("message")
-            )
+            "gift" -> {
+                val giftObj = data.optJSONObject("gift") ?: data
+                val giftId = giftObj.optInt("id").takeIf { it != 0 } ?: giftObj.optInt("gift_id")
+                val url = giftObj.optUrl("thumb_256")
+                    ?: giftObj.optUrl("thumb_192")
+                    ?: giftObj.optUrl("thumb_96")
+                    ?: giftObj.optUrl("thumb_48")
+                    ?: giftObj.optUrl("thumb")
+                    ?: giftObj.optUrl("photo_256")
+                    ?: giftObj.optUrl("photo")
+                    ?: giftObj.optUrl("image")
+                    ?: data.optUrl("thumb_256")
+                    ?: ""
+                val giftMessage = giftObj.optStringClean("message") ?: data.optStringClean("message")
+                MessageAttachment.Gift(
+                    id = giftId,
+                    url = url,
+                    message = giftMessage
+                )
+            }
             "link" -> MessageAttachment.Link(
                 url = data.optString("url"),
                 title = data.optStringClean("title") ?: "",
@@ -652,7 +899,7 @@ object JsonParsers {
         }
     }
 
-    private fun parseAudioItem(audio: JSONObject): AudioTrack {
+    fun parseAudioItem(audio: JSONObject): AudioTrack {
         val url = audio.optUrl("url")
         return AudioTrack(
             id = audio.optInt("id"),
@@ -717,6 +964,14 @@ object JsonParsers {
 
 
     private fun resolveAuthor(id: Int, profiles: Map<Int, AuthorInfo>, groups: Map<Int, AuthorInfo>): AuthorInfo {
+        if (id == 0) {
+            return AuthorInfo(
+                id = 0,
+                name = OpenVKMatchaApp.instance.languageManager.getStringOrDefault(R.string.saved_messages, "Сохранённые сообщения"),
+                avatar = com.deliriousvoid.openvkmatcha.Constants.SAVED_MESSAGES_AVATAR,
+                verified = false
+            )
+        }
         if (id > 0) {
             val profile = profiles[id]
             if (profile != null && profile.name.isNotBlank() && profile.name != "DELETED" && profile.name != "DELETED ") {
@@ -725,12 +980,11 @@ object JsonParsers {
             groups[-id]?.let { return it }
             if (profile != null && profile.name.isNotBlank()) return profile
             return AuthorInfo(id, "Пользователь $id", "", false)
-        } else if (id < 0) {
+        } else {
             groups[id]?.let { return it }
             profiles[-id]?.let { return it }
             return AuthorInfo(id, "Сообщество ${kotlin.math.abs(id)}", "", false)
         }
-        return AuthorInfo(0, "DELETED", "", false)
     }
 
     private fun parseProfileMap(profiles: JSONArray): Map<Int, AuthorInfo> {

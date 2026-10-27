@@ -17,8 +17,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -113,34 +116,13 @@ fun TopicCommentsScreen(
         }
     }
 
-    Scaffold(
-        bottomBar = {
-            CommentInput(
-                text = state.inputText,
-                isSending = state.isSending,
-                isAdmin = state.isAdmin,
-                fromGroup = state.fromGroup,
-                isDeveloperMode = state.isDeveloperMode,
-                pendingAttachments = state.pendingAttachments,
-                replyingTo = state.replyingTo,
-                onCancelReply = viewModel::cancelReply,
-                onTextChange = viewModel::updateInput,
-                onFromGroupChange = viewModel::setFromGroup,
-                onRemoveAttachment = viewModel::removeAttachment,
-                onAddPhoto = { photoPicker.launch("image/*") },
-                onAddVideo = { showVideoPicker = true },
-                onAddAudio = { showMusicPicker = true },
-                onAddDoc = { showDocsPicker = true },
-                onSend = { viewModel.postComment(state.inputText) }
-            )
-        }
-    ) { padding ->
+    Column(modifier = Modifier.fillMaxSize()) {
         PullToRefreshBox(
             isRefreshing = state.isRefreshing,
             onRefresh = { viewModel.loadComments(refresh = true) },
             modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
+                .weight(1f)
+                .fillMaxWidth()
         ) {
             when {
                 state.isResolvingVid -> LoadingBox(modifier = Modifier.fillMaxSize())
@@ -208,6 +190,25 @@ fun TopicCommentsScreen(
                 }
             }
         }
+
+        CommentInput(
+            text = state.inputText,
+            isSending = state.isSending,
+            isAdmin = state.isAdmin,
+            fromGroup = state.fromGroup,
+            isDeveloperMode = state.isDeveloperMode,
+            pendingAttachments = state.pendingAttachments,
+            replyingTo = state.replyingTo,
+            onCancelReply = viewModel::cancelReply,
+            onTextChange = viewModel::updateInput,
+            onFromGroupChange = viewModel::setFromGroup,
+            onRemoveAttachment = viewModel::removeAttachment,
+            onAddPhoto = { photoPicker.launch("image/*") },
+            onAddVideo = { showVideoPicker = true },
+            onAddAudio = { showMusicPicker = true },
+            onAddDoc = { showDocsPicker = true },
+            onSend = { viewModel.postComment(state.inputText) }
+        )
     }
 
     if (showMusicPicker) {
@@ -264,8 +265,8 @@ fun TopicCommentsScreen(
 
     if (viewerInitialIndex != -1 && activeCommentForViewer != null) {
         val comment = activeCommentForViewer!!
-        val gifDocs = comment.documents.filter { it.ext.lowercase() == "gif" || it.type == 3 }
-        val allImageUrls = comment.imageUrls + gifDocs.mapNotNull { it.url }
+        val gifDocs = comment.documents.filter { it.ext.lowercase() == "gif" || it.type == 3 || !it.previewGifUrl.isNullOrBlank() || (it.url != null && it.url.lowercase().contains("gif")) }
+        val allImageUrls = comment.imageUrls + gifDocs.mapNotNull { if (it.ext.lowercase() == "gif" || (it.url != null && it.url.lowercase().contains("gif"))) it.url ?: it.previewGifUrl else it.previewGifUrl ?: it.url }
 
         ImageViewer(
             imageUrls = allImageUrls,
@@ -515,8 +516,7 @@ private fun CommentInput(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .navigationBarsPadding()
-                .imePadding()
+                .windowInsetsPadding(WindowInsets.navigationBars.union(WindowInsets.ime))
         ) {
             if (isAdmin) {
                 Row(
@@ -613,7 +613,7 @@ private fun CommentInput(
                     }
                 }
 
-                TextField(
+                OutlinedTextField(
                     value = textFieldValue,
                     onValueChange = {
                         textFieldValue = it
@@ -623,12 +623,15 @@ private fun CommentInput(
                     },
                     modifier = Modifier.weight(1f),
                     placeholder = { Text(matchaStringResource(R.string.enter_message)) },
-                    colors = TextFieldDefaults.colors(
-                        focusedContainerColor = androidx.compose.ui.graphics.Color.Transparent,
-                        unfocusedContainerColor = androidx.compose.ui.graphics.Color.Transparent,
-                        disabledContainerColor = androidx.compose.ui.graphics.Color.Transparent
-                    ),
-                    maxLines = 5
+                    maxLines = 5,
+                    shape = RoundedCornerShape(24.dp),
+                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = Color.Transparent,
+                        unfocusedBorderColor = Color.Transparent,
+                        focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                    )
                 )
                 
                 if (isSending) {

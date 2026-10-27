@@ -3,6 +3,8 @@ package com.deliriousvoid.openvkmatcha.ui.screens.explore
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
@@ -13,7 +15,9 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.deliriousvoid.openvkmatcha.R
@@ -111,45 +115,8 @@ fun NoteDetailsScreen(
         )
     }
 
-    Scaffold(
-        bottomBar = {
-            Surface(tonalElevation = 2.dp) {
-                Row(
-                    modifier = Modifier
-                        .padding(8.dp)
-                        .fillMaxWidth()
-                        .navigationBarsPadding()
-                        .imePadding(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    TextField(
-                        value = commentText,
-                        onValueChange = { commentText = it },
-                        placeholder = { Text(matchaStringResource(R.string.write_comment)) },
-                        modifier = Modifier.weight(1f),
-                        colors = TextFieldDefaults.colors(
-                            focusedContainerColor = MaterialTheme.colorScheme.surface,
-                            unfocusedContainerColor = MaterialTheme.colorScheme.surface
-                        )
-                    )
-                    IconButton(
-                        onClick = {
-                            viewModel.postComment(commentText)
-                            commentText = ""
-                        },
-                        enabled = commentText.isNotBlank() && !state.isSendingComment
-                    ) {
-                        if (state.isSendingComment) {
-                            CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
-                        } else {
-                            Icon(Icons.AutoMirrored.Filled.Send, contentDescription = matchaStringResource(R.string.action_send))
-                        }
-                    }
-                }
-            }
-        }
-    ) { padding ->
-        Box(modifier = Modifier.padding(padding).fillMaxSize()) {
+    Column(modifier = Modifier.fillMaxSize()) {
+        Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
             if (state.isLoading && state.note == null) {
                 CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
             } else if (state.error != null && state.note == null) {
@@ -220,6 +187,45 @@ fun NoteDetailsScreen(
                             },
                             showActions = false
                         )
+                    }
+                }
+            }
+        }
+
+        Surface(tonalElevation = 2.dp) {
+            Row(
+                modifier = Modifier
+                    .padding(8.dp)
+                    .fillMaxWidth()
+                    .windowInsetsPadding(WindowInsets.navigationBars.union(WindowInsets.ime)),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                OutlinedTextField(
+                    value = commentText,
+                    onValueChange = { commentText = it },
+                    placeholder = { Text(matchaStringResource(R.string.write_comment)) },
+                    modifier = Modifier.weight(1f),
+                    maxLines = 5,
+                    shape = RoundedCornerShape(24.dp),
+                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = Color.Transparent,
+                        unfocusedBorderColor = Color.Transparent,
+                        focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                    )
+                )
+                IconButton(
+                    onClick = {
+                        viewModel.postComment(commentText)
+                        commentText = ""
+                    },
+                    enabled = commentText.isNotBlank() && !state.isSendingComment
+                ) {
+                    if (state.isSendingComment) {
+                        CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                    } else {
+                        Icon(Icons.AutoMirrored.Filled.Send, contentDescription = matchaStringResource(R.string.action_send))
                     }
                 }
             }

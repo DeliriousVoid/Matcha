@@ -189,7 +189,16 @@ fun VideoPlayer(
             val isCurrentlyPlaying = exoPlayer.isPlaying
             val isGlobalFullScreen = AppEvents.isFullScreenOpened.value
 
-            if (!initiallyFullscreen && !isGlobalFullScreen && !AppEvents.isInPipMode.value && !AppEvents.shouldEnterPip.value) {
+            if (initiallyFullscreen) {
+                if (!AppEvents.isInPipMode.value && !AppEvents.shouldEnterPip.value) {
+                    exoPlayer.pause()
+                    if (AppEvents.activeVideo.value?.id == video.id) {
+                        AppEvents.releaseActivePlayer(context, force = true)
+                    } else {
+                        exoPlayer.release()
+                    }
+                }
+            } else if (!isGlobalFullScreen && !AppEvents.isInPipMode.value && !AppEvents.shouldEnterPip.value) {
                 if (isCurrentlyPlaying) {
                     if (pauseVideoOnScroll) {
                         exoPlayer.pause()
@@ -363,6 +372,7 @@ fun VideoPlayer(
                     isFullscreen = isFull,
                     playbackSpeed = playbackSpeed,
                     showSpeedSelector = showSpeedSelector,
+                    showFullscreenToggle = !initiallyFullscreen,
                     onShowSpeedSelector = { showSpeedSelector = it },
                     onPlayPause = {
                         if (isPlaying) {
@@ -385,11 +395,12 @@ fun VideoPlayer(
                         }
                     },
                     onToggleFullscreen = {
-                        if (fullScreenHandler != null) {
+                        if (onDismiss != null) {
+                            onDismiss()
+                        } else if (fullScreenHandler != null) {
                             fullScreenHandler(video, !isFull, exoPlayer)
                         } else {
                             isFullscreen = !isFullscreen
-                            if (!isFullscreen && initiallyFullscreen) onDismiss?.invoke()
                         }
                     },
                     onPip = {
@@ -573,6 +584,7 @@ private fun VideoControls(
     isFullscreen: Boolean,
     playbackSpeed: Float,
     showSpeedSelector: Boolean,
+    showFullscreenToggle: Boolean = true,
     onShowSpeedSelector: (Boolean) -> Unit,
     onPlayPause: () -> Unit,
     onSeek: (Long) -> Unit,
@@ -807,12 +819,14 @@ private fun VideoControls(
                             style = MaterialTheme.typography.bodySmall
                         )
                         
-                        IconButton(onClick = onToggleFullscreen) {
-                            Icon(
-                                imageVector = if (isFullscreen) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
-                                contentDescription = matchaStringResource(R.string.desc_fullscreen),
-                                tint = Color.White
-                            )
+                        if (showFullscreenToggle) {
+                            IconButton(onClick = onToggleFullscreen) {
+                                Icon(
+                                    imageVector = if (isFullscreen) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
+                                    contentDescription = matchaStringResource(R.string.desc_fullscreen),
+                                    tint = Color.White
+                                )
+                            }
                         }
                     }
                     Slider(
@@ -830,7 +844,7 @@ private fun VideoControls(
             } else {
                 // For external videos, only show the fullscreen toggle if needed, or just let them use internal controls
                 // But we still need a way to exit fullscreen if we are in it
-                if (isFullscreen) {
+                if (isFullscreen && showFullscreenToggle) {
                     IconButton(
                         onClick = onToggleFullscreen,
                         modifier = Modifier

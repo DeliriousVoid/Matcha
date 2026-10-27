@@ -75,8 +75,9 @@ object MarkdownParser {
             val colorNames = colorMap.keys.joinToString("|") { Regex.escape(it) }
             Regex(
                 "<(/)?($colorNames|[0-9a-fA-F]{6})>|" +
-                "\\[(id|club|public)(\\d+)\\|(.*?)\\]|" +
+                "\\[(id|club|public|event)(\\d+)\\|(.*?)\\]|" +
                 "\\[(.*?)\\|@([\\w\\d._-]+)\\]|" +
+                "[@*]([id|club|public|event]?\\d+|[\\w\\d._-]+)\\s*\\((.*?)\\)|" +
                 "(?:https?://|www\\.)[\\w\\d.\\-]+[\\w\\d/\\-?%&=._~#+!:@$,;*()]*|(?:[\\w\\d\\-]+\\.)+[a-z]{2,10}(?:/[\\w\\d/\\-?%&=._~#+!:@$,;*()]*)?",
                 RegexOption.IGNORE_CASE
             )
@@ -96,6 +97,9 @@ object MarkdownParser {
 
                 val vkShortName = match.groupValues[6]
                 val vkShortId = match.groupValues[7]
+
+                val vkAtTarget = match.groupValues[8]
+                val vkAtName = match.groupValues[9]
 
                 when {
                     !colorName.isNullOrEmpty() -> {
@@ -126,15 +130,30 @@ object MarkdownParser {
                     !vkIdType.isNullOrEmpty() -> {
                         val annotation = if (vkIdType == "id") vkId else "-$vkId"
                         builder.pushStringAnnotation(tag = "MENTION", annotation = annotation)
-                        builder.withStyle(SpanStyle(color = primaryColor, fontWeight = FontWeight.Bold)) {
+                        builder.withStyle(SpanStyle(color = primaryColor, fontWeight = FontWeight.Bold, textDecoration = TextDecoration.Underline)) {
                             append(vkIdName)
                         }
                         builder.pop()
                     }
                     !vkShortId.isNullOrEmpty() -> {
                         builder.pushStringAnnotation(tag = "PROFILE", annotation = vkShortId)
-                        builder.withStyle(SpanStyle(color = primaryColor, fontWeight = FontWeight.Bold)) {
+                        builder.withStyle(SpanStyle(color = primaryColor, fontWeight = FontWeight.Bold, textDecoration = TextDecoration.Underline)) {
                             append(vkShortName)
+                        }
+                        builder.pop()
+                    }
+                    !vkAtTarget.isNullOrEmpty() -> {
+                        val annotation = when {
+                            vkAtTarget.startsWith("id", ignoreCase = true) -> vkAtTarget.substring(2)
+                            vkAtTarget.startsWith("club", ignoreCase = true) -> "-${vkAtTarget.substring(4)}"
+                            vkAtTarget.startsWith("public", ignoreCase = true) -> "-${vkAtTarget.substring(6)}"
+                            vkAtTarget.startsWith("event", ignoreCase = true) -> "-${vkAtTarget.substring(5)}"
+                            else -> vkAtTarget
+                        }
+                        val tag = if (annotation.all { it.isDigit() || (it == '-' && annotation.length > 1) }) "MENTION" else "PROFILE"
+                        builder.pushStringAnnotation(tag = tag, annotation = annotation)
+                        builder.withStyle(SpanStyle(color = primaryColor, fontWeight = FontWeight.Bold, textDecoration = TextDecoration.Underline)) {
+                            append(vkAtName)
                         }
                         builder.pop()
                     }
@@ -160,41 +179,41 @@ object MarkdownParser {
                 isOvk && path.startsWith("id") && path.substring(2).all { it.isDigit() } -> {
                     val id = if (path == "id0") "0" else path.substring(2)
                     builder.pushStringAnnotation(tag = "PROFILE", annotation = id)
-                    builder.withStyle(SpanStyle(color = primaryColor)) { append(displayText) }
+                    builder.withStyle(SpanStyle(color = primaryColor, textDecoration = TextDecoration.Underline)) { append(displayText) }
                     builder.pop()
                 }
                 isOvk && (path.startsWith("club") || path.startsWith("public")) && path.substring(if (path.startsWith("club")) 4 else 6).all { it.isDigit() } -> {
                     val id = if (path.startsWith("club")) path.substring(4) else path.substring(6)
                     builder.pushStringAnnotation(tag = "PROFILE", annotation = "-$id")
-                    builder.withStyle(SpanStyle(color = primaryColor)) { append(displayText) }
+                    builder.withStyle(SpanStyle(color = primaryColor, textDecoration = TextDecoration.Underline)) { append(displayText) }
                     builder.pop()
                 }
                 isOvk && path.startsWith("playlist") -> {
                     val idStr = path.removePrefix("playlist").trimStart('/')
                     builder.pushStringAnnotation(tag = "PLAYLIST", annotation = idStr)
-                    builder.withStyle(SpanStyle(color = primaryColor)) { append(displayText) }
+                    builder.withStyle(SpanStyle(color = primaryColor, textDecoration = TextDecoration.Underline)) { append(displayText) }
                     builder.pop()
                 }
                 isOvk && path.startsWith("wall") -> {
                     val idStr = path.substring(4)
                     builder.pushStringAnnotation(tag = "WALL", annotation = idStr)
-                    builder.withStyle(SpanStyle(color = primaryColor)) { append(displayText) }
+                    builder.withStyle(SpanStyle(color = primaryColor, textDecoration = TextDecoration.Underline)) { append(displayText) }
                     builder.pop()
                 }
                 isOvk && path.startsWith("audios") -> {
                     val id = path.substring(6)
                     builder.pushStringAnnotation(tag = "MUSIC", annotation = id)
-                    builder.withStyle(SpanStyle(color = primaryColor)) { append(displayText) }
+                    builder.withStyle(SpanStyle(color = primaryColor, textDecoration = TextDecoration.Underline)) { append(displayText) }
                     builder.pop()
                 }
                 isOvk && path.isNotBlank() && !path.contains("/") -> {
                     builder.pushStringAnnotation(tag = "PROFILE", annotation = path)
-                    builder.withStyle(SpanStyle(color = primaryColor)) { append(displayText) }
+                    builder.withStyle(SpanStyle(color = primaryColor, textDecoration = TextDecoration.Underline)) { append(displayText) }
                     builder.pop()
                 }
                 else -> {
                     builder.pushStringAnnotation(tag = "URL", annotation = url)
-                    builder.withStyle(SpanStyle(color = primaryColor)) { append(displayText) }
+                    builder.withStyle(SpanStyle(color = primaryColor, textDecoration = TextDecoration.Underline)) { append(displayText) }
                     builder.pop()
                 }
             }
