@@ -1,4 +1,8 @@
 # 🌱 Matcha
+[![GitHub Release](https://img.shields.io/github/v/release/DeliriousVoid/Matcha?style=flat-square)](https://github.com/DeliriousVoid/Matcha/releases)
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg?style=flat-square)](https://github.com/DeliriousVoid/Matcha/blob/main/LICENSE)
+[![Android API](https://img.shields.io/badge/API-24%2B-brightgreen.svg?style=flat-square)](https://android-arsenal.com/api?level=24)
+
 Matcha - это открытый клиент для OpenVK, который закрывает все основные потребности пользователя, избавляя от необходимости лишний раз открывать веб-версию.
 
 Приложение задумывалось не просто как очередной клиент, а как совершенно новый способ взаимодействия с OpenVK: лёгкий, интуитивный и современный.
